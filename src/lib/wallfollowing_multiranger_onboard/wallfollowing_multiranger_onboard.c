@@ -73,7 +73,25 @@ static void commandForwardAlongWall(float* vel_x, float* vel_y, float range)
 	}
 }
 
+static void commandTurnAroundCorner(float* vel_x, float* vel_w, float radius)
+{
+	*vel_x = max_speed;
+	*vel_w = direction*(-1*(*vel_x)/radius);
+}
 
+static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float range)
+{
+	*vel_w = direction*rate;
+	bool check_distance_to_wall = logicIsCloseTo(ref_distance_from_wall, range, 0.1);
+	if(!check_distance_to_wall)
+	{
+		if(range>ref_distance_from_wall)
+			*vel_y = direction * (-1 * max_speed/3);
+		else
+			*vel_y = direction * (max_speed/3);
+
+	}
+}
 
 static int transition(int new_state)
 {
@@ -85,11 +103,13 @@ static int transition(int new_state)
 
 void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, int direction_turn)
 {
+
+	direction = direction_turn;
    static int state = 1;
    static float previous_heading = 0;
    static float angle = 0;
    static bool around_corner_first_turn = false;
-
+   static bool around_corner_go_back = false;
 	time_t now = time(0);
 	struct tm *tm = localtime (&now);
 	int current_time = tm->tm_sec;
@@ -127,7 +147,14 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   {
 		   previous_heading = current_heading;
            angle = direction*( 1.57 - atan(front_range/side_range));
-           state = transition(4);
+           state = transition(4); // go to turn_to_allign_to_wall
+	   }
+	   if (side_range<1.0 && front_range>2.0)
+	   {
+		   around_corner_first_turn = true;
+		   around_corner_go_back = false;
+		   previous_heading = current_heading;
+		   state = transition(6); // go to rotate_around_wall
 	   }
    }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
@@ -144,7 +171,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
        if(side_range > 2)
        {
            around_corner_first_turn = true;
-           state = transition(2);
+           state = transition(6);
        }
        // If front range is small
        //    then corner is reached
@@ -156,6 +183,10 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
    }else if(state==6)   		//ROTATE_AROUND_WALL
    {
+	   if(front_range < ref_distance_from_wall + 0.3)
+	   {
+		   state=transition(3);
+	   }
 
 
    }else if(state==7)    	   //ROTATE_IN_CORNER
@@ -213,9 +244,56 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
    }else if(state==6)   		//ROTATE_AROUND_WALL
    {
+	   // If first time around corner
+	   	   //first try to find the corner again
+	   if(around_corner_first_turn)
+	   {
+		   commandTurn(&temp_vel_x, &temp_vel_w, -1*max_rate);
+		   temp_vel_y = 0;
+		   // If corner is found
+		   // 	continue going around corner
+		   if(side_range<=ref_distance_from_wall+0.5)
+		   {
+			   around_corner_first_turn = false;
+			   previous_heading = current_heading;
+		   }
+
+	   }else
+	   {
+		   // if side range is larger than prefered distance from wall
+		   if(side_range>ref_distance_from_wall+0.5)
+		   {
+			   // check if scanning has already occured
+			   if(wraptopi(fabs(current_heading-previous_heading))>0.3)
+			   {
+				   around_corner_go_back = true;
+			   }
+			   // turn and adjust distnace to corner from that point
+			   if(around_corner_go_back)
+			   {
+				   // go back if it already went into one direction
+				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, max_rate,side_range);
+				   temp_vel_x = 0.0;
+			   }else
+			   {
+				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w,-1* max_rate,side_range);
+				   temp_vel_x = 0.0;			   }
+		   }else
+		   {
+			   // continue to turn around corner
+			   previous_heading = current_heading;
+			   around_corner_go_back = false;
+			   commandTurnAroundCorner(&temp_vel_x, &temp_vel_w, ref_distance_from_wall);
+		   }
 
 
-   }else if(state==7)      	 //ROTATE_IN_CORNER
+	   }
+
+
+
+
+
+   }else if(state==7)      		 //ROTATE_IN_CORNER
    {
 	   commandTurn(&temp_vel_x, &temp_vel_w, max_rate);
 	   temp_vel_y = 0;
