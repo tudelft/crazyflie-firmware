@@ -88,29 +88,37 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    static int state = 1;
    static float previous_heading = 0;
    static float angle = 0;
+   static bool around_corner_first_turn = false;
 
 	time_t now = time(0);
 	struct tm *tm = localtime (&now);
 	int current_time = tm->tm_sec;
 
-	//  -->STATES<--
-    // 1 = forward
-    // 2 = hover
-    // 3 = turn_to_find_wall
-    // 4 = turn_to_allign_to_wall
-	// 5 = forward along wall
+	/***********************************************************
+	 * State definitions
+	 ***********************************************************/
+		// 1 = forward
+		// 2 = hover
+		// 3 = turn_to_find_wall
+		// 4 = turn_to_allign_to_wall
+		// 5 = forward along wall
+		// 6 = rotate_around_wall
+		// 7 = rotate_in_corner
 
-   // Handle state transitions
-   if (state == 1) 			//FORWARD
+   /***********************************************************
+	* Handle state transitions
+	***********************************************************/
+
+	if (state == 1) 			//FORWARD
    {
 	   if(front_range<ref_distance_from_wall)
 	   {
 		   state = transition(3);
 	   }
-   }else if(state == 2) 	// HOVER
+   }else if(state == 2) 		// HOVER
    {
 
-   }else if(state==3)		// TURN_TO_FIND_WALL
+   }else if(state==3)			// TURN_TO_FIND_WALL
    {
 	   // check if wall is found
 	   bool side_range_check = side_range < ref_distance_from_wall/cos(0.78)+0.2;
@@ -121,41 +129,72 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
            angle = direction*( 1.57 - atan(front_range/side_range));
            state = transition(4);
 	   }
-   }else if(state==4)		//TURN_TO_ALLIGN_TO_WALL
+   }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
 	   bool allign_wall_check = logicIsCloseTo(wraptopi(current_heading-previous_heading),angle,0.1);
 	   if(allign_wall_check)
 	   {
 		   state = transition(5);
 	   }
-   }else if(state==5)   	//FORWARD_ALONG_WALL
+   }else if(state==5)   		//FORWARD_ALONG_WALL
    {
+
+	   // If side range is out of reach,
+	   //    end of the wall is reached
+       if(side_range > 2)
+       {
+           around_corner_first_turn = true;
+           state = transition(2);
+       }
+       // If front range is small
+       //    then corner is reached
 	   if (front_range < ref_distance_from_wall)
-		   state = transition(2);
+	   {
+		   previous_heading = current_heading;
+		   state = transition(7);
+	   }
+
+   }else if(state==6)   		//ROTATE_AROUND_WALL
+   {
 
 
+   }else if(state==7)    	   //ROTATE_IN_CORNER
+   {
+	   // Check if heading goes over 0.8 rad
+	   bool check_heading_corner = logicIsCloseTo(fabs(wraptopi(current_heading-previous_heading)),0.8,0.1);
+	   if(check_heading_corner)
+		   state = transition(3);
+
+   }else
+   {
+	   printf("STATE doesn't exist! \n");
    }
+
+
+
+   /***********************************************************
+    * Handle state actions
+    ***********************************************************/
 
    float temp_vel_x, temp_vel_y, temp_vel_w;
 
-   // Handle state actions
-   if (state == 1) 			//FORWARD
+   if (state == 1) 				//FORWARD
    {
 	   temp_vel_x= max_speed;
 	   temp_vel_y = 0.0;
 	   temp_vel_w = 0.0;
 
-   }else if(state == 2) 	// HOVER
+   }else if(state == 2) 		// HOVER
    {
 	   commandHover(&temp_vel_x, &temp_vel_y, &temp_vel_w);
 
 
-   }else if(state==3)		// TURN_TO_FIND_WALL
+   }else if(state==3)			// TURN_TO_FIND_WALL
    {
 	   commandTurn(&temp_vel_x, &temp_vel_w, max_rate);
 	   temp_vel_y = 0.0;
 
-   }else if(state==4)		//TURN_TO_ALLIGN_TO_WALL
+   }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
 	   // hover first second to stabilize
 	   if (current_time-state_start_time<1)
@@ -166,13 +205,27 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 		   temp_vel_y = 0;
 	   }
 
-
-   }else if(state==5)   	//FORWARD_ALONG_WALL
+   }else if(state==5)   		//FORWARD_ALONG_WALL
    {
 
        commandForwardAlongWall(&temp_vel_x, &temp_vel_y, side_range);
        temp_vel_w = 0.0;
+
+   }else if(state==6)   		//ROTATE_AROUND_WALL
+   {
+
+
+   }else if(state==7)      	 //ROTATE_IN_CORNER
+   {
+	   commandTurn(&temp_vel_x, &temp_vel_w, max_rate);
+	   temp_vel_y = 0;
+
+   }else
+   {
+	   //State does not exist so hover!!
+	   commandHover(&temp_vel_x, &temp_vel_y, &temp_vel_w);
    }
+
 
 
 
@@ -180,6 +233,8 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    *vel_y = temp_vel_y;
    *vel_w = temp_vel_w;
 
+
+   printf("state = %d\n",state);
 
 
 
