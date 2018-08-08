@@ -39,6 +39,8 @@
 #include "config.h"
 #include "nvicconf.h"
 
+typedef xQUEUE Queue_t;
+
 
 static xQueueHandle uart1queue;
 static bool isInit = false;
@@ -138,6 +140,16 @@ void uart1Getchar(char * ch)
 {
   xQueueReceive(uart1queue, ch, portMAX_DELAY);
 }
+
+bool uart1CharAvailable(void)
+{
+  Queue_t * const pxQueue = ( Queue_t * ) uart1queue;
+  if (pxQueue->uxMessagesWaiting > 0)
+    return true;
+  else
+    return false;
+}
+
 
 void __attribute__((used)) USART3_IRQHandler(void)
 {

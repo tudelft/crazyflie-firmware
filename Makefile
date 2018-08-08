@@ -88,6 +88,11 @@ VPATH_CF2 += vendor/libdw1000/src
 # vl53l1 driver
 VPATH_CF2 += $(LIB)/vl53l1/core/src
 
+
+#pprzlink
+PPRZ_PATH = vendor/pprzlink
+VPATH_CF2 +=  ${PPRZ_PATH}/lib/v1.0/C
+
 # FreeRTOS
 VPATH += $(PORT)
 PORT_OBJ = port.o
@@ -146,6 +151,9 @@ PROJ_OBJ_CF2 += vl53l1_api_core.o vl53l1_api.o vl53l1_core.o vl53l1_silicon_core
 PROJ_OBJ_CF2 += vl53l1_api_calibration.o vl53l1_api_debug.o vl53l1_api_preset_modes.o vl53l1_error_strings.o
 PROJ_OBJ_CF2 += vl53l1_register_funcs.o vl53l1_wait.o vl53l1_core_support.o
 
+# pprzlink
+PROJ_OBJ_CF2 += pprz_transport.o 
+
 # Modules
 PROJ_OBJ += system.o comm.o console.o pid.o crtpservice.o param.o
 PROJ_OBJ += log.o worker.o trigger.o sitaw.o queuemonitor.o msp.o
@@ -190,6 +198,8 @@ PROJ_OBJ_CF2 += outlierFilter.o
 PROJ_OBJ_CF2 += flowdeck_v1v2.o
 PROJ_OBJ_CF2 += oa.o
 PROJ_OBJ_CF2 += multiranger.o
+PROJ_OBJ_CF2 += stereoboard.o
+PROJ_OBJ_CF2 += pprz_datalink.o
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE
@@ -245,6 +255,8 @@ INCLUDES_CF2 += -Ivendor/libdw1000/inc
 INCLUDES_CF2 += -I$(LIB)/FatFS
 INCLUDES_CF2 += -I$(LIB)/vl53l1
 INCLUDES_CF2 += -I$(LIB)/vl53l1/core/inc
+INCLUDES_CF2 += -Ivendor/pprzlink/lib/v1.0/C
+CFLAGS+=-I${PPRZ_PATH}/var/include -DUSE_PPRZLINK -DDOWNLINK
 
 ifeq ($(USE_FPU), 1)
 	PROCESSOR = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
@@ -328,6 +340,7 @@ all: check_submodules build
 build:
 # Each target is in a different line, so they are executed one after the other even when the processor has multiple cores (when the -j option for the make command is > 1). See: https://www.gnu.org/software/make/manual/html_node/Parallel.html
 	@$(MAKE) --no-print-directory clean_version
+	@$(MAKE) --no-print-directory pprzlink
 	@$(MAKE) --no-print-directory compile
 	@$(MAKE) --no-print-directory print_version
 	@$(MAKE) --no-print-directory size
@@ -364,6 +377,9 @@ ifeq ($(CLOAD), 1)
 else
 	@echo "Only cload build can be bootloaded. Launch build and cload with CLOAD=1"
 endif
+
+pprzlink:
+	$(MAKE) -C $(PPRZ_PATH) -s --no-print-directory pymessages
 
 #Flash the stm.
 flash:

@@ -10,3 +10,6 @@
 [submodule "vendor/CMSIS"]
 	path = vendor/CMSIS
 	url = https://github.com/ARM-software/CMSIS
+[submodule "vendor/pprzlink"]
+	path = vendor/pprzlink
+	url = https://github.com/paparazzi/pprzlink.git
