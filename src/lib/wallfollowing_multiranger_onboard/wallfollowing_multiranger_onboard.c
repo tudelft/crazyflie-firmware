@@ -17,6 +17,7 @@ float direction = 1;
 long int state_start_time = 0;
 
 #define PI  3.14159265359
+#define TWO_PI 2*PI
 
 void testRange(float front_range, float right_range, float left_range)
 {
@@ -41,7 +42,18 @@ static bool logicIsCloseTo(float real_value, float checked_value, float margin)
 
 static float wraptopi(float number)
 {
-	return (float)fmod(number + PI,(2*PI)-PI);
+	// fmod() has difficulty with the sign...
+	/*if(number>0)
+		return (float)fmod(number + PI,(2*PI)-PI);
+	else
+		return (float)fmod(number + PI,(2*PI)+PI);*/
+	if(number>PI)
+		return number-TWO_PI;
+	else if(number< -1*PI)
+		return number+TWO_PI;
+	else
+		return number;
+
 }
 
 
@@ -140,6 +152,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
    }else if(state==3)			// TURN_TO_FIND_WALL
    {
+
 	   // check if wall is found
 	   bool side_range_check = side_range < ref_distance_from_wall/cos(0.78)+0.2;
 	   bool front_range_check = front_range < ref_distance_from_wall/cos(0.78)+0.2;
@@ -158,6 +171,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   }
    }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
+	   printf("%f %f %f %f\n",wraptopi(current_heading-previous_heading), current_heading, previous_heading,angle);
 	   bool allign_wall_check = logicIsCloseTo(wraptopi(current_heading-previous_heading),angle,0.1);
 	   if(allign_wall_check)
 	   {
