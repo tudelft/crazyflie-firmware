@@ -43,6 +43,7 @@
 
 #include "estimator_kalman.h"
 #include "estimator.h"
+#include "stabilizer.h"
 
 static bool isInit;
 static bool emergencyStop = false;
@@ -175,6 +176,11 @@ void stabilizerSetEmergencyStopTimeout(int timeout)
 {
   emergencyStop = false;
   emergencyStopTimeout = timeout;
+}
+
+float getHeading()
+{
+  return state.attitude.yaw;
 }
 
 PARAM_GROUP_START(stabilizer)

@@ -25,8 +25,6 @@ bool estimatorComplementaryTest(void)
   return pass;
 }
 
-point_t position_send;
-
 void estimatorComplementary(state_t *state, sensorData_t *sensorData, control_t *control, const uint32_t tick)
 {
   sensorsAcquire(sensorData, tick); // Read sensors at full rate (1000Hz)
@@ -62,14 +60,4 @@ void estimatorComplementary(state_t *state, sensorData_t *sensorData, control_t 
       positionEstimate(state, sensorData, POS_UPDATE_DT, tick);
     }
   }
-  position_send = state->position;
 }
-
-void getStatePosition(point_t* pos_estimator)
-{
-	pos_estimator->x = position_send.x;
-	pos_estimator->y = position_send.y;
-	pos_estimator->z = position_send.z;
-
-}
-

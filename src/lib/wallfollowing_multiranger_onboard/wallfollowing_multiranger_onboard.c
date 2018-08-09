@@ -8,7 +8,8 @@
 #include "wallfollowing_multiranger_onboard.h"
 #include <math.h>
 //#include <time.h>
-#include <sys/time.h>
+//#include <sys/time.h>
+#include "usec_time.h"
 
 
 // variables
@@ -16,8 +17,12 @@ float ref_distance_from_wall = 0;
 float max_speed = 0.5;
 float max_rate = 0.5;
 float direction = 1;
-struct timeval state_start_time;
 
+#ifdef CATKIN_MAKE
+struct timeval state_start_time;
+#else
+float state_start_time;
+#endif
 
 
 void testRange(float front_range, float right_range, float left_range)
@@ -108,9 +113,15 @@ static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float ran
 
 static int transition(int new_state)
 {
-
+#ifdef CATKIN_MAKE
 	gettimeofday(&state_start_time,NULL);
+#else
+	float t =  usecTimestamp() / 1e6;
+	state_start_time = t;
+#endif
+
 	return new_state;
+
 }
 
 void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, int direction_turn)
@@ -122,8 +133,14 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    static float angle = 0;
    static bool around_corner_first_turn = false;
    static bool around_corner_go_back = false;
+
+#ifdef CATKIN_MAKE
 	struct timeval now;
 	gettimeofday(&now,NULL);
+	#else
+	float now = usecTimestamp() / 1e6;
+#endif
+
 
 	/***********************************************************
 	 * State definitions
@@ -240,7 +257,12 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
 	   // hover first second to stabilize (tv_usec i microseconds)
+#ifdef CATKIN_MAKE
 	   if (now.tv_usec-state_start_time.tv_usec<1000000)
+#else
+	   if (now-state_start_time<1.0f)
+#endif
+
 		   commandHover(&temp_vel_x, &temp_vel_y, &temp_vel_w);
 	   else // then turn again
 	   {

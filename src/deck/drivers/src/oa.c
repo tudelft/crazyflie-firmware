@@ -39,6 +39,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include "oa.h"
+
 #include <stdlib.h>
 
 static bool isInit = false;
@@ -56,11 +58,11 @@ static VL53L0xDev devUp;
 static VL53L0xDev devLeft;
 static VL53L0xDev devRight;
 
-static uint16_t rangeFront;
-static uint16_t rangeBack;
-static uint16_t rangeUp;
-static uint16_t rangeLeft;
-static uint16_t rangeRight;
+uint16_t rangeFront;
+uint16_t rangeBack;
+uint16_t rangeUp;
+uint16_t rangeLeft;
+uint16_t rangeRight;
 
 static void oaTask(void *param)
 {
