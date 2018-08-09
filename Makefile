@@ -71,6 +71,9 @@ LIB = src/lib
 VPATH_CF2 += $(LIB)/CMSIS/STM32F4xx/Source/
 VPATH_CF2 += $(LIB)/STM32_USB_Device_Library/Core/src
 VPATH_CF2 += $(LIB)/STM32_USB_OTG_Driver/src
+#add multiranger
+VPATH_CF2 += $(LIB)/wallfollowing_multiranger_onboard
+
 VPATH_CF2 += src/deck/api src/deck/core src/deck/drivers/src src/deck/drivers/src/test
 CRT0_CF2 = startup_stm32f40xx.o system_stm32f4xx.o
 
@@ -191,6 +194,12 @@ PROJ_OBJ_CF2 += flowdeck_v1v2.o
 PROJ_OBJ_CF2 += oa.o
 PROJ_OBJ_CF2 += multiranger.o
 
+
+#multiranger wall followr
+PROJ_OBJ_CF2 += wallfollowing_multiranger_onboard.o
+PROJ_OBJ_CF2 += gradient_bug.o
+
+
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE
 endif
@@ -240,6 +249,10 @@ INCLUDES_CF2 += -I$(LIB)/STM32F4xx_StdPeriph_Driver/inc
 INCLUDES_CF2 += -I$(LIB)/CMSIS/STM32F4xx/Include
 INCLUDES_CF2 += -I$(LIB)/STM32_USB_Device_Library/Core/inc
 INCLUDES_CF2 += -I$(LIB)/STM32_USB_OTG_Driver/inc
+
+#MULTI ranger
+INCLUDES_CF2 += -I$(LIB)/wallfollowing_multiranger_onboard
+
 INCLUDES_CF2 += -Isrc/deck/interface -Isrc/deck/drivers/interface
 INCLUDES_CF2 += -Ivendor/libdw1000/inc
 INCLUDES_CF2 += -I$(LIB)/FatFS

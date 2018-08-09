@@ -7,21 +7,22 @@
 
 #include "wallfollowing_multiranger_onboard.h"
 #include <math.h>
-#include <time.h>
+//#include <time.h>
+#include <sys/time.h>
+
 
 // variables
 float ref_distance_from_wall = 0;
 float max_speed = 0.5;
 float max_rate = 0.5;
 float direction = 1;
-long int state_start_time = 0;
+struct timeval state_start_time;
 
-#define PI  3.14159265359
-#define TWO_PI 2*PI
+
 
 void testRange(float front_range, float right_range, float left_range)
 {
-	printf("range %f %f %f\n",front_range, right_range, left_range);
+	//printf("range %f %f %f\n",front_range, right_range, left_range);
 }
 
 void wall_follower_init(float new_ref_distance_from_wall, float max_speed_ref)
@@ -47,12 +48,12 @@ static float wraptopi(float number)
 		return (float)fmod(number + PI,(2*PI)-PI);
 	else
 		return (float)fmod(number + PI,(2*PI)+PI);*/
-	if(number>PI)
-		return number-TWO_PI;
-	else if(number< -1*PI)
-		return number+TWO_PI;
+	if(number>(float)M_PI)
+		return (number-(float)(2*M_PI));
+	else if(number< (float)(-1*M_PI))
+		return (number+(float)(2*M_PI));
 	else
-		return number;
+		return (number);
 
 }
 
@@ -107,9 +108,8 @@ static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float ran
 
 static int transition(int new_state)
 {
-	time_t now = time(0);
-	struct tm *tm = localtime (&now);
-	state_start_time = tm->tm_sec;
+
+	gettimeofday(&state_start_time,NULL);
 	return new_state;
 }
 
@@ -122,9 +122,8 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    static float angle = 0;
    static bool around_corner_first_turn = false;
    static bool around_corner_go_back = false;
-	time_t now = time(0);
-	struct tm *tm = localtime (&now);
-	int current_time = tm->tm_sec;
+	struct timeval now;
+	gettimeofday(&now,NULL);
 
 	/***********************************************************
 	 * State definitions
@@ -154,15 +153,15 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    {
 
 	   // check if wall is found
-	   bool side_range_check = side_range < ref_distance_from_wall/cos(0.78)+0.2;
-	   bool front_range_check = front_range < ref_distance_from_wall/cos(0.78)+0.2;
+	   bool side_range_check = side_range < ref_distance_from_wall/(float)cos(0.78f)+0.2f;
+	   bool front_range_check = front_range < ref_distance_from_wall/(float)cos(0.78f)+0.2f;
 	   if(side_range_check && front_range_check)
 	   {
 		   previous_heading = current_heading;
-           angle = direction*( 1.57 - atan(front_range/side_range));
+           angle = direction*( 1.57f - (float)atan(front_range/side_range));
            state = transition(4); // go to turn_to_allign_to_wall
 	   }
-	   if (side_range<1.0 && front_range>2.0)
+	   if (side_range<1.0f && front_range>2.0f)
 	   {
 		   around_corner_first_turn = true;
 		   around_corner_go_back = false;
@@ -171,8 +170,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   }
    }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
-	   printf("%f %f %f %f\n",wraptopi(current_heading-previous_heading), current_heading, previous_heading,angle);
-	   bool allign_wall_check = logicIsCloseTo(wraptopi(current_heading-previous_heading),angle,0.1);
+	   bool allign_wall_check = logicIsCloseTo(wraptopi(current_heading-previous_heading),angle,0.1f);
 	   if(allign_wall_check)
 	   {
 		   state = transition(5);
@@ -182,7 +180,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
 	   // If side range is out of reach,
 	   //    end of the wall is reached
-       if(side_range > 2)
+       if(side_range > 2.0f)
        {
            around_corner_first_turn = true;
            state = transition(6);
@@ -197,7 +195,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
    }else if(state==6)   		//ROTATE_AROUND_WALL
    {
-	   if(front_range < ref_distance_from_wall + 0.3)
+	   if(front_range < ref_distance_from_wall + 0.3f)
 	   {
 		   state=transition(3);
 	   }
@@ -206,13 +204,13 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    }else if(state==7)    	   //ROTATE_IN_CORNER
    {
 	   // Check if heading goes over 0.8 rad
-	   bool check_heading_corner = logicIsCloseTo(fabs(wraptopi(current_heading-previous_heading)),0.8,0.1);
+	   bool check_heading_corner = logicIsCloseTo(fabs(wraptopi(current_heading-previous_heading)),0.8f,0.1f);
 	   if(check_heading_corner)
 		   state = transition(3);
 
    }else
    {
-	   printf("STATE doesn't exist! \n");
+	  // printf("STATE doesn't exist! \n");
    }
 
 
@@ -241,8 +239,8 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
    }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
-	   // hover first second to stabilize
-	   if (current_time-state_start_time<1)
+	   // hover first second to stabilize (tv_usec i microseconds)
+	   if (now.tv_usec-state_start_time.tv_usec<1000000)
 		   commandHover(&temp_vel_x, &temp_vel_y, &temp_vel_w);
 	   else // then turn again
 	   {
@@ -254,7 +252,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    {
 
        commandForwardAlongWall(&temp_vel_x, &temp_vel_y, side_range);
-       temp_vel_w = 0.0;
+       temp_vel_w = 0.0f;
 
    }else if(state==6)   		//ROTATE_AROUND_WALL
    {
@@ -263,10 +261,10 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   if(around_corner_first_turn)
 	   {
 		   commandTurn(&temp_vel_x, &temp_vel_w, -1*max_rate);
-		   temp_vel_y = 0;
+		   temp_vel_y = 0.0f;
 		   // If corner is found
 		   // 	continue going around corner
-		   if(side_range<=ref_distance_from_wall+0.5)
+		   if(side_range<=ref_distance_from_wall+0.5f)
 		   {
 			   around_corner_first_turn = false;
 			   previous_heading = current_heading;
@@ -275,10 +273,10 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   }else
 	   {
 		   // if side range is larger than prefered distance from wall
-		   if(side_range>ref_distance_from_wall+0.5)
+		   if(side_range>ref_distance_from_wall+0.5f)
 		   {
 			   // check if scanning has already occured
-			   if(wraptopi(fabs(current_heading-previous_heading))>0.3)
+			   if(wraptopi(fabs(current_heading-previous_heading))>0.3f)
 			   {
 				   around_corner_go_back = true;
 			   }
@@ -287,11 +285,11 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 			   {
 				   // go back if it already went into one direction
 				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, max_rate,side_range);
-				   temp_vel_x = 0.0;
+				   temp_vel_x = 0.0f;
 			   }else
 			   {
 				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w,-1* max_rate,side_range);
-				   temp_vel_x = 0.0;			   }
+				   temp_vel_x = 0.0f;			   }
 		   }else
 		   {
 			   // continue to turn around corner
@@ -326,7 +324,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    *vel_w = temp_vel_w;
 
 
-   printf("state = %d\n",state);
+   //printf("state = %d\n",state);
 
 
 
