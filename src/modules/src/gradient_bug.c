@@ -103,6 +103,7 @@ float vel_x_cmd, vel_y_cmd, vel_w_cmd;
 float current_heading;
 float right_range;
 float front_range;
+float left_range;
 
 void gradientBugTask(void *param)
 {
@@ -112,9 +113,9 @@ void gradientBugTask(void *param)
 		//getStatePosition(&position);
 		height = estimatorKalmanGetElevation();
 		current_heading = getHeading() * (float)M_PI / 180.0f;
-		 front_range = (float)rangeFront/1000.0f;
-		 right_range = (float)rangeRight/1000.0f;
-
+		front_range = (float)rangeFront/1000.0f;
+		right_range = (float)rangeRight/1000.0f;
+		left_range = (float)rangeLeft/1000.0f;
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
 
 
@@ -129,15 +130,16 @@ void gradientBugTask(void *param)
 				 */
 				hover(&setpoint_BG, nominal_height);
 
+				// wall following state machine
+				wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
 
-
-				wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, right_range, current_heading, 1);
-
+				// convert yaw rate commands to degrees
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
 
-				  float psi = current_heading;
-				  float vel_x_cmd_convert =  cosf(-psi) * vel_x_cmd + sinf(-psi) * vel_y_cmd;
-				  float vel_y_cmd_convert = -sinf(-psi) * vel_x_cmd + cosf(-psi) * vel_y_cmd;
+				// Convert relative commands to world commands
+				float psi = current_heading;
+				float vel_x_cmd_convert =  cosf(-psi) * vel_x_cmd + sinf(-psi) * vel_y_cmd;
+				float vel_y_cmd_convert = -sinf(-psi) * vel_x_cmd + cosf(-psi) * vel_y_cmd;
 				//float vel_y_cmd_convert = -1 * vel_y_cmd;
 				vel_command(&setpoint_BG, vel_x_cmd_convert, vel_y_cmd_convert,vel_w_cmd_convert, nominal_height);
 
@@ -197,7 +199,7 @@ void gradientBugInit()
 
 	xTaskCreate(gradientBugTask, GRADIENT_BUG_NAME, CMD_HIGH_LEVEL_TASK_STACKSIZE, NULL,
 			GRADIENT_TASK_PRI, NULL);
-	  isInit = true;
+	isInit = true;
 
 }
 

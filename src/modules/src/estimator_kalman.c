@@ -1282,7 +1282,6 @@ static void stateEstimatorExternalizeState(state_t *state, sensorData_t *sensors
   float pitch = asinf(-2*(q[1]*q[3] - q[0]*q[2]));
   float roll = atan2f(2*(q[2]*q[3]+q[0]*q[1]) , q[0]*q[0] - q[1]*q[1] - q[2]*q[2] + q[3]*q[3]);
 
-  yaw_send = yaw;
   // Save attitude, adjusted for the legacy CF2 body coordinate system
   state->attitude = (attitude_t){
       .timestamp = tick,
