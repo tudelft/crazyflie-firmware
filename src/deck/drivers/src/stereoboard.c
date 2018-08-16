@@ -52,8 +52,8 @@ uint8_t use_stereoboard = 1;
  };*/
 
 //laser range
-uint16_t up_range = 0;
-uint16_t bottom_range = 0;
+uint16_t front_range = 0;
+uint16_t back_range = 0;
 uint16_t right_range = 0;
 uint16_t left_range = 0;
 
@@ -117,7 +117,7 @@ void stereoboardTask(void* arg)
       case 15:
 
     	  id_range= DL_IMCU_REMOTE_GROUND_id(stereocam_data.data);
-  	    DEBUG_PRINT("msgID is %d\n",id_range);
+  	   // DEBUG_PRINT("msgID is %d\n",id_range);
 
     	  if (id_range == 0)
     		  up_range = DL_IMCU_REMOTE_GROUND_range(stereocam_data.data);
@@ -166,8 +166,8 @@ static const DeckDriver stereoboard_deck = {
 DECK_DRIVER(stereoboard_deck);
 
 LOG_GROUP_START(updown_laser)
-LOG_ADD(LOG_UINT16, up_range, &up_range)
-LOG_ADD(LOG_UINT16, bottom_range, &bottom_range)
+LOG_ADD(LOG_UINT16, front_range, &up_range)
+LOG_ADD(LOG_UINT16, back_range, &bottom_range)
 LOG_ADD(LOG_UINT16, left_range, &left_range)
 LOG_ADD(LOG_UINT16, right_range, &right_range)
 
