@@ -40,6 +40,7 @@
 #include "task.h"
 
 #include <stdlib.h>
+#include "multiranger.h"
 
 static bool isInit = false;
 static bool isTested = false;
@@ -56,11 +57,11 @@ static VL53L1_Dev_t devUp;
 static VL53L1_Dev_t devLeft;
 static VL53L1_Dev_t devRight;
 
-static uint16_t rangeFront;
-static uint16_t rangeBack;
-static uint16_t rangeUp;
-static uint16_t rangeLeft;
-static uint16_t rangeRight;
+uint16_t rangeFront;
+uint16_t rangeBack;
+uint16_t rangeUp;
+uint16_t rangeLeft;
+uint16_t rangeRight;
 
 static uint16_t oaGetMeasurementAndRestart(VL53L1_Dev_t *dev)
 {

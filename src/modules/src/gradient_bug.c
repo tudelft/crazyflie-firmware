@@ -27,6 +27,7 @@
 
 #include "wallfollowing_multiranger_onboard.h"
 #include "oa.h"
+#include "multiranger.h"
 
 //#define GRADIENT_BUG_NAME "GRADIENTBUG"
 //#define GRADIENT_TASK_PRI 2
