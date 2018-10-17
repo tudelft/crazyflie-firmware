@@ -42,6 +42,8 @@
 #include <stdlib.h>
 #include "multiranger.h"
 
+bool multiranger_isinit = false;
+
 static bool isInit = false;
 static bool isTested = false;
 
@@ -141,6 +143,7 @@ static void oaInit()
                        OA_PIN_BACK);
 
     isInit = true;
+    multiranger_isinit = isInit;
 
     xTaskCreate(oaTask, "oa", 2 * configMINIMAL_STACK_SIZE, NULL,
                 /*priority*/ 3, NULL);

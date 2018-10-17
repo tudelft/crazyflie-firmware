@@ -105,10 +105,18 @@ float current_heading;
 float right_range;
 float front_range;
 float left_range;
+float up_range;
+
+
+bool manual_startup = false;
+bool on_the_ground = true;
+uint32_t time_stamp_manual_startup_command = 0;
+#define MANUAL_STARTUP_TIMEOUT  M2T(3000)
 
 void gradientBugTask(void *param)
 {
 	systemWaitStart();
+	vTaskDelay(M2T(3000));
 	while(1) {
 		vTaskDelay(10);
 		//getStatePosition(&position);
@@ -117,8 +125,33 @@ void gradientBugTask(void *param)
 		front_range = (float)rangeFront/1000.0f;
 		right_range = (float)rangeRight/1000.0f;
 		left_range = (float)rangeLeft/1000.0f;
+		up_range = (float)rangeUp/1000.0f;
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
 
+		//***************** Manual Startup procedure*************//
+
+		// indicate if top range is hit while it is not flying yet, then start counting
+		if (keep_flying == false && manual_startup==false && up_range <0.2f && on_the_ground == true)
+		{
+			manual_startup = true;
+			time_stamp_manual_startup_command = xTaskGetTickCount();
+		}
+
+		// While still on the ground, but indicated that manual startup is requested, keep checking the time
+		if (keep_flying == false && manual_startup == true)
+		{
+			  uint32_t currentTime = xTaskGetTickCount();
+			  // If 3 seconds has passed, start flying.
+			  if ((currentTime -time_stamp_manual_startup_command) > MANUAL_STARTUP_TIMEOUT)
+			  {
+				  keep_flying = true;
+				  manual_startup = false;
+			  }
+		}
+
+		// Don't fly if multiranger is not connected or the uprange is activated
+		if (keep_flying == true && (multiranger_isinit == false || up_range <0.2f))
+			keep_flying = 0;
 
 		if(keep_flying)
 		{
@@ -143,7 +176,7 @@ void gradientBugTask(void *param)
 				float vel_y_cmd_convert = -sinf(-psi) * vel_x_cmd + cosf(-psi) * vel_y_cmd;
 				//float vel_y_cmd_convert = -1 * vel_y_cmd;
 				vel_command(&setpoint_BG, vel_x_cmd_convert, vel_y_cmd_convert,vel_w_cmd_convert, nominal_height);
-
+				on_the_ground = false;
 			}else
 			{
 				/*
@@ -157,6 +190,8 @@ void gradientBugTask(void *param)
 					taken_off = true;
 					wall_follower_init(0.7,0.5);
 				}
+				on_the_ground = false;
+
 			}
 		}else{
 			if(taken_off)
@@ -172,6 +207,8 @@ void gradientBugTask(void *param)
 					shut_off_engines(&setpoint_BG);
 					taken_off = false;
 				}
+				on_the_ground = false;
+
 			}else
 			{
 				/*
@@ -180,6 +217,7 @@ void gradientBugTask(void *param)
 				 * 	 then keep engines off
 				 */
 				shut_off_engines(&setpoint_BG);
+				on_the_ground = true;
 
 			}
 
