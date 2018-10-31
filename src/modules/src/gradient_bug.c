@@ -40,7 +40,7 @@ static bool keep_flying = false;
 float height;
 
 static bool taken_off = false;
-static float nominal_height = 0.8;
+static float nominal_height = 0.5;
 static void take_off(setpoint_t *sp, float velocity)
 {
 	sp->mode.x = modeVelocity;
@@ -126,6 +126,8 @@ void gradientBugTask(void *param)
 		right_range = (float)rangeRight/1000.0f;
 		left_range = (float)rangeLeft/1000.0f;
 		up_range = (float)rangeUp/1000.0f;
+
+
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
 
 		//***************** Manual Startup procedure*************//
@@ -188,7 +190,7 @@ void gradientBugTask(void *param)
 				if(height>nominal_height)
 				{
 					taken_off = true;
-					wall_follower_init(0.7,0.5);
+					wall_follower_init(0.4,0.5);
 				}
 				on_the_ground = false;
 

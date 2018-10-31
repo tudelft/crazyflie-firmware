@@ -195,10 +195,12 @@ PROJ_OBJ_CF2 += oa.o
 PROJ_OBJ_CF2 += multiranger.o
 
 
+
+
 #multiranger wall followr
 PROJ_OBJ_CF2 += wallfollowing_multiranger_onboard.o
 PROJ_OBJ_CF2 += gradient_bug.o
-
+CFLAGS += -DGB_ONBOARD
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE

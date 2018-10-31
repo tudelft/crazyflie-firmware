@@ -9,8 +9,15 @@
 #include <math.h>
 //#include <time.h>
 //#include <sys/time.h>
-#include "usec_time.h"
+//#include "usec_time.h"
 
+#ifndef GB_ONBOARD
+#include <time.h>
+#include <sys/time.h>
+#include <stdio.h>
+#else
+#include "usec_time.h"
+#endif
 
 // variables
 float ref_distance_from_wall = 0;
@@ -18,10 +25,20 @@ float max_speed = 0.5;
 float max_rate = 0.5;
 float direction = 1;
 
-#ifdef CATKIN_MAKE
+#ifndef GB_ONBOARD
 struct timeval state_start_time;
+struct timeval now_time;
 #else
 float state_start_time;
+#endif
+
+#ifndef GB_ONBOARD
+
+int diff_ms(struct timeval t1, struct timeval t2)
+{
+    return (((t1.tv_sec - t2.tv_sec) * 1000000) +
+            (t1.tv_usec - t2.tv_usec))/1000;
+}
 #endif
 
 
@@ -82,6 +99,7 @@ static void commandForwardAlongWall(float* vel_x, float* vel_y, float range)
 {
 	*vel_x = max_speed;
 	bool check_distance_wall = logicIsCloseTo(ref_distance_from_wall,range,0.1);
+	*vel_y = 0;
 	if(!check_distance_wall)
 	{
 		if(range>ref_distance_from_wall)
@@ -100,6 +118,7 @@ static void commandTurnAroundCorner(float* vel_x, float* vel_w, float radius)
 static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float range)
 {
 	*vel_w = direction*rate;
+	*vel_y = 0;
 	bool check_distance_to_wall = logicIsCloseTo(ref_distance_from_wall, range, 0.1);
 	if(!check_distance_to_wall)
 	{
@@ -113,7 +132,7 @@ static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float ran
 
 static int transition(int new_state)
 {
-#ifdef CATKIN_MAKE
+#ifndef GB_ONBOARD
 	gettimeofday(&state_start_time,NULL);
 #else
 	float t =  usecTimestamp() / 1e6;
@@ -134,10 +153,9 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    static bool around_corner_first_turn = false;
    static bool around_corner_go_back = false;
 
-#ifdef CATKIN_MAKE
-	struct timeval now;
-	gettimeofday(&now,NULL);
-	#else
+#ifndef GB_ONBOARD
+	gettimeofday(&now_time,NULL);
+#else
 	float now = usecTimestamp() / 1e6;
 #endif
 
@@ -230,13 +248,18 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	  // printf("STATE doesn't exist! \n");
    }
 
+#ifndef GB_ONBOARD
+printf("state %d\n",state);
+#endif
 
 
    /***********************************************************
     * Handle state actions
     ***********************************************************/
 
-   float temp_vel_x, temp_vel_y, temp_vel_w;
+   float temp_vel_x=0;
+   float temp_vel_y=0;
+   float temp_vel_w=0;
 
    if (state == 1) 				//FORWARD
    {
@@ -256,9 +279,12 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
    }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
+
+
 	   // hover first second to stabilize (tv_usec i microseconds)
-#ifdef CATKIN_MAKE
-	   if (now.tv_usec-state_start_time.tv_usec<1000000)
+#ifndef GB_ONBOARD
+	   if (diff_ms(now_time, state_start_time)<1000)
+
 #else
 	   if (now-state_start_time<1.0f)
 #endif
