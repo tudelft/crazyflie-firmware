@@ -190,7 +190,7 @@ void gradientBugTask(void *param)
 				if(height>nominal_height)
 				{
 					taken_off = true;
-					wall_follower_init(0.5,0.5);
+					wall_follower_init(0.4,0.5);
 				}
 				on_the_ground = false;
 
