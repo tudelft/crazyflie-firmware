@@ -120,7 +120,7 @@ static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float ran
 	*vel_w = direction*rate;
 	*vel_y = 0;
 	bool check_distance_to_wall = logicIsCloseTo(ref_distance_from_wall, range, 0.1);
-	/*if(!check_distance_to_wall)
+	if(!check_distance_to_wall)
 	{
 		if(range>ref_distance_from_wall)
 		{
@@ -134,7 +134,7 @@ static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float ran
 
 		}
 
-	}*/
+	}
 }
 
 static int transition(int new_state)
@@ -200,7 +200,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   if(side_range_check && front_range_check)
 	   {
 		   previous_heading = current_heading;
-           angle = direction*( 1.57f - (float)atan(front_range/side_range)+0.2);
+           angle = direction*( 1.57f - (float)atan(front_range/side_range)+0.2f);
            state = transition(4); // go to turn_to_allign_to_wall
 	   }
 	   if (side_range<1.0f && front_range>2.0f)
