@@ -39,6 +39,12 @@ int diff_ms(struct timeval t1, struct timeval t2)
     return (((t1.tv_sec - t2.tv_sec) * 1000000) +
             (t1.tv_usec - t2.tv_usec))/1000;
 }
+
+float get_sec(struct timeval t1)
+{
+	return (float)((((t1.tv_sec) * 1000000) +
+            (t1.tv_usec))/1000)/1000.0f;
+}
 #endif
 
 
@@ -109,16 +115,58 @@ static void commandForwardAlongWall(float* vel_x, float* vel_y, float range)
 	}
 }
 
-static void commandTurnAroundCorner(float* vel_x, float* vel_w, float radius)
+/*static void commandForwardAlongWallHeadingSine(float* vel_x, float* vel_y, float* vel_w, float range)
+{
+	static int32_t counter =0;
+	*vel_x = max_speed;
+	bool check_distance_wall = logicIsCloseTo(ref_distance_from_wall,range,0.1);
+	*vel_y = 0;
+#ifndef GB_ONBOARD
+	gettimeofday(&now_time,NULL);
+	float now = get_sec(now_time);
+	//printf("now %f\n",now);
+#else
+	float now = usecTimestamp() / 1e6;
+#endif
+
+	*vel_w = 0.1*sin(5*(float)counter/30.0f);
+	printf("check vel %f\n",*vel_w);
+	if(!check_distance_wall)
+	{
+		if(range>ref_distance_from_wall)
+			*vel_y = direction*(-1*max_speed/3);
+		else
+			*vel_y = direction*(max_speed/3);
+	}
+	counter++;
+}*/
+
+
+/*static void commandForwardAlongWallHeadingAdjust(float* vel_x, float* vel_y, float* vel_w, float range, float diff_range)
+{
+	*vel_x = max_speed;
+	bool check_distance_wall = logicIsCloseTo(ref_distance_from_wall,range,0.1);
+	*vel_y = 0;
+	if(!check_distance_wall)
+	{
+		if(diff_range>0)
+			*vel_w = direction*(max_rate/3);
+		else
+			*vel_w = direction*(-1*max_rate/3);
+	}
+}*/
+
+
+/*static void commandTurnAroundCorner(float* vel_x, float* vel_w, float radius)
 {
 	*vel_x = max_speed;
 	*vel_w = direction*(-1*(*vel_x)/radius);
-}
+}*/
 
-static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float range)
+static void commandTurnAroundCornerAndAdjust(float* vel_x, float* vel_y, float* vel_w, float radius,float range)
 {
-	*vel_w = direction*rate;
-	*vel_y = 0;
+	*vel_x = max_speed;
+	*vel_w = direction*(-1*(*vel_x)/radius);
 	bool check_distance_to_wall = logicIsCloseTo(ref_distance_from_wall, range, 0.1);
 	if(!check_distance_to_wall)
 	{
@@ -135,6 +183,28 @@ static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float ran
 		}
 
 	}
+}
+
+static void commandTurnAndAdjust(float* vel_y, float* vel_w,float rate,float range)
+{
+	*vel_w = direction*rate;
+	*vel_y = 0;
+	/*bool check_distance_to_wall = logicIsCloseTo(ref_distance_from_wall, range, 0.1);
+	if(!check_distance_to_wall)
+	{
+		if(range>ref_distance_from_wall)
+		{
+			*vel_y = direction * (-1* max_speed/3);
+
+		}
+
+		else
+		{
+			*vel_y = direction * (max_speed/3);
+
+		}
+
+	}*/
 }
 
 static int transition(int new_state)
@@ -159,6 +229,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
    static float angle = 0;
    static bool around_corner_first_turn = false;
    static bool around_corner_go_back = false;
+   //static float prev_side_range = 0;
 
 #ifndef GB_ONBOARD
 	gettimeofday(&now_time,NULL);
@@ -184,7 +255,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 
 	if (state == 1) 			//FORWARD
    {
-	   if(front_range<ref_distance_from_wall)
+	   if(front_range<ref_distance_from_wall+0.2f)
 	   {
 		   state = transition(3);
 	   }
@@ -200,7 +271,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   if(side_range_check && front_range_check)
 	   {
 		   previous_heading = current_heading;
-           angle = direction*( 1.57f - (float)atan(front_range/side_range)+0.2f);
+           angle = direction*( 1.57f - (float)atan(front_range/side_range)+0.1f);
            state = transition(4); // go to turn_to_allign_to_wall
 	   }
 	   if (side_range<1.0f && front_range>2.0f)
@@ -215,6 +286,7 @@ void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, 
 	   bool allign_wall_check = logicIsCloseTo(wraptopi(current_heading-previous_heading),angle,0.1f);
 	   if(allign_wall_check)
 	   {
+		  // prev_side_range = side_range;
 		   state = transition(5);
 	   }
    }else if(state==5)   		//FORWARD_ALONG_WALL
@@ -305,9 +377,13 @@ printf("state %d\n",state);
 
    }else if(state==5)   		//FORWARD_ALONG_WALL
    {
-
+	  // float diff_range = prev_side_range-side_range;
+	   //commandForwardAlongWallHeadingAdjust(&temp_vel_x, &temp_vel_y,&temp_vel_w, side_range, diff_range);
+	   //prev_side_range = side_range;
        commandForwardAlongWall(&temp_vel_x, &temp_vel_y, side_range);
        temp_vel_w = 0.0f;
+
+	   //commandForwardAlongWallHeadingSine(&temp_vel_x, &temp_vel_y,&temp_vel_w, side_range);
 
    }else if(state==6)   		//ROTATE_AROUND_WALL
    {
@@ -339,7 +415,6 @@ printf("state %d\n",state);
 			   // turn and adjust distnace to corner from that point
 			   if(around_corner_go_back)
 			   {
-
 				   // go back if it already went into one direction
 				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, max_rate,side_range);
 				   temp_vel_x = 0.0f;
@@ -352,7 +427,8 @@ printf("state %d\n",state);
 			   // continue to turn around corner
 			   previous_heading = current_heading;
 			   around_corner_go_back = false;
-			   commandTurnAroundCorner(&temp_vel_x, &temp_vel_w, ref_distance_from_wall);
+			   commandTurnAroundCornerAndAdjust(&temp_vel_x, &temp_vel_y, &temp_vel_w, ref_distance_from_wall, side_range);
+			 //  temp_vel_w = temp_vel_w - 0.05f;
 		   }
 
 
