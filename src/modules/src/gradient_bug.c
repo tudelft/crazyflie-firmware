@@ -26,6 +26,8 @@
 #include "stabilizer.h"
 
 #include "wallfollowing_multiranger_onboard.h"
+#include "lobe_navigation.h"
+
 #include "oa.h"
 #include "multiranger.h"
 
@@ -127,6 +129,9 @@ void gradientBugTask(void *param)
 		left_range = (float)rangeLeft/1000.0f;
 		up_range = (float)rangeUp/1000.0f;
 
+		point_t pos;
+		estimatorKalmanGetEstimatedPos(&pos);
+
 
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
 
@@ -167,7 +172,10 @@ void gradientBugTask(void *param)
 				hover(&setpoint_BG, nominal_height);
 
 				// wall following state machine
-				wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
+				//wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
+				int8_t dummy_rssi = 100;
+				lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, current_heading, (float)pos.x, (float)pos.y, dummy_rssi);
+
 
 				// convert yaw rate commands to degrees
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
@@ -190,7 +198,9 @@ void gradientBugTask(void *param)
 				if(height>nominal_height)
 				{
 					taken_off = true;
-					wall_follower_init(0.4,0.5);
+					//wall_follower_init(0.4,0.5);
+					init_lobe_navigator();
+
 				}
 				on_the_ground = false;
 

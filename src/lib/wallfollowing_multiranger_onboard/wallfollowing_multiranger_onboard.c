@@ -34,7 +34,7 @@ float state_start_time;
 
 #ifndef GB_ONBOARD
 
-int diff_ms(struct timeval t1, struct timeval t2)
+static int diff_ms(struct timeval t1, struct timeval t2)
 {
     return (((t1.tv_sec - t2.tv_sec) * 1000000) +
             (t1.tv_usec - t2.tv_usec))/1000;
