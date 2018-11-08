@@ -220,7 +220,7 @@ static int transition(int new_state)
 
 }
 
-void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, int direction_turn)
+int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, int direction_turn)
 {
 
 	direction = direction_turn;
@@ -459,6 +459,6 @@ printf("state %d\n",state);
 
    //printf("state = %d\n",state);
 
-
+return state;
 
 }

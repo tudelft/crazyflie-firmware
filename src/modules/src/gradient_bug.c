@@ -31,6 +31,8 @@
 #include "oa.h"
 #include "multiranger.h"
 
+#include "radiolink.h"
+
 //#define GRADIENT_BUG_NAME "GRADIENTBUG"
 //#define GRADIENT_TASK_PRI 2
 #define GRADIENT_BUG_COMMANDER_PRI 3
@@ -108,6 +110,7 @@ float right_range;
 float front_range;
 float left_range;
 float up_range;
+float rssi_angle;
 
 
 bool manual_startup = false;
@@ -120,7 +123,7 @@ void gradientBugTask(void *param)
 	systemWaitStart();
 	vTaskDelay(M2T(3000));
 	while(1) {
-		vTaskDelay(10);
+		vTaskDelay(30);
 		//getStatePosition(&position);
 		height = estimatorKalmanGetElevation();
 		current_heading = getHeading() * (float)M_PI / 180.0f;
@@ -173,8 +176,8 @@ void gradientBugTask(void *param)
 
 				// wall following state machine
 				//wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
-				int8_t dummy_rssi = 100;
-				lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, current_heading, (float)pos.x, (float)pos.y, dummy_rssi);
+				//uint8_t dummy_rssi = 44+(3.14-fabs(current_heading))*20;
+				rssi_angle =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
 
 
 				// convert yaw rate commands to degrees
@@ -260,10 +263,13 @@ PARAM_GROUP_STOP(gbug)
 
 
 LOG_GROUP_START(gradientbug)
-LOG_ADD(LOG_FLOAT, height, &height)
+LOG_ADD(LOG_UINT8, rssi, &rssi_ext)
+LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
+
+/*LOG_ADD(LOG_FLOAT, height, &height)
 LOG_ADD(LOG_FLOAT, heading, &current_heading)
 LOG_ADD(LOG_FLOAT, right_range, &right_range)
-LOG_ADD(LOG_FLOAT, front_range, &front_range)
+LOG_ADD(LOG_FLOAT, front_range, &front_range)*/
 
 LOG_GROUP_STOP(gradientbug)
 

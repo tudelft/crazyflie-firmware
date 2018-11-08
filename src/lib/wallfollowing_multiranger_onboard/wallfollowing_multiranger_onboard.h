@@ -12,7 +12,7 @@
 
 void testRange(float front_range, float right_range, float left_range);
 
-void wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, int direction_turn);
+int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, int direction_turn);
 
 void wall_follower_init(float new_ref_distance_from_wall, float max_speed_ref);
 #endif /* SRC_WALLFOLLOWING_MULTIRANGER_ONBOARD_H_ */
