@@ -25,6 +25,7 @@ float state_start_time;
 #endif
 
 bool first_run = true;
+#define RSSI_ARRAY_MAX 360
 
 #ifndef GB_ONBOARD
 
@@ -164,11 +165,13 @@ static void medianArray(uint8_t array[], uint8_t array_filtered[], int32_t size,
 
 
 // Command functions
+/*
 static void commandTurnCircle(float* vel_x,  float* vel_w, float max_speed, float radius)
 {
 	*vel_x = max_speed;
 	*vel_w = ((*vel_x)/radius);
 }
+*/
 
 static void commandTurn( float* vel_w, float max_rate)
 {
@@ -184,12 +187,12 @@ void init_lobe_navigator()
 
 }
 
-float lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, float current_pos_x, float current_pos_y, uint8_t rssi)
+int lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float* rssi_angle_save, float front_range, float side_range, float current_heading, float current_pos_x, float current_pos_y, uint8_t rssi)
 {
 	static int state = 2;
 	static float previous_heading = 0;
-	static uint8_t rssi_array[360];
-	static float heading_array[360];
+	static uint8_t rssi_array[RSSI_ARRAY_MAX];
+	static float heading_array[RSSI_ARRAY_MAX];
 	static int32_t it_array = 0;
 	static float rssi_angle = 0;
 	static float prev_pos_x = 0;
@@ -197,6 +200,7 @@ float lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float front_range
 	static float rssi_angle_dir=0;
 	int32_t min_index=0;
 	static int state_wf;
+	static int amount_of_cycles = 1;
 
 #ifndef GB_ONBOARD
 	gettimeofday(&now_time,NULL);
@@ -243,7 +247,7 @@ float lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float front_range
 		{
 			// reiintialize values for rotate_360
 			previous_heading = current_heading;
-			int32_t it;for(it=0;it<360;it++){rssi_array[it]=(uint8_t)255;heading_array[it]=(float)0;}
+			int32_t it;for(it=0;it<RSSI_ARRAY_MAX;it++){rssi_array[it]=(uint8_t)255;heading_array[it]=(float)0;}
 			it_array=0;
 			state = transition(4);
 		}
@@ -264,19 +268,27 @@ float lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float front_range
 #endif
 			{
 				bool circle_check = logicIsCloseTo(wraptopi(current_heading-previous_heading),0,0.1f);
-				// If so, determine attenna lobe towards beacon
 				if(circle_check)
+					amount_of_cycles++;
+				    state = transition(2);
+
+				// If so, determine attenna lobe towards beacon
+				if(circle_check && amount_of_cycles==2)
 				{
+					amount_of_cycles=0;
 					// Filter the rssi_array
 					uint8_t rssi_array_filtered[360];
 					medianArray(rssi_array, rssi_array_filtered, it_array, 10);
+//for(int it = 0;it<it_array;it++)printf("%f, ", heading_array[it]);printf("\n");
+
+	//				for(int it = 0;it<it_array;it++)printf("%d, ", rssi_array_filtered[it]);printf("\n");
 					// Find the minimum and determine the rssi angle
 					min_index = find_minimum(rssi_array_filtered,it_array);
 					rssi_angle = wraptopi(heading_array[min_index]+3.14f);
-
+					//printf("min_index %d rssi_angle %f\n",min_index,rssi_angle);
 					// prepare variables to go to the rssi_angle
 					previous_heading = current_heading;
-					rssi_angle_dir = wraptopi(current_heading-rssi_angle); // to determine the direction when turning to goal
+					rssi_angle_dir = wraptopi(rssi_angle-current_heading); // to determine the direction when turning to goal
 					state = transition(3);
 				}
 
@@ -292,7 +304,7 @@ float lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float front_range
 	}else if(state == 3)         //ROTATE_TO_GOAL
 	{
 		// check if heading is close to the rssi_angle
-		bool goal_check = logicIsCloseTo(wraptopi(current_heading- rssi_angle),0,0.1f);
+		bool goal_check = logicIsCloseTo(wraptopi( rssi_angle-current_heading),0,0.1f);
 		if(goal_check)
 		{
 			// if so, then prepare variables and go to forward
@@ -345,18 +357,22 @@ float lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float front_range
 	}else if(state == 2) 		// ROTATE_360
 	{
 		// turn a small circle, will storing the rssi values
-		commandTurnCircle(&temp_vel_x, &temp_vel_w, 0.5,0.5);
-		rssi_array[it_array]=rssi;
-		heading_array[it_array]=current_heading;
-		it_array++;
+		commandTurn(&temp_vel_w, 1.0);
+		//commandTurnCircle(&temp_vel_x, &temp_vel_w, 0.25,0.25);
+		if(it_array<RSSI_ARRAY_MAX)
+		{
+			rssi_array[it_array]=rssi;
+			heading_array[it_array]=current_heading;
+			it_array++;
+		}
 
 	}else if(state==3)			//ROTATE_TO_GOAL
 	{
 		// rotate to goal, determined on the sign
 		if (rssi_angle_dir<0)
-			commandTurn(&temp_vel_w, 0.5);
-		else
 			commandTurn(&temp_vel_w, -0.5);
+		else
+			commandTurn(&temp_vel_w, 0.5);
 
 
 	}else if(state==4)			//HOVER_BEFORE_ROTATE
@@ -378,7 +394,8 @@ float lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float front_range
 	*vel_x = temp_vel_x;
 	*vel_y = temp_vel_y;
 	*vel_w = temp_vel_w;
+	*rssi_angle_save = rssi_angle;
 
-	return (float)rssi_angle;
+	return state;
 
 }

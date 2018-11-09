@@ -111,13 +111,25 @@ float front_range;
 float left_range;
 float up_range;
 float rssi_angle;
+int state;
+
 
 
 bool manual_startup = false;
 bool on_the_ground = true;
 uint32_t time_stamp_manual_startup_command = 0;
 #define MANUAL_STARTUP_TIMEOUT  M2T(3000)
+/*static double wraptopi(double number)
+{
 
+	if(number>(double)M_PI)
+		return (number-(double)(2*M_PI));
+	else if(number< (double)(-1*M_PI))
+		return (number+(double)(2*M_PI));
+	else
+		return (number);
+
+}*/
 void gradientBugTask(void *param)
 {
 	systemWaitStart();
@@ -163,6 +175,8 @@ void gradientBugTask(void *param)
 		if (keep_flying == true && (multiranger_isinit == false || up_range <0.2f))
 			keep_flying = 0;
 
+		state = 0;
+
 		if(keep_flying)
 		{
 			if(taken_off)
@@ -177,7 +191,9 @@ void gradientBugTask(void *param)
 				// wall following state machine
 				//wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
 				//uint8_t dummy_rssi = 44+(3.14-fabs(current_heading))*20;
-				rssi_angle =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
+				//uint8_t dummy_rssi = 44+(uint8_t)(fabs((double)(wraptopi((double)current_heading-0.8-3.14))*20.0));
+
+				state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
 
 
 				// convert yaw rate commands to degrees
@@ -263,7 +279,8 @@ PARAM_GROUP_STOP(gbug)
 
 
 LOG_GROUP_START(gradientbug)
-LOG_ADD(LOG_UINT8, rssi, &rssi_ext)
+//LOG_ADD(LOG_UINT8, rssi, &rssi_ext)
+LOG_ADD(LOG_UINT8, state, &state)
 LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
 
 /*LOG_ADD(LOG_FLOAT, height, &height)
