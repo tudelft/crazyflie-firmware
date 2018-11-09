@@ -165,13 +165,11 @@ static void medianArray(uint8_t array[], uint8_t array_filtered[], int32_t size,
 
 
 // Command functions
-/*
 static void commandTurnCircle(float* vel_x,  float* vel_w, float max_speed, float radius)
 {
 	*vel_x = max_speed;
 	*vel_w = ((*vel_x)/radius);
 }
-*/
 
 static void commandTurn( float* vel_w, float max_rate)
 {
@@ -357,8 +355,8 @@ int lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float* rssi_angle_s
 	}else if(state == 2) 		// ROTATE_360
 	{
 		// turn a small circle, will storing the rssi values
-		commandTurn(&temp_vel_w, 1.0);
-		//commandTurnCircle(&temp_vel_x, &temp_vel_w, 0.25,0.25);
+		//commandTurn(&temp_vel_w, 1.0);
+		commandTurnCircle(&temp_vel_x, &temp_vel_w, 0.25,0.25);
 		if(it_array<RSSI_ARRAY_MAX)
 		{
 			rssi_array[it_array]=rssi;

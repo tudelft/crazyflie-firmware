@@ -92,6 +92,8 @@ static void vel_command(setpoint_t *sp, float vel_x, float vel_y, float yaw_rate
 	sp->position.z = height;
 	sp->mode.yaw = modeVelocity;
 	sp->attitudeRate.yaw = yaw_rate;
+	sp->velocity_body = true;
+
 }
 
 static void shut_off_engines(setpoint_t *sp)
@@ -200,11 +202,11 @@ void gradientBugTask(void *param)
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
 
 				// Convert relative commands to world commands
-				float psi = current_heading;
+				/*float psi = current_heading;
 				float vel_x_cmd_convert =  cosf(-psi) * vel_x_cmd + sinf(-psi) * vel_y_cmd;
-				float vel_y_cmd_convert = -sinf(-psi) * vel_x_cmd + cosf(-psi) * vel_y_cmd;
+				float vel_y_cmd_convert = -sinf(-psi) * vel_x_cmd + cosf(-psi) * vel_y_cmd;*/
 				//float vel_y_cmd_convert = -1 * vel_y_cmd;
-				vel_command(&setpoint_BG, vel_x_cmd_convert, vel_y_cmd_convert,vel_w_cmd_convert, nominal_height);
+				vel_command(&setpoint_BG, vel_x_cmd, vel_y_cmd,vel_w_cmd_convert, nominal_height);
 				on_the_ground = false;
 			}else
 			{
