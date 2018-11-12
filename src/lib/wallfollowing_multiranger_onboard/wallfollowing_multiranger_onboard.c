@@ -20,10 +20,11 @@
 #endif
 
 // variables
-float ref_distance_from_wall = 0;
-float max_speed = 0.5;
-float max_rate = 0.5;
-float direction = 1;
+static float ref_distance_from_wall = 0;
+static float max_speed = 0.5;
+static float max_rate = 0.5;
+static float direction = 1;
+static float first_run = false;
 
 #ifndef GB_ONBOARD
 struct timeval state_start_time;
@@ -57,6 +58,7 @@ void wall_follower_init(float new_ref_distance_from_wall, float max_speed_ref)
 {
 	ref_distance_from_wall = new_ref_distance_from_wall;
 	max_speed = max_speed_ref;
+	first_run = true;
 }
 
 // Static helper functions
@@ -224,7 +226,7 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 {
 
 	direction = direction_turn;
-   static int state = 1;
+   static int state = 3;
    static float previous_heading = 0;
    static float angle = 0;
    static bool around_corner_first_turn = false;
@@ -236,6 +238,15 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 #else
 	float now = usecTimestamp() / 1e6;
 #endif
+
+	if(first_run)
+	{
+		previous_heading = current_heading;
+		state = 3;
+		around_corner_first_turn = false;
+		around_corner_go_back = false;
+		first_run = false;
+	}
 
 
 	/***********************************************************

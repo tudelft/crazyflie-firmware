@@ -34,6 +34,8 @@
 
 #include "radiolink.h"
 
+#include "median_filter.h"
+
 //#define GRADIENT_BUG_NAME "GRADIENTBUG"
 //#define GRADIENT_TASK_PRI 2
 #define GRADIENT_BUG_COMMANDER_PRI 3
@@ -135,6 +137,9 @@ uint32_t time_stamp_manual_startup_command = 0;
 }*/
 void gradientBugTask(void *param)
 {
+	struct MedianFilterFloat medFilt;
+	init_median_filter_f(medFilt,5);
+
 	systemWaitStart();
 	vTaskDelay(M2T(3000));
 	while(1) {
@@ -153,10 +158,13 @@ void gradientBugTask(void *param)
 
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
 
+
+		float up_range_filtered = update_median_filter_f(medFilt,up_range);
+
 		//***************** Manual Startup procedure*************//
 
 		// indicate if top range is hit while it is not flying yet, then start counting
-		if (keep_flying == false && manual_startup==false && up_range <0.2f && on_the_ground == true)
+		if (keep_flying == false && manual_startup==false && up_range_filtered <0.2f && on_the_ground == true)
 		{
 			manual_startup = true;
 			time_stamp_manual_startup_command = xTaskGetTickCount();
@@ -175,7 +183,7 @@ void gradientBugTask(void *param)
 		}
 
 		// Don't fly if multiranger is not connected or the uprange is activated
-		if (keep_flying == true && (multiranger_isinit == false || up_range <0.2f))
+		if (keep_flying == true && (multiranger_isinit == false || up_range_filtered <0.2f))
 			keep_flying = 0;
 
 		state = 0;
@@ -198,7 +206,7 @@ void gradientBugTask(void *param)
 
 
 				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
-				wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading, rssi_inter_ext);
+				wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_ext);
 
 
 				// convert yaw rate commands to degrees
@@ -225,6 +233,8 @@ void gradientBugTask(void *param)
 					//wall_follower_init(0.4,0.5);
 					//init_lobe_navigator();
 					init_wall_follower_and_avoid_controller(0.4,0.5,-1);
+
+
 
 				}
 				on_the_ground = false;

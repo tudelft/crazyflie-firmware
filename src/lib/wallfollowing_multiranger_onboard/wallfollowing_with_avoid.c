@@ -97,20 +97,23 @@ void init_wall_follower_and_avoid_controller(float new_ref_distance_from_wall, f
 }
 
 
-void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w, float front_range, float left_range, float right_range, float current_heading,  uint8_t rssi_other_drone)
+void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w, float front_range, float left_range, float right_range,  float current_heading, float pos_x, float pos_y, uint8_t rssi_other_drone)
 {
 
 	// Initalize static variables
 	static int state = 1;
 	//static float previous_heading = 0;
-	//static int state_wf = 0;
+	static int state_wf = 0;
 	static bool already_turned = false;
+	static float prev_pos_x = 0;
+
+	static float prev_pos_y = 0;
 
 
 #ifndef GB_ONBOARD
 	gettimeofday(&now_time,NULL);
 #else
-	float now = usecTimestamp() / 1e6;
+	float now = (float)usecTimestamp() / (float)1e6;
 #endif
 
 	// if it is reinitialized
@@ -144,22 +147,28 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 		// if front range is close, start wallfollowing
 		if(front_range<ref_distance_from_wall+0.2f)
 		{
-			wall_follower_init(0.4,0.5);
+			wall_follower_init(ref_distance_from_wall,0.5);
 			state = transition(2); //wall_following
 		}
 	}else if(state == 2)         //WALL_FOLLOWING
 	{
+
 		// After 10 seconds, turn already_turned back on again
-#ifndef GB_ONBOARD
-		if (diff_ms(now_time, state_start_time)>10000 &&already_turned)
-#else
-	    if (now-state_start_time>10.0f&&already_turned)
-#endif
+		float diff_x= prev_pos_x - pos_x;
+		float diff_y= prev_pos_y - pos_y;
+
+		float distance_from_turning_point = sqrt(diff_x*diff_x + diff_y*diff_y);
+	    if (distance_from_turning_point>2&&already_turned)
+
 	    {
 	    	already_turned=false;
 	    }
+		printf("time %d  already turned %d ",diff_ms(now_time, state_start_time),already_turned);
+
+		printf("rssi other drone %d state %d\n",rssi_other_drone,state_wf);
+
 		// if during wall-following, agent gets too close to another agent, change local direction
-		if(rssi_other_drone == 44 && already_turned == false)
+		if(rssi_other_drone<45&& state_wf == 5 && already_turned == false)
 		{
 			state = transition(3);
 		}
@@ -171,6 +180,8 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 			local_direction = local_direction*-1;
 			wall_follower_init(0.4,0.5);
 			already_turned = true;
+			prev_pos_x = pos_x;
+			prev_pos_y =pos_y;
 			state = transition(2);
 		}
 	}
@@ -194,16 +205,16 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 		//Get the values from the wallfollowing
 		if(local_direction == 1)
 		{
-		    wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, local_direction);
+		   state_wf= wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, local_direction);
 		}else if(local_direction == -1)
 		{
-			wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, left_range, current_heading, local_direction);
+			state_wf=	wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, left_range, current_heading, local_direction);
 		}
 
 	}else if(state == 3)          //ROTATE_LOCAL_DIRECTION
 	{
 		//Turn to see the other side of the wall
-		commandTurn( &temp_vel_w, local_direction*0.5f);
+		commandTurn( &temp_vel_w, local_direction*-0.5f);
 	}
 
 #ifndef GB_ONBOARD
