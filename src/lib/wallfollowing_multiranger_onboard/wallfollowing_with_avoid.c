@@ -29,7 +29,7 @@ float state_start_time;
 static bool first_run = true;
 static float ref_distance_from_wall = 0.5;
 static float max_speed = 0.5;
-static local_direction = 1;
+static float local_direction = 1;
 
 #ifndef GB_ONBOARD
 
@@ -57,15 +57,16 @@ static int transition(int new_state)
 
 
 // Static helper functions
-static bool logicIsCloseTo(float real_value, float checked_value, float margin)
+/*static bool logicIsCloseTo(float real_value, float checked_value, float margin)
 {
 	if(real_value>checked_value-margin && real_value<checked_value+margin)
 	{
 		return true;
 	}else
 		return false;
-}
+}*/
 
+/*
 static float wraptopi(float number)
 {
 	if(number>(float)M_PI)
@@ -76,6 +77,7 @@ static float wraptopi(float number)
 		return (number);
 
 }
+*/
 
 
 // Command functions
@@ -100,8 +102,8 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 
 	// Initalize static variables
 	static int state = 1;
-	static float previous_heading = 0;
-	static int state_wf = 0;
+	//static float previous_heading = 0;
+	//static int state_wf = 0;
 	static bool already_turned = false;
 
 
@@ -114,7 +116,7 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 	// if it is reinitialized
 	if (first_run)
 	{
-		previous_heading = current_heading;
+		//previous_heading = current_heading;
 		state = 1;
 #ifndef GB_ONBOARD
 		gettimeofday(&state_start_time,NULL);
@@ -192,16 +194,16 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 		//Get the values from the wallfollowing
 		if(local_direction == 1)
 		{
-		    state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, local_direction);
+		    wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, local_direction);
 		}else if(local_direction == -1)
 		{
-			state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, left_range, current_heading, local_direction);
+			wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, left_range, current_heading, local_direction);
 		}
 
 	}else if(state == 3)          //ROTATE_LOCAL_DIRECTION
 	{
 		//Turn to see the other side of the wall
-		commandTurn( &temp_vel_w, local_direction*0.5);
+		commandTurn( &temp_vel_w, local_direction*0.5f);
 	}
 
 #ifndef GB_ONBOARD

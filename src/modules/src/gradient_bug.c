@@ -27,6 +27,7 @@
 
 #include "wallfollowing_multiranger_onboard.h"
 #include "lobe_navigation.h"
+#include "wallfollowing_with_avoid.h"
 
 #include "oa.h"
 #include "multiranger.h"
@@ -195,7 +196,9 @@ void gradientBugTask(void *param)
 				//uint8_t dummy_rssi = 44+(3.14-fabs(current_heading))*20;
 				//uint8_t dummy_rssi = 44+(uint8_t)(fabs((double)(wraptopi((double)current_heading-0.8-3.14))*20.0));
 
-				state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
+
+				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
+				wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading, rssi_inter_ext);
 
 
 				// convert yaw rate commands to degrees
@@ -220,7 +223,8 @@ void gradientBugTask(void *param)
 				{
 					taken_off = true;
 					//wall_follower_init(0.4,0.5);
-					init_lobe_navigator();
+					//init_lobe_navigator();
+					init_wall_follower_and_avoid_controller(0.4,0.5,-1);
 
 				}
 				on_the_ground = false;

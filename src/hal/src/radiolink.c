@@ -57,6 +57,8 @@ static int radiolinkReceiveCRTPPacket(CRTPPacket *p);
 //Local RSSI variable used to enable logging of RSSI values from Radio
 static uint8_t rssi;
 uint8_t rssi_ext = 30;
+static uint8_t rssi_inter = 30;
+uint8_t rssi_inter_ext = 30;
 
 static struct crtpLinkOperations radiolinkOp =
 {
@@ -158,6 +160,11 @@ void radiolinkSyslinkDispatch(SyslinkPacket *slp)
 		//Extract RSSI sample sent from radio
 		memcpy(&rssi, slp->data, sizeof(uint8_t));
 		rssi_ext = rssi;
+	}else if (slp->type == SYSLINK_RADIO_RSSI_INTER)
+	{
+		//Extract RSSI sample sent from radio
+		memcpy(&rssi_inter, slp->data, sizeof(uint8_t));
+		rssi_inter_ext = rssi_inter;
 	}
 }
 
@@ -201,4 +208,5 @@ static int radiolinkSetEnable(bool enable)
 
 LOG_GROUP_START(radio)
 LOG_ADD(LOG_UINT8, rssi, &rssi)
+LOG_ADD(LOG_UINT8, rssi_inter, &rssi_inter)
 LOG_GROUP_STOP(radio)

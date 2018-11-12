@@ -32,6 +32,7 @@
 #include "syslink.h"
 
 extern uint8_t rssi_ext;
+extern uint8_t rssi_inter_ext;
 
 void radiolinkInit(void);
 bool radiolinkTest(void);
