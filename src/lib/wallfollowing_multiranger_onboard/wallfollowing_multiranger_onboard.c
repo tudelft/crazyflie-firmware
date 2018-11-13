@@ -275,7 +275,6 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 
    }else if(state==3)			// TURN_TO_FIND_WALL
    {
-
 	   // check if wall is found
 	   bool side_range_check = side_range < ref_distance_from_wall/(float)cos(0.78f)+0.2f;
 	   bool front_range_check = front_range < ref_distance_from_wall/(float)cos(0.78f)+0.2f;

@@ -113,7 +113,7 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 #ifndef GB_ONBOARD
 	gettimeofday(&now_time,NULL);
 #else
-	float now = (float)usecTimestamp() / (float)1e6;
+	//float now = (float)usecTimestamp() / (float)1e6;
 #endif
 
 	// if it is reinitialized
@@ -163,12 +163,12 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 	    {
 	    	already_turned=false;
 	    }
-		printf("time %d  already turned %d ",diff_ms(now_time, state_start_time),already_turned);
+		//printf("time %d  already turned %d ",diff_ms(now_time, state_start_time),already_turned);
 
-		printf("rssi other drone %d state %d\n",rssi_other_drone,state_wf);
+		//printf("rssi other drone %d state %d\n",rssi_other_drone,state_wf);
 
 		// if during wall-following, agent gets too close to another agent, change local direction
-		if(rssi_other_drone<45&& state_wf == 5 && already_turned == false)
+		if(rssi_other_drone<47&& state_wf == 5 && already_turned == false)
 		{
 			state = transition(3);
 		}
@@ -178,7 +178,7 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 		if(front_range<ref_distance_from_wall+0.2f)
 		{
 			local_direction = local_direction*-1;
-			wall_follower_init(0.4,0.5);
+			wall_follower_init(ref_distance_from_wall,0.5);
 			already_turned = true;
 			prev_pos_x = pos_x;
 			prev_pos_y =pos_y;

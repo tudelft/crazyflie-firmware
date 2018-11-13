@@ -47,7 +47,7 @@ static bool keep_flying = false;
 float height;
 
 static bool taken_off = false;
-static float nominal_height = 0.5;
+static float nominal_height = 0.3;
 static void take_off(setpoint_t *sp, float velocity)
 {
 	sp->mode.x = modeVelocity;
@@ -108,6 +108,7 @@ static void shut_off_engines(setpoint_t *sp)
 
 }
 
+
 setpoint_t setpoint_BG;
 float vel_x_cmd, vel_y_cmd, vel_w_cmd;
 float current_heading;
@@ -115,10 +116,25 @@ float right_range;
 float front_range;
 float left_range;
 float up_range;
+float back_range;
 float rssi_angle;
 int state;
+float up_range_filtered;
 
+//#define REVERSE
 
+#ifdef REVERSE
+static float wraptopi(float number)
+{
+	if(number>(float)M_PI)
+		return (number-(float)(2*M_PI));
+	else if(number< (float)(-1*M_PI))
+		return (number+(float)(2*M_PI));
+	else
+		return (number);
+
+}
+#endif
 
 bool manual_startup = false;
 bool on_the_ground = true;
@@ -138,8 +154,10 @@ uint32_t time_stamp_manual_startup_command = 0;
 void gradientBugTask(void *param)
 {
 	struct MedianFilterFloat medFilt;
-	init_median_filter_f(medFilt,5);
+	init_median_filter_f(&medFilt,5);
 
+	struct MedianFilterInt medFiltRssi;
+	init_median_filter_i(&medFiltRssi,5);
 	systemWaitStart();
 	vTaskDelay(M2T(3000));
 	while(1) {
@@ -151,20 +169,23 @@ void gradientBugTask(void *param)
 		right_range = (float)rangeRight/1000.0f;
 		left_range = (float)rangeLeft/1000.0f;
 		up_range = (float)rangeUp/1000.0f;
+	    back_range = (float)rangeBack/1000.0f;
+
+
 
 		point_t pos;
 		estimatorKalmanGetEstimatedPos(&pos);
 
 
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
-
-
-		float up_range_filtered = update_median_filter_f(medFilt,up_range);
-
+		up_range_filtered = update_median_filter_f(&medFilt,up_range);
+		if (up_range_filtered< 0.05f)
+			up_range_filtered = up_range;
+		//up_range_filtered = 1.0f;
 		//***************** Manual Startup procedure*************//
 
 		// indicate if top range is hit while it is not flying yet, then start counting
-		if (keep_flying == false && manual_startup==false && up_range_filtered <0.2f && on_the_ground == true)
+		if (keep_flying == false && manual_startup==false && up_range <0.2f && on_the_ground == true)
 		{
 			manual_startup = true;
 			time_stamp_manual_startup_command = xTaskGetTickCount();
@@ -183,11 +204,13 @@ void gradientBugTask(void *param)
 		}
 
 		// Don't fly if multiranger is not connected or the uprange is activated
-		if (keep_flying == true && (multiranger_isinit == false || up_range_filtered <0.2f))
+		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f))
 			keep_flying = 0;
 
 		state = 0;
 
+
+		int rssi_inter_filtered = update_median_filter_i(&medFiltRssi,rssi_inter_ext);
 		if(keep_flying)
 		{
 			if(taken_off)
@@ -206,9 +229,18 @@ void gradientBugTask(void *param)
 
 
 				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
-				wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_ext);
+				//wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
 
 
+#ifndef REVERSE
+			wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
+#else
+			wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, back_range, left_range, right_range,-1* wraptopi(current_heading+3.14f),(float)pos.x, (float)pos.y, rssi_inter_filtered);
+			vel_x_cmd = -1*vel_x_cmd;
+			vel_y_cmd = 1*vel_y_cmd;
+			vel_w_cmd = -1*vel_w_cmd;
+
+#endif
 				// convert yaw rate commands to degrees
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
 
@@ -232,7 +264,7 @@ void gradientBugTask(void *param)
 					taken_off = true;
 					//wall_follower_init(0.4,0.5);
 					//init_lobe_navigator();
-					init_wall_follower_and_avoid_controller(0.4,0.5,-1);
+					init_wall_follower_and_avoid_controller(0.6,0.5,1);
 
 
 
@@ -298,6 +330,7 @@ LOG_GROUP_START(gradientbug)
 //LOG_ADD(LOG_UINT8, rssi, &rssi_ext)
 LOG_ADD(LOG_UINT8, state, &state)
 LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
+LOG_ADD(LOG_FLOAT, up_range, &up_range_filtered)
 
 /*LOG_ADD(LOG_FLOAT, height, &height)
 LOG_ADD(LOG_FLOAT, heading, &current_heading)
