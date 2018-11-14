@@ -47,7 +47,7 @@ static bool keep_flying = false;
 float height;
 
 static bool taken_off = false;
-static float nominal_height = 0.3;
+static float nominal_height = 0.5;
 static void take_off(setpoint_t *sp, float velocity)
 {
 	sp->mode.x = modeVelocity;
@@ -264,7 +264,7 @@ void gradientBugTask(void *param)
 					taken_off = true;
 					//wall_follower_init(0.4,0.5);
 					//init_lobe_navigator();
-					init_wall_follower_and_avoid_controller(0.6,0.5,1);
+					init_wall_follower_and_avoid_controller(0.4,0.5,-1);
 
 
 

@@ -168,7 +168,7 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 		//printf("rssi other drone %d state %d\n",rssi_other_drone,state_wf);
 
 		// if during wall-following, agent gets too close to another agent, change local direction
-		if(rssi_other_drone<47&& state_wf == 5 && already_turned == false)
+		if(rssi_other_drone<50&& state_wf == 5 && already_turned == false)
 		{
 			state = transition(3);
 		}
