@@ -28,6 +28,7 @@
 #include "wallfollowing_multiranger_onboard.h"
 #include "lobe_navigation.h"
 #include "wallfollowing_with_avoid.h"
+#include "com_bug_with_looping.h"
 
 #include "oa.h"
 #include "multiranger.h"
@@ -210,7 +211,8 @@ void gradientBugTask(void *param)
 		state = 0;
 
 
-		int rssi_inter_filtered = update_median_filter_i(&medFiltRssi,rssi_inter_ext);
+		//int rssi_inter_filtered = update_median_filter_i(&medFiltRssi,rssi_inter_ext);
+
 		if(keep_flying)
 		{
 			if(taken_off)
@@ -231,6 +233,7 @@ void gradientBugTask(void *param)
 				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
 				//wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
 
+/*
 
 #ifndef REVERSE
 			wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
@@ -241,6 +244,10 @@ void gradientBugTask(void *param)
 			vel_w_cmd = -1*vel_w_cmd;
 
 #endif
+*/
+
+				state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
+
 				// convert yaw rate commands to degrees
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
 
@@ -264,7 +271,8 @@ void gradientBugTask(void *param)
 					taken_off = true;
 					//wall_follower_init(0.4,0.5);
 					//init_lobe_navigator();
-					init_wall_follower_and_avoid_controller(0.4,0.5,-1);
+					//init_wall_follower_and_avoid_controller(0.4,0.5,-1);
+					init_com_bug_loop_controller(0.4, 0.5);
 
 
 

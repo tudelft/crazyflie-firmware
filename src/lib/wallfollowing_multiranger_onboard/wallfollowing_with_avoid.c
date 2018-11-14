@@ -219,7 +219,7 @@ void wall_follower_and_avoid_controller(float* vel_x, float* vel_y, float* vel_w
 
 #ifndef GB_ONBOARD
 
-	printf("state %d\n",state);
+	printf("state wf %d\n",state);
 
 #endif
 

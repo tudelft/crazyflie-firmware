@@ -418,7 +418,7 @@ printf("state %d\n",state);
 		   {
 
 			   // check if scanning has already occured
-			   if(wraptopi(fabs(current_heading-previous_heading))>0.3f)
+			   if(wraptopi(fabs(current_heading-previous_heading))>0.8f)
 			   {
 				   around_corner_go_back = true;
 			   }
@@ -426,11 +426,11 @@ printf("state %d\n",state);
 			   if(around_corner_go_back)
 			   {
 				   // go back if it already went into one direction
-				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, max_rate,side_range);
+				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, -1*max_rate,side_range);
 				   temp_vel_x = 0.0f;
 			   }else
 			   {
-				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w,-1* max_rate,side_range);
+				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, max_rate,side_range);
 				   temp_vel_x = 0.0f;			   }
 		   }else
 		   {

@@ -93,26 +93,33 @@ void init_com_bug_loop_controller(float new_ref_distance_from_wall, float max_sp
 }
 
 
-void com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, float current_pos_x, float current_pos_y)
+int com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float front_range, float left_range, float right_range, float current_heading, float current_pos_x, float current_pos_y)
 {
 
 	// Initalize static variables
 	static int state = 2;
-	static float previous_heading = 0;
+	//static float previous_heading = 0;
 	static int state_wf=0;
 	static float wanted_angle = -0.8;
 	static float wanted_angle_dir = 0;
+	static float pos_x_hit = 0;
+	static float pos_y_hit = 0;
+	static bool overwrite_and_reverse_direction = false;
+	static float direction = 1;
 
+/*
 #ifndef GB_ONBOARD
 	gettimeofday(&now_time,NULL);
 #else
 	float now = usecTimestamp() / 1e6;
 #endif
+*/
 
 	// if it is reinitialized
 	if (first_run)
 	{
-		previous_heading = current_heading;
+		//previous_heading = current_heading;
+		overwrite_and_reverse_direction = false;
 		state = 2;
 #ifndef GB_ONBOARD
 		gettimeofday(&state_start_time,NULL);
@@ -137,12 +144,19 @@ void com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fro
 
 	if (state == 1) 			//FORWARD
 	{
-		printf("%f\n",front_range);
+		//printf("%f\n",front_range);
 		if(front_range<ref_distance_from_wall+0.2f)
 		{
+			if (overwrite_and_reverse_direction)
+				direction = -1.0f*direction;
+
+			pos_x_hit = current_pos_x;
+			pos_y_hit = current_pos_y;
+
 			wall_follower_init(0.4,0.5);
 
 			state = transition(3); //wall_following
+
 		}
 	}else if(state == 2) 		//ROTATE_TO_GOAL
 	{
@@ -159,11 +173,23 @@ void com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fro
 
 
 		float bearing_to_goal = wraptopi(wanted_angle-current_heading);
-		bool goal_check_WF = (bearing_to_goal<0 && bearing_to_goal>-1.57);
-		printf("bearing to goal %f\n", bearing_to_goal);
+		bool goal_check_WF = (bearing_to_goal<0.3f && bearing_to_goal>-0.3f);
+
+        float rel_x_loop = current_pos_x- pos_x_hit;
+        float rel_y_loop = current_pos_y -pos_y_hit;
+
+        float loop_angle = wraptopi(atan2(rel_y_loop,rel_x_loop));
+
+        if (fabs(wraptopi(bearing_to_goal+3.14f-loop_angle))<0.5)
+        {
+        	overwrite_and_reverse_direction = true;
+        }
+
+
+
 
 				//logicIsCloseTo(wraptopi(current_heading-wanted_angle),0,0.3f);
-		if(state_wf == 6 && goal_check_WF)
+		if(state_wf == 6 && goal_check_WF && front_range>ref_distance_from_wall+0.4f)
 		{
 			wanted_angle_dir = wraptopi(current_heading-wanted_angle); // to determine the direction when turning to goal
 			state = transition(2); //rotate_to_goal
@@ -197,8 +223,10 @@ void com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fro
 	}else  if(state == 3)          //WALL_FOLLOWING
 	{
 		//Get the values from the wallfollowing
-		state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, side_range, current_heading, -1);
-
+		if(direction == -1)
+		    state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, left_range, current_heading, direction);
+		else
+			state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, direction);
 	}
 
 #ifndef GB_ONBOARD
@@ -211,5 +239,5 @@ void com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fro
 	*vel_y = temp_vel_y;
 	*vel_w = temp_vel_w;
 
-
+return state;
 }
