@@ -105,7 +105,8 @@ int com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fron
 	static float pos_x_hit = 0;
 	static float pos_y_hit = 0;
 	static bool overwrite_and_reverse_direction = false;
-	static float direction = 1;
+	static float direction = -1;
+	static bool cannot_go_to_goal = false;
 
 /*
 #ifndef GB_ONBOARD
@@ -147,8 +148,16 @@ int com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fron
 		//printf("%f\n",front_range);
 		if(front_range<ref_distance_from_wall+0.2f)
 		{
+
+
+
 			if (overwrite_and_reverse_direction)
+			{
 				direction = -1.0f*direction;
+				overwrite_and_reverse_direction = false;
+			}
+
+
 
 			pos_x_hit = current_pos_x;
 			pos_y_hit = current_pos_y;
@@ -162,6 +171,16 @@ int com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fron
 	{
 		// check if heading is close to the preferred_angle
 		bool goal_check = logicIsCloseTo(wraptopi(current_heading- wanted_angle),0,0.1f);
+		if(front_range<ref_distance_from_wall+0.3f)
+		{
+			//pos_x_hit = current_pos_x;
+			//pos_y_hit = current_pos_y;
+			cannot_go_to_goal=  true;
+			wall_follower_init(0.4,0.5);
+
+			state = transition(3); //wall_following
+
+		}
 		if(goal_check)
 		{
 			state = transition(1); //forward
@@ -171,9 +190,13 @@ int com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fron
 		// if during wallfollowing, agent goes around wall, and heading is close to rssi _angle
 		//      got to rotate to goal
 
-
 		float bearing_to_goal = wraptopi(wanted_angle-current_heading);
-		bool goal_check_WF = (bearing_to_goal<0.3f && bearing_to_goal>-0.3f);
+		bool goal_check_WF=false;
+		if (direction == -1)
+			goal_check_WF= (bearing_to_goal<0 && bearing_to_goal>-1.57f);
+		else
+			goal_check_WF = (bearing_to_goal>0 && bearing_to_goal<1.57f);
+
 
         float rel_x_loop = current_pos_x- pos_x_hit;
         float rel_y_loop = current_pos_y -pos_y_hit;
@@ -186,10 +209,13 @@ int com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fron
         }
 
 
-
+        if(state_wf == 5 && cannot_go_to_goal)
+        {
+        	cannot_go_to_goal  = false;
+        }
 
 				//logicIsCloseTo(wraptopi(current_heading-wanted_angle),0,0.3f);
-		if(state_wf == 6 && goal_check_WF && front_range>ref_distance_from_wall+0.4f)
+		if((state_wf == 6||state_wf == 8) && goal_check_WF && front_range>ref_distance_from_wall+0.4f && !cannot_go_to_goal)
 		{
 			wanted_angle_dir = wraptopi(current_heading-wanted_angle); // to determine the direction when turning to goal
 			state = transition(2); //rotate_to_goal
@@ -209,6 +235,14 @@ int com_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float fron
 	if (state == 1) 		     //FORWARD
 	{
 		// forward max speed
+		if (left_range<ref_distance_from_wall)
+		{
+			temp_vel_y = -0.2f;
+		}
+		if (right_range<ref_distance_from_wall)
+		{
+			temp_vel_y = 0.2f;
+		}
 		temp_vel_x= 0.5;
 
 	}else  if(state == 2)			//ROTATE_TO_GOAL

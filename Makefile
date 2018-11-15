@@ -201,6 +201,7 @@ PROJ_OBJ_CF2 += multiranger.o
 PROJ_OBJ_CF2 += wallfollowing_multiranger_onboard.o
 PROJ_OBJ_CF2 += lobe_navigation.o
 PROJ_OBJ_CF2 += wallfollowing_with_avoid.o
+PROJ_OBJ_CF2 += com_bug_with_looping.o
 PROJ_OBJ_CF2 += gradient_bug.o
 CFLAGS += -DGB_ONBOARD
 

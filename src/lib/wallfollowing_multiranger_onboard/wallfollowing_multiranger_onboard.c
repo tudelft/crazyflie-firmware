@@ -96,6 +96,24 @@ static void commandTurn(float* vel_x, float* vel_w, float ref_rate)
 
 }
 
+static void commandAlignCorner(float* vel_y, float* vel_w, float ref_rate, float range, float wanted_distance_from_corner)
+{
+
+	if (range>wanted_distance_from_corner+0.5f)
+	{
+		*vel_w = direction*ref_rate;
+		*vel_y=0;
+
+	}else{
+		if(range>wanted_distance_from_corner)
+			*vel_y = direction*(-1*max_speed/3);
+		else
+			*vel_y = direction*(max_speed/3);
+	*vel_w = 0;}
+
+
+}
+
 static void commandHover(float* vel_x, float* vel_y, float* vel_w)
 {
 	*vel_x = 0.0;
@@ -111,9 +129,9 @@ static void commandForwardAlongWall(float* vel_x, float* vel_y, float range)
 	if(!check_distance_wall)
 	{
 		if(range>ref_distance_from_wall)
-			*vel_y = direction*(-1*max_speed/3);
+			*vel_y = direction*(-1*max_speed/2);
 		else
-			*vel_y = direction*(max_speed/3);
+			*vel_y = direction*(max_speed/2);
 	}
 }
 
@@ -229,9 +247,11 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
    static int state = 3;
    static float previous_heading = 0;
    static float angle = 0;
-   static bool around_corner_first_turn = false;
+  // static bool around_corner_first_turn = false;
    static bool around_corner_go_back = false;
    //static float prev_side_range = 0;
+   //static bool found_corner = 0;
+  // static float wanted_distance_from_corner= 0.3;
 
 #ifndef GB_ONBOARD
 	gettimeofday(&now_time,NULL);
@@ -243,7 +263,7 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 	{
 		previous_heading = current_heading;
 		state = 3;
-		around_corner_first_turn = false;
+	//	around_corner_first_turn = false;
 		around_corner_go_back = false;
 		first_run = false;
 	}
@@ -286,10 +306,10 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 	   }
 	   if (side_range<1.0f && front_range>2.0f)
 	   {
-		   around_corner_first_turn = true;
+		 //  around_corner_first_turn = true;
 		   around_corner_go_back = false;
 		   previous_heading = current_heading;
-		   state = transition(6); // go to rotate_around_wall
+		   state = transition(8); // go to rotate_around_wall
 	   }
    }else if(state==4)			//TURN_TO_ALLIGN_TO_WALL
    {
@@ -306,8 +326,8 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 	   //    end of the wall is reached
        if(side_range > ref_distance_from_wall + 0.2f)
        {
-           around_corner_first_turn = true;
-           state = transition(6);
+         //  around_corner_first_turn = true;
+           state = transition(8);
        }
        // If front range is small
        //    then corner is reached
@@ -332,13 +352,22 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 	   if(check_heading_corner)
 		   state = transition(3);
 
-   }else
+   }else if(state==8)    	   //FIND_CORNER
+   {
+	   if(side_range<=ref_distance_from_wall)
+	   {
+		   state = transition(6);
+	   }
+
+   }
+
+   else
    {
 	  // printf("STATE doesn't exist! \n");
    }
 
 #ifndef GB_ONBOARD
-printf("state %d\n",state);
+printf("state_WF %d\n",state);
 #endif
 
 
@@ -398,51 +427,39 @@ printf("state %d\n",state);
    }else if(state==6)   		//ROTATE_AROUND_WALL
    {
 	   // If first time around corner
-	   	   //first try to find the corner again
-	   if(around_corner_first_turn)
+	   //first try to find the corner again
+
+	   // if side range is larger than prefered distance from wall
+	   if(side_range>ref_distance_from_wall+0.5f)
 	   {
-		   commandTurn(&temp_vel_x, &temp_vel_w, -1*max_rate);
-		   temp_vel_y = 0.0f;
-		   // If corner is found
-		   // 	continue going around corner
-		   if(side_range<=ref_distance_from_wall+0.5f)
+
+		   // check if scanning has already occured
+		   if(wraptopi(fabs(current_heading-previous_heading))>0.8f)
 		   {
-			   around_corner_first_turn = false;
-			   previous_heading = current_heading;
+			   around_corner_go_back = true;
 		   }
-
-	   }else
-	   {
-		   // if side range is larger than prefered distance from wall
-		   if(side_range>ref_distance_from_wall+0.5f)
+		   // turn and adjust distnace to corner from that point
+		   if(around_corner_go_back)
 		   {
-
-			   // check if scanning has already occured
-			   if(wraptopi(fabs(current_heading-previous_heading))>0.8f)
-			   {
-				   around_corner_go_back = true;
-			   }
-			   // turn and adjust distnace to corner from that point
-			   if(around_corner_go_back)
-			   {
-				   // go back if it already went into one direction
-				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, -1*max_rate,side_range);
-				   temp_vel_x = 0.0f;
-			   }else
-			   {
-				   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, max_rate,side_range);
-				   temp_vel_x = 0.0f;			   }
+			   // go back if it already went into one direction
+			   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, -1* max_rate,side_range);
+			   temp_vel_x = 0.0f;
 		   }else
 		   {
-			   // continue to turn around corner
-			   previous_heading = current_heading;
-			   around_corner_go_back = false;
-			   commandTurnAroundCornerAndAdjust(&temp_vel_x, &temp_vel_y, &temp_vel_w, ref_distance_from_wall, side_range);
-			 //  temp_vel_w = temp_vel_w - 0.05f;
-		   }
-
-
+			   commandTurnAndAdjust(&temp_vel_y, &temp_vel_w, max_rate,side_range);
+			   temp_vel_x = 0.0f;			   }
 	   }
+	   else
+	   {
+		   // continue to turn around corner
+		   previous_heading = current_heading;
+		   around_corner_go_back = false;
+		   commandTurnAroundCornerAndAdjust(&temp_vel_x, &temp_vel_y, &temp_vel_w, ref_distance_from_wall, side_range);
+		   //  temp_vel_w = temp_vel_w - 0.05f;
+	   }
+
+
+
 
 
 
@@ -453,7 +470,17 @@ printf("state %d\n",state);
 	   commandTurn(&temp_vel_x, &temp_vel_w, max_rate);
 	   temp_vel_y = 0;
 
-   }else
+
+
+
+   }else if(state==8) //FIND_CORNER
+   {
+	   commandAlignCorner(&temp_vel_y, &temp_vel_w,-1* max_rate, side_range, ref_distance_from_wall);
+	   temp_vel_x = 0;
+
+   }
+
+   else
    {
 	   //State does not exist so hover!!
 	   commandHover(&temp_vel_x, &temp_vel_y, &temp_vel_w);
