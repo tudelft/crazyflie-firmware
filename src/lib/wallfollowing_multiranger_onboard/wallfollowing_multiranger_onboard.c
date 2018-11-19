@@ -99,7 +99,7 @@ static void commandTurn(float* vel_x, float* vel_w, float ref_rate)
 static void commandAlignCorner(float* vel_y, float* vel_w, float ref_rate, float range, float wanted_distance_from_corner)
 {
 
-	if (range>wanted_distance_from_corner+0.5f)
+	if (range>wanted_distance_from_corner+0.3f)
 	{
 		*vel_w = direction*ref_rate;
 		*vel_y=0;
@@ -331,7 +331,7 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
        }
        // If front range is small
        //    then corner is reached
-	   if (front_range < ref_distance_from_wall)
+	   if (front_range < ref_distance_from_wall+0.2f)
 	   {
 		   previous_heading = current_heading;
 		   state = transition(7);
