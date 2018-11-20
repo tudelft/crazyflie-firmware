@@ -334,17 +334,12 @@ PARAM_ADD(PARAM_UINT8, keep_flying, &keep_flying)
 PARAM_GROUP_STOP(gbug)
 
 
+/*
 LOG_GROUP_START(gradientbug)
-//LOG_ADD(LOG_UINT8, rssi, &rssi_ext)
 LOG_ADD(LOG_UINT8, state, &state)
 LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
 LOG_ADD(LOG_FLOAT, up_range, &up_range_filtered)
-
-/*LOG_ADD(LOG_FLOAT, height, &height)
-LOG_ADD(LOG_FLOAT, heading, &current_heading)
-LOG_ADD(LOG_FLOAT, right_range, &right_range)
-LOG_ADD(LOG_FLOAT, front_range, &front_range)*/
-
 LOG_GROUP_STOP(gradientbug)
+*/
 
 

@@ -39,9 +39,9 @@
 uint16_t range_last;
 
 //static char ch = 'a';
-static float velx, vely, velz;
+//static float velx, vely, velz;
 static float homingvector_x, homingvector_y;
-static float motion_x, motion_y;
+//static float motion_x, motion_y;
 static uint8_t make_snapshot = 0;
 static uint8_t follow_vector = 0;
 uint8_t msg_id_check = 0;
@@ -92,7 +92,7 @@ void stereoboardTask(void* arg)
 
     msg_id_check = msg_id;
 
-    motion_x = (float) msg_id;
+    //motion_x = (float) msg_id;
     switch (msg_id) {
       case 90:
         homingvector_x = DL_STEREOCAM_VISUALHOMING_X(stereocam_data.data);
@@ -165,13 +165,13 @@ static const DeckDriver stereoboard_deck = {
 
 DECK_DRIVER(stereoboard_deck);
 
-LOG_GROUP_START(updown_laser)
+/*LOG_GROUP_START(updown_laser)
 LOG_ADD(LOG_UINT16, front_range, &front_range_UD)
 LOG_ADD(LOG_UINT16, back_range, &back_range_UD)
 LOG_ADD(LOG_UINT16, left_range, &left_range_UD)
 LOG_ADD(LOG_UINT16, right_range, &right_range_UD)
 
-LOG_GROUP_STOP(updown_laser)
+LOG_GROUP_STOP(updown_laser)*/
 
 /*LOG_GROUP_START(stereoboard)
 LOG_ADD(LOG_FLOAT, velocity x, &velx)
