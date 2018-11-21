@@ -46,8 +46,8 @@ static inline void init_median_filter_i(struct MedianFilterInt *filter, uint8_t 
     filter->size = size;
   }
   for (i = 0; i < filter->size; i++) {
-    filter->data[i] = 0;
-    filter->sortData[i] = 0;
+    filter->data[i] = 150;
+    filter->sortData[i] = 150;
   }
   filter->dataIndex = 0;
 }
