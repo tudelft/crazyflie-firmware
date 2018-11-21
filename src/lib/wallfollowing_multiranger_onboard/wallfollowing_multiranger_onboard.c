@@ -239,9 +239,14 @@ static int transition(int new_state)
 	return new_state;
 
 }
+void adjustDistanceWall(float distance_wall_new)
+{
+	ref_distance_from_wall = distance_wall_new;
+}
 
 int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, float side_range, float current_heading, int direction_turn)
 {
+
 
 	direction = direction_turn;
    static int state = 3;
