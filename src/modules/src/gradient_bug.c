@@ -158,7 +158,7 @@ void gradientBugTask(void *param)
 	init_median_filter_f(&medFilt,5);
 
 	struct MedianFilterInt medFiltRssi;
-	init_median_filter_i(&medFiltRssi,5);
+	init_median_filter_i(&medFiltRssi,101);
 	systemWaitStart();
 	vTaskDelay(M2T(3000));
 	while(1) {
@@ -211,7 +211,7 @@ void gradientBugTask(void *param)
 		state = 0;
 
 
-		//int rssi_inter_filtered = update_median_filter_i(&medFiltRssi,rssi_inter_ext);
+		int rssi_inter_filtered = update_median_filter_i(&medFiltRssi,rssi_inter_ext);
 
 		if(keep_flying)
 		{
@@ -231,7 +231,7 @@ void gradientBugTask(void *param)
 
 
 				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
-				//wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
+				state=wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
 
 /*
 
@@ -246,7 +246,7 @@ void gradientBugTask(void *param)
 #endif
 */
 
-				state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
+				//state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
 
 				// convert yaw rate commands to degrees
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
@@ -271,8 +271,8 @@ void gradientBugTask(void *param)
 					taken_off = true;
 					//wall_follower_init(0.4,0.5);
 					//init_lobe_navigator();
-					//init_wall_follower_and_avoid_controller(0.4,0.5,-1);
-					init_com_bug_loop_controller(0.4, 0.5);
+					init_wall_follower_and_avoid_controller(0.4,0.5,-1);
+					//init_com_bug_loop_controller(0.4, 0.5);
 
 
 
@@ -334,6 +334,7 @@ PARAM_ADD(PARAM_UINT8, keep_flying, &keep_flying)
 PARAM_GROUP_STOP(gbug)
 
 
+
 /*
 LOG_GROUP_START(gradientbug)
 LOG_ADD(LOG_UINT8, state, &state)
@@ -341,5 +342,6 @@ LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
 LOG_ADD(LOG_FLOAT, up_range, &up_range_filtered)
 LOG_GROUP_STOP(gradientbug)
 */
+
 
 
