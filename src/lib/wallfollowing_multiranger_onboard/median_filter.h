@@ -23,12 +23,15 @@
 
 #define MEDIAN_H
 
-#define MAX_MEDIAN_DATASIZE 13
+
+
+#define MAX_MEDIAN_DATASIZE_I 101
+#define MAX_MEDIAN_DATASIZE_F 13
 #define MEDIAN_DEFAULT_SIZE 5
 
 //#include "std.h"
 struct MedianFilterInt {
-  int32_t data[MAX_MEDIAN_DATASIZE], sortData[MAX_MEDIAN_DATASIZE];
+	int data[MAX_MEDIAN_DATASIZE_I], sortData[MAX_MEDIAN_DATASIZE_I];
   uint8_t dataIndex;
   uint8_t size;
 };
@@ -36,8 +39,8 @@ struct MedianFilterInt {
 static inline void init_median_filter_i(struct MedianFilterInt *filter, uint8_t size)
 {
   uint8_t i;
-  if (size > MAX_MEDIAN_DATASIZE){
-    filter->size = MAX_MEDIAN_DATASIZE;
+  if (size > MAX_MEDIAN_DATASIZE_I){
+    filter->size = MAX_MEDIAN_DATASIZE_I;
   } else if ((size % 2) == 0) {
     // force filter to have odd number of entries so that
     // returned median is always an entry and not an average
@@ -64,7 +67,7 @@ static inline int32_t get_median_filter_i(struct MedianFilterInt *filter)
 
 static inline int32_t update_median_filter_i(struct MedianFilterInt *filter, int32_t new_data)
 {
-  int temp, i, j; // used to sort array
+	int temp, i, j; // used to sort array
 
   // Insert new data into raw data array round robin style
   filter->data[filter->dataIndex] = new_data;
@@ -88,7 +91,7 @@ static inline int32_t update_median_filter_i(struct MedianFilterInt *filter, int
 }
 
 struct MedianFilterFloat {
-  float data[MAX_MEDIAN_DATASIZE], sortData[MAX_MEDIAN_DATASIZE];
+  float data[MAX_MEDIAN_DATASIZE_F], sortData[MAX_MEDIAN_DATASIZE_F];
   uint8_t dataIndex;
   uint8_t size;
 };
@@ -96,8 +99,8 @@ struct MedianFilterFloat {
 static inline void init_median_filter_f(struct MedianFilterFloat *filter, uint8_t size)
 {
   uint8_t i;
-  if (size > MAX_MEDIAN_DATASIZE){
-    filter->size = MAX_MEDIAN_DATASIZE;
+  if (size > MAX_MEDIAN_DATASIZE_F){
+    filter->size = MAX_MEDIAN_DATASIZE_F;
   } else if ((size % 2) == 0){
     filter->size = size + 1;
   } else {

@@ -126,6 +126,7 @@ float rssi_angle;
 int state;
 int state_wf;
 float up_range_filtered;
+uint8_t rssi_beacon_filtered;
 
 //#define REVERSE
 
@@ -162,11 +163,23 @@ void gradientBugTask(void *param)
 	struct MedianFilterFloat medFilt;
 	init_median_filter_f(&medFilt,5);
 
-	struct MedianFilterInt medFiltRssi;
-	init_median_filter_i(&medFiltRssi,101);
+/*	struct MedianFilterInt medFiltRssi;
+	init_median_filter_i(&medFiltRssi,101);*/
 
 	struct MedianFilterInt medFiltRssibeacon;
-	init_median_filter_i(&medFiltRssibeacon,101);
+	init_median_filter_i(&medFiltRssibeacon,99);
+
+/*	struct MedianFilterInt medFiltRssibeacon2;
+	init_median_filter_i(&medFiltRssibeacon2,99);*/
+
+/*
+	  int pos_avg = 0;
+	  long sum = 0;
+	  int arrNumbers[151] = {0};
+	  int len = sizeof(arrNumbers) / sizeof(int);*/
+	  //int count = sizeof(sample) / sizeof(int);
+
+
 	systemWaitStart();
 	vTaskDelay(M2T(3000));
 	while(1) {
@@ -188,6 +201,7 @@ void gradientBugTask(void *param)
 
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
 		up_range_filtered = update_median_filter_f(&medFilt,up_range);
+
 		if (up_range_filtered< 0.05f)
 			up_range_filtered = up_range;
 		//up_range_filtered = 1.0f;
@@ -212,8 +226,24 @@ void gradientBugTask(void *param)
 			  }
 		}
 
-		uint8_t rssi_beacon_filtered = update_median_filter_i(&medFiltRssibeacon,rssi_ext);
+		//rssi_beacon_filtered = update_median_filter_i(&medFiltRssibeacon,rssi_ext);
 
+		//rssi_beacon_filtered = update_median_filter_i(&medFiltRssibeacon2,rssi_beacon_filtered);
+
+/*
+		if(rssi_ext!=130)
+		{
+		rssi_beacon_filtered = (uint8_t)movingAvg(arrNumbers, &sum, pos_avg, len, rssi_ext);
+		pos_avg++;
+	    if (pos_avg >= len){
+	    	pos_avg = 0;
+	    }
+		}
+*/
+		rssi_beacon_filtered = rssi_ext;
+		/*float alpha = 0.1f;
+
+		rssi_beacon_filtered = (uint8_t)(alpha*(float)(rssi_ext)+(1.0f-alpha)*(float)(rssi_beacon_filtered));*/
 
 		// Don't fly if multiranger is not connected or the uprange is activated
 		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered==44))
@@ -259,8 +289,8 @@ void gradientBugTask(void *param)
 
 				//state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
 				//state=com_bug_loop_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_inter_ext);
-				//state=lobe_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
-				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
+				state=lobe_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
+				//state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
 
 
 				// convert yaw rate commands to degrees
@@ -289,8 +319,8 @@ void gradientBugTask(void *param)
 					//init_wall_follower_and_avoid_controller(0.4,0.5,-1);
 					//init_com_bug_loop_controller(0.4, 0.5);
 					//init_com_bug_loop_avoid_controller(0.4, 0.5);
-					//init_lobe_bug_loop_controller(0.4, 0.5);
 					init_lobe_bug_loop_controller(0.4, 0.5);
+					//init_gradient_bug_loop_controller(0.4, 0.5);
 
 
 
@@ -357,9 +387,9 @@ PARAM_GROUP_STOP(gbug)
 LOG_GROUP_START(gradientbug)
 LOG_ADD(LOG_UINT8, state, &state)
 LOG_ADD(LOG_UINT8, state_wf, &state_wf)
-
+LOG_ADD(LOG_UINT8, rssi_beacon, &rssi_beacon_filtered)
 LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
-LOG_ADD(LOG_FLOAT, up_range, &up_range_filtered)
+//LOG_ADD(LOG_FLOAT, up_range, &up_range_filtered)
 LOG_GROUP_STOP(gradientbug)
 
 

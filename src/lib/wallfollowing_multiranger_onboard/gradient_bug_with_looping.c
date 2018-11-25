@@ -260,17 +260,23 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 					int diff_rssi_unf = (int)prev_rssi - (int)rssi_beacon;
 					diff_rssi = diff_rssi_unf;//update_median_filter_i(&medFiltdiffRssi,diff_rssi_unf);
 					float diff_wanted_angle = 0;
+					//printf("diff_rssi, %d\n", diff_rssi);
 					if(diff_rssi>0)
 					{
+
 						diff_wanted_angle = wraptopi(heading_rssi-wanted_angle);
+					//	printf("right way!, %f\n", diff_wanted_angle);
+
 
 					}else if(diff_rssi<0)
 					{
 						diff_wanted_angle =wraptopi(3.14f+(heading_rssi-wanted_angle));
-
-
+				//		printf("wrong way!, %f\n", diff_wanted_angle);
 					}
-					wanted_angle = wraptopi(wanted_angle +(float)fabs((float)(diff_rssi)/10.0f)*(diff_wanted_angle));
+					//wanted_angle = wraptopi(wanted_angle +(float)fabs((float)(diff_rssi)/10.0f)*(diff_wanted_angle));
+					if(diff_wanted_angle != 0)
+					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));
+				//	printf("wanted_angle, %f\n", wanted_angle);
 
 				//	printf("diif_rssi %d, wanted_angle %f, diff_wanted_angle %f, heading_rssi %f\n",diff_rssi,wanted_angle,diff_wanted_angle,heading_rssi);
 
@@ -339,7 +345,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
 #ifndef GB_ONBOARD
 
-	printf("state %d\n",state);
+	//printf("state %d\n",state);
 
 #endif
 	*rssi_angle = wanted_angle;

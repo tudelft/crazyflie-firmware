@@ -43,6 +43,23 @@
 #include "ledseq.h"
 #include "queuemonitor.h"
 
+
+
+uint8_t movingAvg(int *ptrArrNumbers, long *ptrSum, int pos, int len, int nextNum)
+{
+  //Subtract the oldest number from the prev sum, add the new number
+  *ptrSum = *ptrSum - ptrArrNumbers[pos] + nextNum;
+  //Assign the nextNum to the position in the array
+  ptrArrNumbers[pos] = nextNum;
+  //return the average
+  return *ptrSum / len;
+}
+//static uint8_t rssi_beacon_filtered;
+	  int pos_avg = 0;
+	  long sum = 0;
+	  int arrNumbers[251] = {0};
+	  int len = sizeof(arrNumbers) / sizeof(int);
+
 #define RADIOLINK_TX_QUEUE_SIZE (1)
 
 static xQueueHandle  txQueue;
@@ -159,7 +176,15 @@ void radiolinkSyslinkDispatch(SyslinkPacket *slp)
 	{
 		//Extract RSSI sample sent from radio
 		memcpy(&rssi, slp->data, sizeof(uint8_t));
-		rssi_ext = rssi;
+		//rssi_ext = rssi;
+
+
+		rssi_ext = (uint8_t)movingAvg(arrNumbers, &sum, pos_avg, len, rssi);
+		pos_avg++;
+	    if (pos_avg >= len){
+	    	pos_avg = 0;
+	    }
+
 	}else if (slp->type == SYSLINK_RADIO_RSSI_INTER)
 	{
 		//Extract RSSI sample sent from radio

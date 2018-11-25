@@ -372,7 +372,7 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
    }
 
 #ifndef GB_ONBOARD
-printf("state_WF %d\n",state);
+//printf("state_WF %d\n",state);
 #endif
 
 
