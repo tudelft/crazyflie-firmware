@@ -201,9 +201,25 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		}
 	}else if(state == 3)         //WALL_FOLLOWING
 	{
-		// if during wallfollowing, agent goes around wall, and heading is close to rssi _angle
-		//      got to rotate to goal
+		// If going forward with wall following and cannot_go_to_goal bool is still on
+		// 		turn it off!
+        if(state_wf == 5 && cannot_go_to_goal)
+        {
+        	cannot_go_to_goal  = false;
+        }
 
+        // Check if bug went into a looping while wall following,
+        // 		if so, then forse the reverse direction predical.
+        float rel_x_loop = current_pos_x- pos_x_hit;		//	diff_rssi = (int)prev_rssi - (int)rssi_beacon;
+        float rel_y_loop = current_pos_y -pos_y_hit;
+        float loop_angle = wraptopi(atan2(rel_y_loop,rel_x_loop));
+
+        if (fabs(wraptopi(bearing_to_goal+3.14f-loop_angle))<0.5)
+        {
+        	overwrite_and_reverse_direction = true;
+        }
+
+        // Check if the goal is reachable from the current point of view of the agent
 		float bearing_to_goal = wraptopi(wanted_angle-current_heading);
 		bool goal_check_WF=false;
 		if (direction == -1)
@@ -212,94 +228,57 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 			goal_check_WF = (bearing_to_goal>0 && bearing_to_goal<1.57f);
 
 
-        float rel_x_loop = current_pos_x- pos_x_hit;		//	diff_rssi = (int)prev_rssi - (int)rssi_beacon;
-
-        float rel_y_loop = current_pos_y -pos_y_hit;
-
-        float loop_angle = wraptopi(atan2(rel_y_loop,rel_x_loop));
-
-        if (fabs(wraptopi(bearing_to_goal+3.14f-loop_angle))<0.5)
-        {
-        	overwrite_and_reverse_direction = true;
-        }
-
-
-        if(state_wf == 5 && cannot_go_to_goal)
-        {
-        	cannot_go_to_goal  = false;
-        }
-
-				//logicIsCloseTo(wraptopi(current_heading-wanted_angle),0,0.3f);
-		if((state_wf == 6||state_wf == 8) && goal_check_WF && front_range>ref_distance_from_wall+0.4f && !cannot_go_to_goal)
+		// if during wallfollowing, agent goes around wall, and heading is close to rssi _angle
+		//      got to rotate to goal
+        if((state_wf == 6||state_wf == 8) && goal_check_WF && front_range>ref_distance_from_wall+0.4f && !cannot_go_to_goal)
 		{
 			wanted_angle_dir = wraptopi(current_heading-wanted_angle); // to determine the direction when turning to goal
 			state = transition(2); //rotate_to_goal
 		}
 
+        // If going straight
+        // 		determine by the gradient of the crazyradio what the approx direction is.
 		if(state_wf==5)
 		{
+			// Reset sample gathering
 			if(rssi_sample_reset)
 			{
 				pos_x_sample = current_pos_x;
 				pos_y_sample = current_pos_y;
 				rssi_sample_reset = false;
 				prev_rssi = rssi_beacon;
-
 			}
 
+
+			// if the crazyflie traveled for 1 meter, than measure if it went into the right path
 		        float rel_x_sample = current_pos_x- pos_x_sample;
 		        float rel_y_sample = current_pos_y -pos_y_sample;
 				float distance = sqrt(rel_x_sample*rel_x_sample+rel_y_sample*rel_y_sample);
-
-
-
 				if(distance>1.0f)
 				{
 					rssi_sample_reset = true;
 					heading_rssi = current_heading;
 					int diff_rssi_unf = (int)prev_rssi - (int)rssi_beacon;
-					diff_rssi = diff_rssi_unf;//update_median_filter_i(&medFiltdiffRssi,diff_rssi_unf);
+					//rssi already gets filtered at the radio_link.c
+					diff_rssi = diff_rssi_unf;
 					float diff_wanted_angle = 0;
-					//printf("diff_rssi, %d\n", diff_rssi);
+					// if the rssi difference is positive, then the drone is going into the right way
 					if(diff_rssi>0)
 					{
-
 						diff_wanted_angle = wraptopi(heading_rssi-wanted_angle);
-					//	printf("right way!, %f\n", diff_wanted_angle);
-
-
-					}else if(diff_rssi<0)
+					}else if(diff_rssi<0) // if it is negative, the wronge way
 					{
 						diff_wanted_angle =wraptopi(3.14f+(heading_rssi-wanted_angle));
-				//		printf("wrong way!, %f\n", diff_wanted_angle);
 					}
 					//wanted_angle = wraptopi(wanted_angle +(float)fabs((float)(diff_rssi)/10.0f)*(diff_wanted_angle));
+					// Increment the value the existing wanted_angle.
 					if(diff_wanted_angle != 0)
 					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));
-				//	printf("wanted_angle, %f\n", wanted_angle);
-
-				//	printf("diif_rssi %d, wanted_angle %f, diff_wanted_angle %f, heading_rssi %f\n",diff_rssi,wanted_angle,diff_wanted_angle,heading_rssi);
-
-
 				}
-
-
-			//printf("diff_rssi, %d\n",diff_rssi);
-/*			if(diff_rssi>0)
-					{
-						printf("RIGHT WAY!!\n");
-					}else if(diff_rssi<0){
-						printf("WRONG WAY!!\n");
-
-					}else{
-						printf("DONT CARE!\n");
-
-					}*/
 
 		}else{
 			rssi_sample_reset = true;
 		}
-
 	}
 
 

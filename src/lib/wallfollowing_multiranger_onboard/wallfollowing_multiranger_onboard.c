@@ -284,6 +284,7 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 		// 5 = forward along wall
 		// 6 = rotate_around_wall
 		// 7 = rotate_in_corner
+	        // 8 = find corner
 
    /***********************************************************
 	* Handle state transitions
