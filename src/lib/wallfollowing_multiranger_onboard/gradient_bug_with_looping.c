@@ -30,6 +30,13 @@ static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
 
+
+// Converts degrees to radians.
+#define deg2rad(angleDegrees) (angleDegrees * (float)M_PI / 180.0f)
+
+// Converts radians to degrees.
+#define rad2deg(angleRadians) (angleRadians * 180.0f / (float)M_PI)
+
 //struct MedianFilterInt medFiltdiffRssi;
 
 #ifndef GB_ONBOARD
@@ -85,6 +92,77 @@ static void commandTurn( float* vel_w, float max_rate)
 	*vel_w = max_rate;
 }
 
+/*
+// heading stuff
+static float meanAngle (double *angles, int size)
+{
+  double y_part = 0, x_part = 0;
+  int i;
+
+  for (i = 0; i < size; i++)
+    {
+      x_part += cos (angles[i] * M_PI / 180);
+      y_part += sin (angles[i] * M_PI / 180);
+    }
+
+  return atan2 (y_part / size, x_part / size) * 180 / M_PI;
+}
+*/
+
+
+static float fillHeadingArray(bool* correct_heading_array, float rssi_heading, int diff_rssi)
+{
+	static float heading_array[8] = {-135.0f, -90.0f, -45.0f,0.0f,45.0f, 90.0f,135.0f,180.0f};
+	float rssi_heading_deg = rad2deg(rssi_heading);
+	//printf("%f \n", rssi_heading_deg);
+
+	for(int it = 0;it<8;it++)
+	{
+
+		if((rssi_heading_deg>=heading_array[it]-22.5f &&rssi_heading_deg<heading_array[it]+22.5f && it!=7)||(
+				it==7&&(rssi_heading_deg>=heading_array[it]-22.5f || rssi_heading_deg<-135.0f-22.5f	)))
+		{
+			if(diff_rssi>0)
+			{
+				correct_heading_array[it]=true;
+				correct_heading_array[(it+4)%8]=false;
+			}else if(diff_rssi<0){
+				correct_heading_array[it]=false;
+				correct_heading_array[(it+4)%8]=true;
+			}
+
+		}
+
+	}
+
+
+	int count = 0;
+	  float y_part = 0, x_part = 0;
+
+	for(int it = 0;it<8;it++)
+	{
+		if(correct_heading_array[it] == 1)
+		{
+			 x_part += (float)cos (heading_array[it] * (float)M_PI / 180.0f);
+			 y_part += (float)sin (heading_array[it] * (float)M_PI / 180.0f);
+
+			//sum += heading_array[it];
+			count ++;
+			//printf("heading_array[it], %f x_part %f, y_part %f, count %d\n",heading_array[it],x_part,y_part,count);
+
+		}
+	}
+
+	float wanted_angle_return = 0;
+	if(count!=0){
+		wanted_angle_return = atan2(y_part/(float)count, x_part/(float)count);
+	}
+
+
+	return wanted_angle_return;
+
+
+}
 
 // statemachine functions
 void init_gradient_bug_loop_controller(float new_ref_distance_from_wall, float max_speed_ref)
@@ -118,6 +196,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	static int diff_rssi = 0;
 	static bool rssi_sample_reset = false;
 	static float heading_rssi = 0;
+	static bool correct_heading_array[8] = {false};
 
 
 /*
@@ -208,6 +287,16 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
         	cannot_go_to_goal  = false;
         }
 
+
+
+        // Check if the goal is reachable from the current point of view of the agent
+		float bearing_to_goal = wraptopi(wanted_angle-current_heading);
+		bool goal_check_WF=false;
+		if (direction == -1)
+			goal_check_WF= (bearing_to_goal<0 && bearing_to_goal>-1.57f);
+		else
+			goal_check_WF = (bearing_to_goal>0 && bearing_to_goal<1.57f);
+
         // Check if bug went into a looping while wall following,
         // 		if so, then forse the reverse direction predical.
         float rel_x_loop = current_pos_x- pos_x_hit;		//	diff_rssi = (int)prev_rssi - (int)rssi_beacon;
@@ -218,15 +307,6 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
         {
         	overwrite_and_reverse_direction = true;
         }
-
-        // Check if the goal is reachable from the current point of view of the agent
-		float bearing_to_goal = wraptopi(wanted_angle-current_heading);
-		bool goal_check_WF=false;
-		if (direction == -1)
-			goal_check_WF= (bearing_to_goal<0 && bearing_to_goal>-1.57f);
-		else
-			goal_check_WF = (bearing_to_goal>0 && bearing_to_goal<1.57f);
-
 
 		// if during wallfollowing, agent goes around wall, and heading is close to rssi _angle
 		//      got to rotate to goal
@@ -261,19 +341,27 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 					int diff_rssi_unf = (int)prev_rssi - (int)rssi_beacon;
 					//rssi already gets filtered at the radio_link.c
 					diff_rssi = diff_rssi_unf;
-					float diff_wanted_angle = 0;
+					/*float diff_wanted_angle = 0;
+					float alpha = 0.8;
 					// if the rssi difference is positive, then the drone is going into the right way
 					if(diff_rssi>0)
 					{
-						diff_wanted_angle = wraptopi(heading_rssi-wanted_angle);
+						wanted_angle = wraptopi(alpha * wanted_angle + (1-alpha)*heading_rssi);
+						//diff_wanted_angle = wraptopi(heading_rssi-wanted_angle);
 					}else if(diff_rssi<0) // if it is negative, the wronge way
 					{
-						diff_wanted_angle =wraptopi(3.14f+(heading_rssi-wanted_angle));
-					}
+						wanted_angle = wraptopi(alpha * wanted_angle + (1-alpha)*wraptopi(3.14f+heading_rssi));
+
+						//diff_wanted_angle =wraptopi(3.14f+(heading_rssi-wanted_angle));
+					}*/
 					//wanted_angle = wraptopi(wanted_angle +(float)fabs((float)(diff_rssi)/10.0f)*(diff_wanted_angle));
 					// Increment the value the existing wanted_angle.
-					if(diff_wanted_angle != 0)
-					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));
+/*					if(diff_wanted_angle != 0)
+					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));*/
+					wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi);
+					//printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
+					//for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
+
 				}
 
 		}else{

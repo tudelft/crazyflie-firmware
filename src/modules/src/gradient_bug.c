@@ -289,8 +289,8 @@ void gradientBugTask(void *param)
 
 				//state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
 				//state=com_bug_loop_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_inter_ext);
-				state=lobe_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
-				//state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
+				//state=lobe_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
+				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
 
 
 				// convert yaw rate commands to degrees
@@ -319,8 +319,8 @@ void gradientBugTask(void *param)
 					//init_wall_follower_and_avoid_controller(0.4,0.5,-1);
 					//init_com_bug_loop_controller(0.4, 0.5);
 					//init_com_bug_loop_avoid_controller(0.4, 0.5);
-					init_lobe_bug_loop_controller(0.4, 0.5);
-					//init_gradient_bug_loop_controller(0.4, 0.5);
+					//init_lobe_bug_loop_controller(0.4, 0.5);
+					init_gradient_bug_loop_controller(0.4, 0.5);
 
 
 
