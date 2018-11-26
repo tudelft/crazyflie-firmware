@@ -248,6 +248,20 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 			{
 				direction = -1.0f*direction;
 				overwrite_and_reverse_direction = false;
+			}else{
+				if(left_range<right_range && left_range<2.0f)
+				{
+					direction = -1.0f;
+				}else if(left_range>right_range && right_range<2.0f)
+				{
+					direction = 1.0f;
+
+				}else if(left_range>2.0f && right_range>2.0f)
+				{
+                    direction = 1.0f;
+				}else{
+
+				}
 			}
 
 
@@ -256,6 +270,9 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 			pos_y_hit = current_pos_y;
 
 			wall_follower_init(0.4,0.5);
+
+			//reset correct heading array
+			for(int it=0;it<8;it++)correct_heading_array[it]=0;
 
 			state = transition(3); //wall_following
 
@@ -305,7 +322,11 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
         if (fabs(wraptopi(bearing_to_goal+3.14f-loop_angle))<0.5)
         {
-        	overwrite_and_reverse_direction = true;
+        	//LETOP DIT MOET WEER OMGEDRAAID WORDEN!!!
+        	overwrite_and_reverse_direction = false;
+        }else{
+        	overwrite_and_reverse_direction = false;
+
         }
 
 		// if during wallfollowing, agent goes around wall, and heading is close to rssi _angle
