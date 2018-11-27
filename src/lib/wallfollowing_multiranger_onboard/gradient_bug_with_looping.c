@@ -29,6 +29,7 @@ float state_start_time;
 static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
+uint8_t rssi_threshold = 50;
 
 
 // Converts degrees to radians.
@@ -176,7 +177,8 @@ void init_gradient_bug_loop_controller(float new_ref_distance_from_wall, float m
 
 int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float* rssi_angle, int* state_wallfollowing,
 		float front_range, float left_range, float right_range,
-		float current_heading, float current_pos_x, float current_pos_y,uint8_t rssi_beacon)
+		float current_heading, float current_pos_x, float current_pos_y,uint8_t rssi_beacon,
+		uint8_t rssi_inter, bool priority)
 {
 
 	// Initalize static variables
@@ -189,6 +191,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	static float pos_y_hit = 0;
 	static float pos_x_sample = 0;
 	static float pos_y_sample = 0;
+	static float pos_x_move = 0;
+	static float pos_y_move = 0;
 	static bool overwrite_and_reverse_direction = false;
 	static float direction = 1;
 	static bool cannot_go_to_goal = false;
@@ -297,6 +301,15 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		}
 	}else if(state == 3)         //WALL_FOLLOWING
 	{
+
+		// if another drone is close and there is no right of way, move out of the way
+		if(priority== false && rssi_inter<rssi_threshold &&((direction == 1.0f && left_range>1.0f) || (direction == -1.0f && right_range>1.0f)) )
+		{
+			pos_x_move = current_pos_x;
+			pos_y_move = current_pos_y;
+			state= transition(4);
+		}
+
 		// If going forward with wall following and cannot_go_to_goal bool is still on
 		// 		turn it off!
         if(state_wf == 5 && cannot_go_to_goal)
@@ -388,6 +401,13 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		}else{
 			rssi_sample_reset = true;
 		}
+	}else if(state==4)         //MOVE_OUT_OF_WAY
+	{
+		// once the drone has gone by, rotate to goal
+		if(rssi_inter>=rssi_threshold)
+		{
+			state = transition(2); //rotate_to_goal
+		}
 	}
 
 
@@ -402,16 +422,25 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
 	if (state == 1) 		     //FORWARD
 	{
-		// forward max speed
-		if (left_range<ref_distance_from_wall)
+		// stop moving if there is another drone in the way
+		if(rssi_inter<rssi_threshold && priority == false)
 		{
-			temp_vel_y = -0.2f;
+			temp_vel_x= 0;
+			temp_vel_y= 0;
+
+		}else{
+
+			// forward max speed
+			if (left_range<ref_distance_from_wall)
+			{
+				temp_vel_y = -0.2f;
+			}
+			if (right_range<ref_distance_from_wall)
+			{
+				temp_vel_y = 0.2f;
+			}
+			temp_vel_x= 0.5;
 		}
-		if (right_range<ref_distance_from_wall)
-		{
-			temp_vel_y = 0.2f;
-		}
-		temp_vel_x= 0.5;
 
 	}else  if(state == 2)			//ROTATE_TO_GOAL
 	{
@@ -429,6 +458,17 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		    state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, left_range, current_heading, direction);
 		else
 			state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, direction);
+	}else if(state==4)
+	{
+        float rel_x_sample = current_pos_x- pos_x_move;
+        float rel_y_sample = current_pos_y -pos_y_move;
+		float distance = sqrt(rel_x_sample*rel_x_sample+rel_y_sample*rel_y_sample);
+		if(distance<1.0f && ((direction == 1 && left_range>ref_distance_from_wall) || (direction == -1 && right_range>ref_distance_from_wall)) )
+		{
+			temp_vel_y = direction*0.5f;
+		}else{
+			temp_vel_y = 0;
+		}
 	}
 
 #ifndef GB_ONBOARD
