@@ -78,6 +78,9 @@ static uint8_t rssi_inter = 140;
 uint8_t rssi_inter_ext = 140;
 static uint8_t id_inter = 99;
 uint8_t id_inter_ext = 99;
+uint8_t own_id = 0;
+static uint8_t rssi_beacon_inter = 140;
+uint8_t rssi_beacon_inter_ext = 140;
 
 static struct crtpLinkOperations radiolinkOp =
 {
@@ -104,6 +107,9 @@ void radiolinkInit(void)
   radiolinkSetChannel(configblockGetRadioChannel());
   radiolinkSetDatarate(configblockGetRadioSpeed());
   radiolinkSetAddress(configblockGetRadioAddress());
+
+  uint64_t address = configblockGetRadioAddress();
+  own_id = (uint8_t)((address) & 0x00000000ff);
 
   isInit = true;
 }
@@ -194,6 +200,8 @@ void radiolinkSyslinkDispatch(SyslinkPacket *slp)
 		rssi_inter_ext = rssi_inter;
 		memcpy(&id_inter, slp->data+1, sizeof(uint8_t));
 		id_inter_ext = id_inter;
+		memcpy(&rssi_beacon_inter, slp->data+2, sizeof(uint8_t));
+		rssi_beacon_inter_ext = rssi_beacon_inter;
 	}
 }
 
@@ -239,4 +247,5 @@ LOG_GROUP_START(radio)
 LOG_ADD(LOG_UINT8, rssi, &rssi)
 LOG_ADD(LOG_UINT8, rssi_inter, &rssi_inter)
 LOG_ADD(LOG_UINT8, id_inter, &id_inter)
+LOG_ADD(LOG_UINT8, rssi_b_inter, &rssi_beacon_inter)
 LOG_GROUP_STOP(radio)
