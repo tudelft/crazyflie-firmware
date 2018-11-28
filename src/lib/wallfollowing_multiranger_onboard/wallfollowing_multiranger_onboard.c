@@ -330,7 +330,7 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 
 	   // If side range is out of reach,
 	   //    end of the wall is reached
-       if(side_range > ref_distance_from_wall + 0.2f)
+       if(side_range > ref_distance_from_wall + 0.3f)
        {
          //  around_corner_first_turn = true;
            state = transition(8);

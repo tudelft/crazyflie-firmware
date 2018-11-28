@@ -9,6 +9,7 @@
 //#include "median_filter.h"
 
 #include <math.h>
+#include <stdlib.h>
 
 #ifndef GB_ONBOARD
 #include <time.h>
@@ -111,7 +112,7 @@ static float meanAngle (double *angles, int size)
 */
 
 
-static float fillHeadingArray(bool* correct_heading_array, float rssi_heading, int diff_rssi)
+static float fillHeadingArray(uint8_t* correct_heading_array, float rssi_heading, int diff_rssi)
 {
 	static float heading_array[8] = {-135.0f, -90.0f, -45.0f,0.0f,45.0f, 90.0f,135.0f,180.0f};
 	float rssi_heading_deg = rad2deg(rssi_heading);
@@ -125,11 +126,14 @@ static float fillHeadingArray(bool* correct_heading_array, float rssi_heading, i
 		{
 			if(diff_rssi>0)
 			{
-				correct_heading_array[it]=true;
-				correct_heading_array[(it+4)%8]=false;
+				correct_heading_array[it]=correct_heading_array[it]+1;//(uint8_t)abs(diff_rssi);
+				if(correct_heading_array[(it+4)%8]>0)
+				correct_heading_array[(it+4)%8]=correct_heading_array[(it+4)%8]-1;//(uint8_t)abs(diff_rssi);
+
 			}else if(diff_rssi<0){
-				correct_heading_array[it]=false;
-				correct_heading_array[(it+4)%8]=true;
+				if(correct_heading_array[it]>0)
+				correct_heading_array[it]=correct_heading_array[it]-1;//(uint8_t)abs(diff_rssi);
+				correct_heading_array[(it+4)%8]=correct_heading_array[(it+4)%8]+1;//(uint8_t)abs(diff_rssi);
 			}
 
 		}
@@ -142,13 +146,13 @@ static float fillHeadingArray(bool* correct_heading_array, float rssi_heading, i
 
 	for(int it = 0;it<8;it++)
 	{
-		if(correct_heading_array[it] == 1)
+		if(correct_heading_array[it] > 0)
 		{
-			 x_part += (float)cos (heading_array[it] * (float)M_PI / 180.0f);
-			 y_part += (float)sin (heading_array[it] * (float)M_PI / 180.0f);
+			 x_part += (float)correct_heading_array[it]*(float)cos (heading_array[it] * (float)M_PI / 180.0f);
+			 y_part += (float)correct_heading_array[it]*(float)sin (heading_array[it] * (float)M_PI / 180.0f);
 
 			//sum += heading_array[it];
-			count ++;
+			count = count + correct_heading_array[it];
 			//printf("heading_array[it], %f x_part %f, y_part %f, count %d\n",heading_array[it],x_part,y_part,count);
 
 		}
@@ -200,7 +204,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	static int diff_rssi = 0;
 	static bool rssi_sample_reset = false;
 	static float heading_rssi = 0;
-	static bool correct_heading_array[8] = {false};
+	static uint8_t correct_heading_array[8] = {0};
 
 
 /*
@@ -393,8 +397,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 /*					if(diff_wanted_angle != 0)
 					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));*/
 					wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi);
-					//printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
-					//for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
+					printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
+					for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
 
 				}
 

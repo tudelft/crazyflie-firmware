@@ -246,7 +246,7 @@ void gradientBugTask(void *param)
 		rssi_beacon_filtered = (uint8_t)(alpha*(float)(rssi_ext)+(1.0f-alpha)*(float)(rssi_beacon_filtered));*/
 
 		// Don't fly if multiranger is not connected or the uprange is activated
-		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<45))
+		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<54))
 			keep_flying = 0;
 
 		state = 0;
