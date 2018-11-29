@@ -219,6 +219,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	// if it is reinitialized
 	if (first_run)
 	{
+		wanted_angle = current_heading;
 		//previous_heading = current_heading;
 		wanted_angle_dir = wraptopi(current_heading-wanted_angle); // to determine the direction when turning to goal
 
@@ -397,8 +398,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 /*					if(diff_wanted_angle != 0)
 					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));*/
 					wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi);
-					printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
-					for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
+					//printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
+					//for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
 
 				}
 

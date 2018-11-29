@@ -57,7 +57,7 @@ uint8_t movingAvg(int *ptrArrNumbers, long *ptrSum, int pos, int len, int nextNu
 //static uint8_t rssi_beacon_filtered;
 	  int pos_avg = 0;
 	  long sum = 0;
-	  int arrNumbers[50] = {60};
+	  int arrNumbers[10] = {35};
 	  int len = sizeof(arrNumbers) / sizeof(int);
 
 #define RADIOLINK_TX_QUEUE_SIZE (1)
@@ -187,7 +187,7 @@ void radiolinkSyslinkDispatch(SyslinkPacket *slp)
 		//rssi_ext = rssi;
 
 
-		rssi_ext = (uint8_t)movingAvg(arrNumbers, &sum, pos_avg, len, rssi);
+		rssi_ext = (uint8_t)movingAvg(arrNumbers, &sum, pos_avg, len, (int)rssi);
 		pos_avg++;
 	    if (pos_avg >= len){
 	    	pos_avg = 0;
