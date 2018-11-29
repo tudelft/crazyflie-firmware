@@ -36,6 +36,7 @@ extern uint8_t rssi_inter_ext;
 extern uint8_t id_inter_ext;
 extern uint8_t own_id;
 extern uint8_t rssi_beacon_inter_ext;
+extern float rssi_angle_inter_ext;
 
 void radiolinkInit(void);
 bool radiolinkTest(void);
@@ -45,6 +46,6 @@ void radiolinkSetAddress(uint64_t address);
 void radiolinkSetPowerDbm(int8_t powerDbm);
 void radiolinkSyslinkDispatch(SyslinkPacket *slp);
 struct crtpLinkOperations * radiolinkGetLink();
-
+void radiolinkSendInfoGradientBug(int8_t state, float angle_rssi);
 
 #endif //__RADIO_H__

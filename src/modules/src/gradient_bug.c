@@ -368,7 +368,8 @@ void gradientBugTask(void *param)
 		}
 
 		commanderSetSetpoint(&setpoint_BG, GRADIENT_BUG_COMMANDER_PRI);
-
+		//float test_float = (float)(own_id)*10.0f;
+		radiolinkSendInfoGradientBug(state,rssi_angle);
 
 	}
 }
@@ -397,7 +398,7 @@ LOG_GROUP_START(gradientbug)
 LOG_ADD(LOG_UINT8, state, &state)
 LOG_ADD(LOG_UINT8, state_wf, &state_wf)
 LOG_ADD(LOG_UINT8, rssi_beacon, &rssi_beacon_filtered)
-LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
+LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle_inter_ext)
 //LOG_ADD(LOG_FLOAT, up_range, &up_range_filtered)
 LOG_GROUP_STOP(gradientbug)
 

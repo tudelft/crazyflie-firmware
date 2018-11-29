@@ -82,6 +82,10 @@ uint8_t own_id = 0;
 static uint8_t rssi_beacon_inter = 140;
 uint8_t rssi_beacon_inter_ext = 140;
 
+static float rssi_angle_inter = 0.0f;
+ float rssi_angle_inter_ext = 0.0f;
+
+
 static struct crtpLinkOperations radiolinkOp =
 {
   .setEnable         = radiolinkSetEnable,
@@ -159,6 +163,18 @@ void radiolinkSetPowerDbm(int8_t powerDbm)
   syslinkSendPacket(&slp);
 }
 
+void radiolinkSendInfoGradientBug(int8_t state, float angle_rssi )
+{
+	SyslinkPacket slp;
+
+	slp.type = SYSLINK_GRADIENT_BUG;
+	slp.length = 5;
+	slp.data[0] = state;
+	memcpy(&slp.data[1], &angle_rssi, sizeof(float));
+
+	syslinkSendPacket(&slp);
+}
+
 
 void radiolinkSyslinkDispatch(SyslinkPacket *slp)
 {
@@ -202,6 +218,8 @@ void radiolinkSyslinkDispatch(SyslinkPacket *slp)
 		id_inter_ext = id_inter;
 		memcpy(&rssi_beacon_inter, slp->data+2, sizeof(uint8_t));
 		rssi_beacon_inter_ext = rssi_beacon_inter;
+		memcpy(&rssi_angle_inter, slp->data+3, sizeof(float));
+		rssi_angle_inter_ext = rssi_angle_inter;
 	}
 }
 
