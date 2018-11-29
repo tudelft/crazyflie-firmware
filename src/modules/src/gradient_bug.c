@@ -266,7 +266,7 @@ void gradientBugTask(void *param)
 				hover(&setpoint_BG, nominal_height);
 
 				// wall following state machine
-				//wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
+				//state = wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
 				//uint8_t dummy_rssi = 44+(3.14-fabs(current_heading))*20;
 				//uint8_t dummy_rssi = 44+(uint8_t)(fabs((double)(wraptopi((double)current_heading-0.8-3.14))*20.0));
 
