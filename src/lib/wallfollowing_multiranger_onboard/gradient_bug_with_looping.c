@@ -4,7 +4,7 @@
  *  Created on: Nov 8, 2018
  *      Author: knmcguire
  */
-#include "com_bug_with_looping.h"
+#include "gradient_bug_with_looping.h"
 #include "wallfollowing_multiranger_onboard.h"
 //#include "median_filter.h"
 
@@ -180,7 +180,7 @@ void init_gradient_bug_loop_controller(float new_ref_distance_from_wall, float m
 
 
 int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float* rssi_angle, int* state_wallfollowing,
-		float front_range, float left_range, float right_range,
+		float front_range, float left_range, float right_range, float back_range,
 		float current_heading, float current_pos_x, float current_pos_y,uint8_t rssi_beacon,
 		uint8_t rssi_inter, bool priority)
 {
@@ -195,8 +195,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	static float pos_y_hit = 0;
 	static float pos_x_sample = 0;
 	static float pos_y_sample = 0;
-	static float pos_x_move = 0;
-	static float pos_y_move = 0;
+	//static float pos_x_move = 0;
+	//static float pos_y_move = 0;
 	static bool overwrite_and_reverse_direction = false;
 	static float direction = 1;
 	static bool cannot_go_to_goal = false;
@@ -310,8 +310,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		// if another drone is close and there is no right of way, move out of the way
 		if(priority== false && rssi_inter<rssi_threshold &&((direction == 1.0f && left_range>1.0f) || (direction == -1.0f && right_range>1.0f)) )
 		{
-			pos_x_move = current_pos_x;
-			pos_y_move = current_pos_y;
+		//	pos_x_move = current_pos_x;
+		//	pos_y_move = current_pos_y;
 			state= transition(4);
 		}
 
@@ -463,17 +463,35 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		    state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, left_range, current_heading, direction);
 		else
 			state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, direction);
-	}else if(state==4)
+	}else if(state==4)           //MOVE_AWAY
 	{
-        float rel_x_sample = current_pos_x- pos_x_move;
-        float rel_y_sample = current_pos_y -pos_y_move;
-		float distance = sqrt(rel_x_sample*rel_x_sample+rel_y_sample*rel_y_sample);
-		if(distance<1.0f && ((direction == 1 && left_range>ref_distance_from_wall) || (direction == -1 && right_range>ref_distance_from_wall)) )
+        //float rel_x_sample = current_pos_x- pos_x_move;
+        //float rel_y_sample = current_pos_y -pos_y_move;
+		//float distance = sqrt(rel_x_sample*rel_x_sample+rel_y_sample*rel_y_sample);
+		float save_distance = 1.0f;
+		if(left_range<save_distance)
+		{
+			temp_vel_y =temp_vel_y- 0.5f;
+			}
+		if(right_range<save_distance)
+		{
+			temp_vel_y = temp_vel_y+ 0.5f;
+			}
+		if(front_range<save_distance)
+		{
+			temp_vel_x = temp_vel_x - 0.5f;
+		}
+		if(back_range<save_distance)
+			{
+				temp_vel_x = temp_vel_x + 0.5f;
+			}
+
+/*		if(distance<1.0f && ((direction == 1 && left_range>ref_distance_from_wall) || (direction == -1 && right_range>ref_distance_from_wall)) )
 		{
 			temp_vel_y = direction*0.5f;
 		}else{
 			temp_vel_y = 0;
-		}
+		}*/
 	}
 
 #ifndef GB_ONBOARD

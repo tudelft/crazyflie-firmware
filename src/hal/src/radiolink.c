@@ -60,6 +60,12 @@ uint8_t movingAvg(int *ptrArrNumbers, long *ptrSum, int pos, int len, int nextNu
 	  int arrNumbers[10] = {35};
 	  int len = sizeof(arrNumbers) / sizeof(int);
 
+	  int pos_avg_2 = 0;
+	  long sum_2 = 0;
+	  int arrNumbers_2[10] = {35};
+	  int len_2 = sizeof(arrNumbers) / sizeof(int);
+
+
 #define RADIOLINK_TX_QUEUE_SIZE (1)
 
 static xQueueHandle  txQueue;
@@ -213,13 +219,20 @@ void radiolinkSyslinkDispatch(SyslinkPacket *slp)
 	{
 		//Extract RSSI sample sent from radio
 		memcpy(&rssi_inter, slp->data, sizeof(uint8_t));
-		rssi_inter_ext = rssi_inter;
+		//rssi_inter_ext = rssi_inter;
+		rssi_inter_ext = (uint8_t)movingAvg(arrNumbers_2, &sum_2, pos_avg_2, len_2, (int)rssi_inter);
+		pos_avg_2++;
+	    if (pos_avg_2 >= len_2){
+	    	pos_avg_2 = 0;
+	    }
 		memcpy(&id_inter, slp->data+1, sizeof(uint8_t));
 		id_inter_ext = id_inter;
 		memcpy(&rssi_beacon_inter, slp->data+2, sizeof(uint8_t));
 		rssi_beacon_inter_ext = rssi_beacon_inter;
 		memcpy(&rssi_angle_inter, slp->data+3, sizeof(float));
 		rssi_angle_inter_ext = rssi_angle_inter;
+
+
 	}
 }
 

@@ -246,7 +246,7 @@ void gradientBugTask(void *param)
 		rssi_beacon_filtered = (uint8_t)(alpha*(float)(rssi_ext)+(1.0f-alpha)*(float)(rssi_beacon_filtered));*/
 
 		// Don't fly if multiranger is not connected or the uprange is activated
-		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<54))
+		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<10))
 			keep_flying = 0;
 
 		state = 0;
@@ -296,10 +296,10 @@ void gradientBugTask(void *param)
 					priority = true;
 				}else
 				{
-					priority = true;
+					priority = false;
 
 				}
-				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered, rssi_inter_ext,priority);
+				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, back_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered, rssi_inter_ext,priority);
 
 
 				// convert yaw rate commands to degrees
