@@ -53,6 +53,11 @@ float height;
 
 static bool taken_off = false;
 static float nominal_height = 0.5;
+
+//1= wall_following, 2=lobe navigator, 3 = wallfollowing with avoid, 4 = com_bug_loop_controller
+// 5 = com_bug_loop_avoid_controller 6=lobe_bug_loop_controller 7=gradient_bug_loop_controller
+#define METHOD 7
+
 static void take_off(setpoint_t *sp, float velocity)
 {
 	sp->mode.x = modeVelocity;
@@ -207,6 +212,8 @@ void gradientBugTask(void *param)
 		//up_range_filtered = 1.0f;
 		//***************** Manual Startup procedure*************//
 
+		//TODO: shut off engines when crazyflie is on it's back.
+
 		// indicate if top range is hit while it is not flying yet, then start counting
 		if (keep_flying == false && manual_startup==false && up_range <0.2f && on_the_ground == true)
 		{
@@ -222,7 +229,7 @@ void gradientBugTask(void *param)
 			  if ((currentTime -time_stamp_manual_startup_command) > MANUAL_STARTUP_TIMEOUT)
 			  {
 				  keep_flying = true;
-				  manual_startup = false;
+				  //manual_startup = false;
 			  }
 		}
 
@@ -267,9 +274,6 @@ void gradientBugTask(void *param)
 
 				// wall following state machine
 				//state = wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
-				//uint8_t dummy_rssi = 44+(3.14-fabs(current_heading))*20;
-				//uint8_t dummy_rssi = 44+(uint8_t)(fabs((double)(wraptopi((double)current_heading-0.8-3.14))*20.0));
-
 
 				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
 				//state=wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
@@ -290,6 +294,8 @@ void gradientBugTask(void *param)
 				//state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
 				//state=com_bug_loop_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_inter_ext);
 				//state=lobe_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
+
+#if METHOD==7
 				bool priority = false;
 				if(id_inter_ext>own_id)
 				{
@@ -300,7 +306,7 @@ void gradientBugTask(void *param)
 
 				}
 				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, back_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered, rssi_inter_ext,priority);
-
+#endif
 
 				// convert yaw rate commands to degrees
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
@@ -329,8 +335,9 @@ void gradientBugTask(void *param)
 					//init_com_bug_loop_controller(0.4, 0.5);
 					//init_com_bug_loop_avoid_controller(0.4, 0.5);
 					//init_lobe_bug_loop_controller(0.4, 0.5);
+#if METHOD==7
 					init_gradient_bug_loop_controller(0.4, 0.5);
-
+#endif
 
 
 				}
