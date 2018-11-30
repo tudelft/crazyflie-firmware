@@ -41,6 +41,9 @@
 
 #include "median_filter.h"
 
+#include "stereoboard.h"
+
+
 //#define GRADIENT_BUG_NAME "GRADIENTBUG"
 //#define GRADIENT_TASK_PRI 2
 #define GRADIENT_BUG_COMMANDER_PRI 3
@@ -192,12 +195,28 @@ void gradientBugTask(void *param)
 		//getStatePosition(&position);
 		height = estimatorKalmanGetElevation();
 		current_heading = getHeading() * (float)M_PI / 180.0f;
-		front_range = (float)rangeFront/1000.0f;
-		right_range = (float)rangeRight/1000.0f;
-		left_range = (float)rangeLeft/1000.0f;
-		up_range = (float)rangeUp/1000.0f;
-	    back_range = (float)rangeBack/1000.0f;
 
+		if(multiranger_isinit)
+		{
+			front_range = (float)rangeFront/1000.0f;
+			right_range = (float)rangeRight/1000.0f;
+			left_range = (float)rangeLeft/1000.0f;
+			back_range = (float)rangeBack/1000.0f;
+			if (rangeUp<20)
+			{
+			up_range = (float)2.0f;
+			}else{
+			up_range = (float)rangeUp/1000.0f;
+
+			}
+
+		}else if(stereoboard_isinit){
+				front_range = (float)front_range_UD/1000.0f;
+				right_range = (float)right_range_UD/1000.0f;
+				left_range = (float)left_range_UD/1000.0f;
+				back_range = (float)back_range_UD/1000.0f;
+				up_range = 2.0f;
+			}
 
 
 		point_t pos;
@@ -252,8 +271,9 @@ void gradientBugTask(void *param)
 
 		rssi_beacon_filtered = (uint8_t)(alpha*(float)(rssi_ext)+(1.0f-alpha)*(float)(rssi_beacon_filtered));*/
 
-		// Don't fly if multiranger is not connected or the uprange is activated
-		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<10))
+		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
+		//TODO: add flowdeck init here
+		if (keep_flying == true && (stereoboard_isinit == false||multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<10))
 			keep_flying = 0;
 
 		state = 0;
@@ -406,7 +426,7 @@ LOG_ADD(LOG_UINT8, state, &state)
 LOG_ADD(LOG_UINT8, state_wf, &state_wf)
 LOG_ADD(LOG_UINT8, rssi_beacon, &rssi_beacon_filtered)
 LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle_inter_ext)
-//LOG_ADD(LOG_FLOAT, up_range, &up_range_filtered)
+LOG_ADD(LOG_FLOAT, front_range, &front_range)
 LOG_GROUP_STOP(gradientbug)
 
 

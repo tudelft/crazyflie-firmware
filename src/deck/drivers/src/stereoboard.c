@@ -59,6 +59,8 @@ uint16_t left_range_UD = 0;
 
 uint8_t id_range = 0;
 
+bool stereoboard_isinit = false;
+
 
 
 struct UartDataStruct USART1_Data;
@@ -115,7 +117,10 @@ void stereoboardTask(void* arg)
 
         break;
       case 15:
-
+    	  if(!stereoboard_isinit)
+    	  {
+    	  stereoboard_isinit = true;
+    	  }
     	  id_range= DL_IMCU_REMOTE_GROUND_id(stereocam_data.data);
   	   // DEBUG_PRINT("msgID is %d\n",id_range);
 
@@ -170,7 +175,6 @@ LOG_ADD(LOG_UINT16, front_range, &front_range_UD)
 LOG_ADD(LOG_UINT16, back_range, &back_range_UD)
 LOG_ADD(LOG_UINT16, left_range, &left_range_UD)
 LOG_ADD(LOG_UINT16, right_range, &right_range_UD)
-
 LOG_GROUP_STOP(updown_laser)*/
 
 /*LOG_GROUP_START(stereoboard)

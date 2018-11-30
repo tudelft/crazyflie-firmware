@@ -52,6 +52,13 @@ struct stereocam_t {
   bool msg_available;                   ///< If we received a message
 };
 
+extern uint16_t front_range_UD;
+extern uint16_t back_range_UD;
+extern uint16_t right_range_UD;
+extern uint16_t left_range_UD;
+
+extern bool stereoboard_isinit;
+
 extern void stereoboardDeckInit(DeckInfo *info);
 extern void stereoboardTask(void* arg);
 
