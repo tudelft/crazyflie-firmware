@@ -31,6 +31,7 @@ static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
 uint8_t rssi_threshold = 55;
+uint8_t rssi_collision_threshold = 35;
 
 
 // Converts degrees to radians.
@@ -241,6 +242,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	// 1 = forward
 	// 2 = rotate_to_goal
 	// 3 = wall_following
+	// 4 = move out of way
 
 	/***********************************************************
 	 * Handle state transitions
@@ -316,9 +318,15 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 				if((rssi_angle_inter<0 && wanted_angle<0)||(rssi_angle_inter>0 && wanted_angle>0))
 				{
 					wanted_angle = -1*wanted_angle;
+					wanted_angle_dir = wraptopi(current_heading-wanted_angle);
+					state= transition(2);
 				}
 			}
-			state= transition(4);
+			if(rssi_inter<rssi_collision_threshold)
+			{
+				state= transition(4);
+
+			}
 		}
 
 		// If going forward with wall following and cannot_go_to_goal bool is still on
@@ -344,12 +352,16 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
         float rel_y_loop = current_pos_y -pos_y_hit;
         float loop_angle = wraptopi(atan2(rel_y_loop,rel_x_loop));
 
-        if (fabs(wraptopi(bearing_to_goal+3.14f-loop_angle))<0.5)
+       // printf("loop_angle %f %f %f\n",loop_angle,wraptopi(wanted_angle+3.14f), fabs(wraptopi(wanted_angle+3.14f-loop_angle)) );
+
+        if (fabs(wraptopi(wanted_angle+3.14f-loop_angle))<1.0)
         {
-        	//LETOP DIT MOET WEER OMGEDRAAID WORDEN!!!
+        //	printf("LOOPING!\n");
         	overwrite_and_reverse_direction = true;
         }else{
-        	overwrite_and_reverse_direction = false;
+        //	printf("no LOOPING!\n");
+
+        	//overwrite_and_reverse_direction = false;
 
         }
 
@@ -418,7 +430,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	}else if(state==4)         //MOVE_OUT_OF_WAY
 	{
 		// once the drone has gone by, rotate to goal
-		if(rssi_inter>=rssi_threshold)
+		if(rssi_inter>=rssi_collision_threshold)
 		{
 
 			state = transition(2); //rotate_to_goal
@@ -439,12 +451,12 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	if (state == 1) 		     //FORWARD
 	{
 		// stop moving if there is another drone in the way
-		if(rssi_inter<rssi_threshold && priority == false)
+/*		if(rssi_inter<rssi_threshold && priority == false)
 		{
 			temp_vel_x= 0;
 			temp_vel_y= 0;
 
-		}else{
+		}else{*/
 
 			// forward max speed
 			if (left_range<ref_distance_from_wall)
@@ -456,7 +468,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 				temp_vel_y = 0.2f;
 			}
 			temp_vel_x= 0.5;
-		}
+		//}
 
 	}else  if(state == 2)			//ROTATE_TO_GOAL
 	{
@@ -507,7 +519,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
 #ifndef GB_ONBOARD
 
-	//printf("state %d\n",state);
+	printf("state %d\n",state);
 
 #endif
 	*rssi_angle = wanted_angle;
