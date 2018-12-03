@@ -175,30 +175,24 @@ void gradientBugTask(void *param)
 	init_median_filter_f(&medFilt,5);
 
 /*	struct MedianFilterInt medFiltRssi;
-	init_median_filter_i(&medFiltRssi,101);*/
+	init_median_filter_i(&medFiltRssi,101);
 
 	struct MedianFilterInt medFiltRssibeacon;
 	init_median_filter_i(&medFiltRssibeacon,99);
 
-/*	struct MedianFilterInt medFiltRssibeacon2;
+	struct MedianFilterInt medFiltRssibeacon2;
 	init_median_filter_i(&medFiltRssibeacon2,99);*/
 
-/*
-	  int pos_avg = 0;
-	  long sum = 0;
-	  int arrNumbers[151] = {0};
-	  int len = sizeof(arrNumbers) / sizeof(int);*/
-	  //int count = sizeof(sample) / sizeof(int);
 
 
 	systemWaitStart();
 	vTaskDelay(M2T(3000));
 	while(1) {
 		vTaskDelay(10);
-		//getStatePosition(&position);
 		height = estimatorKalmanGetElevation();
 		current_heading = getHeading() * (float)M_PI / 180.0f;
 
+		// Select which laser range sensor readings to use
 		if(multiranger_isinit)
 		{
 			front_range = (float)rangeFront/1000.0f;
@@ -226,13 +220,15 @@ void gradientBugTask(void *param)
 			}
 
 
+		// Get position estimate of kalman filter
 		point_t pos;
 		estimatorKalmanGetEstimatedPos(&pos);
 
-
+		// Initialize setpoint
 		memset(&setpoint_BG, 0, sizeof(setpoint_BG));
-		up_range_filtered = update_median_filter_f(&medFilt,up_range);
 
+		// Filtere uprange, since it sometimes gives a low spike that
+		up_range_filtered = update_median_filter_f(&medFilt,up_range);
 		if (up_range_filtered< 0.05f)
 			up_range_filtered = up_range;
 		//up_range_filtered = 1.0f;
@@ -259,24 +255,6 @@ void gradientBugTask(void *param)
 			  }
 		}
 
-		//rssi_beacon_filtered = update_median_filter_i(&medFiltRssibeacon,rssi_ext);
-
-		//rssi_beacon_filtered = update_median_filter_i(&medFiltRssibeacon2,rssi_beacon_filtered);
-
-/*
-		if(rssi_ext!=130)
-		{
-		rssi_beacon_filtered = (uint8_t)movingAvg(arrNumbers, &sum, pos_avg, len, rssi_ext);
-		pos_avg++;
-	    if (pos_avg >= len){
-	    	pos_avg = 0;
-	    }
-		}
-*/
-		rssi_beacon_filtered = rssi_ext;
-		/*float alpha = 0.1f;
-
-		rssi_beacon_filtered = (uint8_t)(alpha*(float)(rssi_ext)+(1.0f-alpha)*(float)(rssi_beacon_filtered));*/
 
 		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
 		//TODO: add flowdeck init here
@@ -284,10 +262,10 @@ void gradientBugTask(void *param)
 			keep_flying = 0;
 
 		state = 0;
+		rssi_beacon_filtered = rssi_ext;
 
 
-		//int rssi_inter_filtered = update_median_filter_i(&medFiltRssi,rssi_inter_ext);
-
+		// Main flying code
 		if(keep_flying)
 		{
 			if(taken_off)
@@ -299,31 +277,39 @@ void gradientBugTask(void *param)
 				 */
 				hover(&setpoint_BG, nominal_height);
 
-#if METHOD == 1
+#if METHOD == 1 //WALL_FOLLOWING
+
 				// wall following state machine
 				state = wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
+				/*
 
-				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
-				//state=wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
+				#ifndef REVERSE
+							wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
+				#else
+							wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, back_range, left_range, right_range,-1* wraptopi(current_heading+3.14f),(float)pos.x, (float)pos.y, rssi_inter_filtered);
+							vel_x_cmd = -1*vel_x_cmd;
+							vel_y_cmd = 1*vel_y_cmd;
+							vel_w_cmd = -1*vel_w_cmd;
 
+				#endif
+				*/
 #endif
-/*
 
-#ifndef REVERSE
-			wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
-#else
-			wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, back_range, left_range, right_range,-1* wraptopi(current_heading+3.14f),(float)pos.x, (float)pos.y, rssi_inter_filtered);
-			vel_x_cmd = -1*vel_x_cmd;
-			vel_y_cmd = 1*vel_y_cmd;
-			vel_w_cmd = -1*vel_w_cmd;
-
+#if METHOD == 2 //LOBE_NAVIGATOR
+				state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
 #endif
-*/
-
-				//state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
-				//state=com_bug_loop_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_inter_ext);
-				//state=lobe_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
-
+#if METHOD ==3 //WALL_FOLLOWER_AND_AVOID
+				state=wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
+#endif
+#if METHOD ==4
+                state=com_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y);
+#endif
+#if METHOD==5
+                state=com_bug_loop_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_inter_ext);
+#endif
+#if METHOD==6
+                state=lobe_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range, left_range, right_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered);
+#endif
 #if METHOD==7
 				bool priority = false;
 				if(id_inter_ext>own_id)
@@ -343,7 +329,7 @@ void gradientBugTask(void *param)
 				// convert yaw rate commands to degrees
 				float vel_w_cmd_convert = -1* vel_w_cmd * 180.0f / (float)M_PI;
 
-				// Convert relative commands to world commands
+				// Convert relative commands to world commands (not necessary anymore)
 				/*float psi = current_heading;
 				float vel_x_cmd_convert =  cosf(-psi) * vel_x_cmd + sinf(-psi) * vel_y_cmd;
 				float vel_y_cmd_convert = -sinf(-psi) * vel_x_cmd + cosf(-psi) * vel_y_cmd;*/
@@ -364,11 +350,21 @@ void gradientBugTask(void *param)
 #if METHOD==1
 					wall_follower_init(0.4,0.5);
 #endif
-					//init_lobe_navigator();
-					//init_wall_follower_and_avoid_controller(0.4,0.5,-1);
-					//init_com_bug_loop_controller(0.4, 0.5);
-					//init_com_bug_loop_avoid_controller(0.4, 0.5);
-					//init_lobe_bug_loop_controller(0.4, 0.5);
+#if METHOD==2
+					init_lobe_navigator();
+#endif
+#if METHOD==3
+					init_wall_follower_and_avoid_controller(0.4,0.5,-1);
+#endif
+#if METHOD==4
+					init_com_bug_loop_controller(0.4, 0.5);
+#endif
+#if METHOD==5
+					init_com_bug_loop_avoid_controller(0.4, 0.5);
+#endif
+#if METHOD==6
+					init_lobe_bug_loop_controller(0.4, 0.5);
+#endif
 #if METHOD==7
 					init_gradient_bug_loop_controller(0.4, 0.5);
 #endif
