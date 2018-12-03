@@ -61,6 +61,8 @@ static float nominal_height = 0.5;
 // 5 = com_bug_loop_avoid_controller 6=lobe_bug_loop_controller 7=gradient_bug_loop_controller
 #define METHOD 7
 
+static bool outbound = true;
+
 
 
 
@@ -321,7 +323,7 @@ void gradientBugTask(void *param)
 
 				}
 
-				bool outbound = true;
+				//bool outbound = true;
 				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, back_range, current_heading,
 						(float)pos.x, (float)pos.y, rssi_beacon_filtered, rssi_inter_ext, rssi_angle_inter_ext, priority, outbound);
 #endif
@@ -406,7 +408,7 @@ void gradientBugTask(void *param)
 
 		commanderSetSetpoint(&setpoint_BG, GRADIENT_BUG_COMMANDER_PRI);
 		//float test_float = (float)(own_id)*10.0f;
-		radiolinkSendInfoGradientBug(state,rssi_angle);
+		radiolinkSendInfoGradientBug(1,rssi_angle);
 
 	}
 }
@@ -426,6 +428,7 @@ void gradientBugInit()
 
 PARAM_GROUP_START(gbug)
 PARAM_ADD(PARAM_UINT8, keep_flying, &keep_flying)
+PARAM_ADD(PARAM_UINT8, outbound, &outbound)
 PARAM_GROUP_STOP(gbug)
 
 

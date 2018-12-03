@@ -253,8 +253,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		if(front_range<ref_distance_from_wall+0.2f)
 		{
 
-
-
+// if looping is detected, reverse direction (only on outbound)
 			if (overwrite_and_reverse_direction)
 			{
 				direction = -1.0f*direction;
@@ -274,8 +273,6 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
 				}
 			}
-
-
 
 			pos_x_hit = current_pos_x;
 			pos_y_hit = current_pos_y;
@@ -352,17 +349,16 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
         float rel_y_loop = current_pos_y -pos_y_hit;
         float loop_angle = wraptopi(atan2(rel_y_loop,rel_x_loop));
 
-       // printf("loop_angle %f %f %f\n",loop_angle,wraptopi(wanted_angle+3.14f), fabs(wraptopi(wanted_angle+3.14f-loop_angle)) );
-
-        if (fabs(wraptopi(wanted_angle+3.14f-loop_angle))<1.0)
+        if(outbound)
         {
-        //	printf("LOOPING!\n");
-        	overwrite_and_reverse_direction = true;
+        	if (fabs(wraptopi(wanted_angle+3.14f-loop_angle))<1.0)
+        	{
+        		overwrite_and_reverse_direction = true;
+        	}else{
+        		//overwrite_and_reverse_direction = false; // this didn't really work...
+        	}
         }else{
-        //	printf("no LOOPING!\n");
-
-        	//overwrite_and_reverse_direction = false;
-
+        	overwrite_and_reverse_direction = false;
         }
 
 		// if during wallfollowing, agent goes around wall, and heading is close to rssi _angle
@@ -399,6 +395,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
         			rssi_sample_reset = true;
         			heading_rssi = current_heading;
         			int diff_rssi_unf = (int)prev_rssi - (int)rssi_beacon;
+
         			//rssi already gets filtered at the radio_link.c
         			diff_rssi = diff_rssi_unf;
         			/*float diff_wanted_angle = 0;
@@ -418,7 +415,11 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
         			// Increment the value the existing wanted_angle.
         			/*					if(diff_wanted_angle != 0)
 					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));*/
+
+
         			wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi);
+
+
         			//printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
         			//for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
         		}
@@ -488,9 +489,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 			state_wf = wall_follower(&temp_vel_x, &temp_vel_y, &temp_vel_w, front_range, right_range, current_heading, direction);
 	}else if(state==4)           //MOVE_AWAY
 	{
-        //float rel_x_sample = current_pos_x- pos_x_move;
-        //float rel_y_sample = current_pos_y -pos_y_move;
-		//float distance = sqrt(rel_x_sample*rel_x_sample+rel_y_sample*rel_y_sample);
+
 		float save_distance = 1.0f;
 		if(left_range<save_distance)
 		{
@@ -509,12 +508,6 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 				temp_vel_x = temp_vel_x + 0.5f;
 			}
 
-/*		if(distance<1.0f && ((direction == 1 && left_range>ref_distance_from_wall) || (direction == -1 && right_range>ref_distance_from_wall)) )
-		{
-			temp_vel_y = direction*0.5f;
-		}else{
-			temp_vel_y = 0;
-		}*/
 	}
 
 #ifndef GB_ONBOARD
