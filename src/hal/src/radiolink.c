@@ -63,7 +63,7 @@ uint8_t movingAvg(int *ptrArrNumbers, long *ptrSum, int pos, int len, int nextNu
 	  int pos_avg_2 = 0;
 	  long sum_2 = 0;
 	  int arrNumbers_2[10] = {35};
-	  int len_2 = sizeof(arrNumbers) / sizeof(int);
+	  int len_2 = sizeof(arrNumbers_2) / sizeof(int);
 
 
 #define RADIOLINK_TX_QUEUE_SIZE (1)
@@ -276,7 +276,7 @@ static int radiolinkSetEnable(bool enable)
 
 LOG_GROUP_START(radio)
 LOG_ADD(LOG_UINT8, rssi, &rssi)
-LOG_ADD(LOG_UINT8, rssi_inter, &rssi_inter)
+LOG_ADD(LOG_UINT8, rssi_inter, &rssi_inter_ext)
 LOG_ADD(LOG_UINT8, id_inter, &id_inter)
 //LOG_ADD(LOG_UINT8, rssi_b_inter, &rssi_beacon_inter)
 LOG_GROUP_STOP(radio)

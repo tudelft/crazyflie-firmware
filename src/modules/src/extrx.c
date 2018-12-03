@@ -176,7 +176,7 @@ static void extRxDecodeSpektrum(void)
 
 /* Loggable variables */
 #ifdef ENABLE_EXTRX_LOG
-LOG_GROUP_START(extrx)
+/*LOG_GROUP_START(extrx)
 LOG_ADD(LOG_UINT16, ch0, &ch[0])
 LOG_ADD(LOG_UINT16, ch1, &ch[1])
 LOG_ADD(LOG_UINT16, ch2, &ch[2])
@@ -185,5 +185,5 @@ LOG_ADD(LOG_UINT16, thrust, &extrxSetpoint.thrust)
 LOG_ADD(LOG_FLOAT, roll, &extrxSetpoint.attitude.roll)
 LOG_ADD(LOG_FLOAT, pitch, &extrxSetpoint.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &extrxSetpoint.attitude.yaw)
-LOG_GROUP_STOP(extrx)
+LOG_GROUP_STOP(extrx)*/
 #endif

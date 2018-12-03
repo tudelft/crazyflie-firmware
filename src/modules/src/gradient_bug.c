@@ -61,6 +61,9 @@ static float nominal_height = 0.5;
 // 5 = com_bug_loop_avoid_controller 6=lobe_bug_loop_controller 7=gradient_bug_loop_controller
 #define METHOD 7
 
+
+
+
 static void take_off(setpoint_t *sp, float velocity)
 {
 	sp->mode.x = modeVelocity;
@@ -202,13 +205,17 @@ void gradientBugTask(void *param)
 			right_range = (float)rangeRight/1000.0f;
 			left_range = (float)rangeLeft/1000.0f;
 			back_range = (float)rangeBack/1000.0f;
-			if (rangeUp<20)
+			up_range = (float)rangeUp/1000.0f;
+
+			//up_range = (float)2.0f;
+
+			/*if (rangeUp<20)
 			{
 			up_range = (float)2.0f;
 			}else{
 			up_range = (float)rangeUp/1000.0f;
+			}*/
 
-			}
 
 		}else if(stereoboard_isinit){
 				front_range = (float)front_range_UD/1000.0f;
@@ -248,7 +255,7 @@ void gradientBugTask(void *param)
 			  if ((currentTime -time_stamp_manual_startup_command) > MANUAL_STARTUP_TIMEOUT)
 			  {
 				  keep_flying = true;
-				  //manual_startup = false;
+				  manual_startup = false;
 			  }
 		}
 
@@ -273,7 +280,7 @@ void gradientBugTask(void *param)
 
 		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
 		//TODO: add flowdeck init here
-		if (keep_flying == true && (stereoboard_isinit == false||multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<10))
+		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<10))
 			keep_flying = 0;
 
 		state = 0;
@@ -292,12 +299,14 @@ void gradientBugTask(void *param)
 				 */
 				hover(&setpoint_BG, nominal_height);
 
+#if METHOD == 1
 				// wall following state machine
-				//state = wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
+				state = wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
 
 				//state =lobe_navigator(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, front_range,left_range, current_heading, (float)pos.x, (float)pos.y, rssi_ext);
 				//state=wall_follower_and_avoid_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range,left_range,right_range, current_heading,(float)pos.x, (float)pos.y, rssi_inter_filtered);
 
+#endif
 /*
 
 #ifndef REVERSE
@@ -325,7 +334,10 @@ void gradientBugTask(void *param)
 					priority = false;
 
 				}
-				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, back_range, current_heading, (float)pos.x, (float)pos.y, rssi_beacon_filtered, rssi_inter_ext,priority);
+
+				bool outbound = true;
+				state=gradient_bug_loop_controller(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, &rssi_angle, &state_wf, front_range, left_range, right_range, back_range, current_heading,
+						(float)pos.x, (float)pos.y, rssi_beacon_filtered, rssi_inter_ext, rssi_angle_inter_ext, priority, outbound);
 #endif
 
 				// convert yaw rate commands to degrees
@@ -349,7 +361,9 @@ void gradientBugTask(void *param)
 				if(height>nominal_height)
 				{
 					taken_off = true;
-					//wall_follower_init(0.4,0.5);
+#if METHOD==1
+					wall_follower_init(0.4,0.5);
+#endif
 					//init_lobe_navigator();
 					//init_wall_follower_and_avoid_controller(0.4,0.5,-1);
 					//init_com_bug_loop_controller(0.4, 0.5);
@@ -425,8 +439,11 @@ LOG_GROUP_START(gradientbug)
 LOG_ADD(LOG_UINT8, state, &state)
 LOG_ADD(LOG_UINT8, state_wf, &state_wf)
 LOG_ADD(LOG_UINT8, rssi_beacon, &rssi_beacon_filtered)
-LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle_inter_ext)
-LOG_ADD(LOG_FLOAT, front_range, &front_range)
+LOG_ADD(LOG_FLOAT, rssi_angle, &rssi_angle)
+LOG_ADD(LOG_FLOAT, rssi_angle_i, &rssi_angle_inter_ext)
+LOG_ADD(LOG_UINT8, rssi_i, &rssi_inter_ext)
+
+//LOG_ADD(LOG_FLOAT, up_range, &up_range)
 LOG_GROUP_STOP(gradientbug)
 
 

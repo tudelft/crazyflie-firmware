@@ -30,7 +30,7 @@ float state_start_time;
 static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
-uint8_t rssi_threshold = 50;
+uint8_t rssi_threshold = 55;
 
 
 // Converts degrees to radians.
@@ -182,14 +182,14 @@ void init_gradient_bug_loop_controller(float new_ref_distance_from_wall, float m
 int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float* rssi_angle, int* state_wallfollowing,
 		float front_range, float left_range, float right_range, float back_range,
 		float current_heading, float current_pos_x, float current_pos_y,uint8_t rssi_beacon,
-		uint8_t rssi_inter, bool priority)
+		uint8_t rssi_inter, float rssi_angle_inter, bool priority, bool outbound)
 {
 
 	// Initalize static variables
 	static int state = 2;
 	//static float previous_heading = 0;
 	static int state_wf=0;
-	static float wanted_angle = 0;
+	static float wanted_angle = 0.8;
 	static float wanted_angle_dir = 0;
 	static float pos_x_hit = 0;
 	static float pos_y_hit = 0;
@@ -219,7 +219,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	// if it is reinitialized
 	if (first_run)
 	{
-		wanted_angle = current_heading;
+		wanted_angle = 0.8;
 		//previous_heading = current_heading;
 		wanted_angle_dir = wraptopi(current_heading-wanted_angle); // to determine the direction when turning to goal
 
@@ -308,10 +308,16 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	{
 
 		// if another drone is close and there is no right of way, move out of the way
-		if(priority== false && rssi_inter<rssi_threshold &&((direction == 1.0f && left_range>1.0f) || (direction == -1.0f && right_range>1.0f)) )
+		if(priority== false && rssi_inter<rssi_threshold )
 		{
 		//	pos_x_move = current_pos_x;
 		//	pos_y_move = current_pos_y;
+			if(outbound){
+				if((rssi_angle_inter<0 && wanted_angle<0)||(rssi_angle_inter>0 && wanted_angle>0))
+				{
+					wanted_angle = -1*wanted_angle;
+				}
+			}
 			state= transition(4);
 		}
 
@@ -341,7 +347,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
         if (fabs(wraptopi(bearing_to_goal+3.14f-loop_angle))<0.5)
         {
         	//LETOP DIT MOET WEER OMGEDRAAID WORDEN!!!
-        	overwrite_and_reverse_direction = false;
+        	overwrite_and_reverse_direction = true;
         }else{
         	overwrite_and_reverse_direction = false;
 
@@ -357,30 +363,33 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
         // If going straight
         // 		determine by the gradient of the crazyradio what the approx direction is.
-		if(state_wf==5)
-		{
-			// Reset sample gathering
-			if(rssi_sample_reset)
-			{
-				pos_x_sample = current_pos_x;
-				pos_y_sample = current_pos_y;
-				rssi_sample_reset = false;
-				prev_rssi = rssi_beacon;
-			}
+        if(state_wf==5)
+        {
 
 
-			// if the crazyflie traveled for 1 meter, than measure if it went into the right path
-		        float rel_x_sample = current_pos_x- pos_x_sample;
-		        float rel_y_sample = current_pos_y -pos_y_sample;
-				float distance = sqrt(rel_x_sample*rel_x_sample+rel_y_sample*rel_y_sample);
-				if(distance>1.0f)
-				{
-					rssi_sample_reset = true;
-					heading_rssi = current_heading;
-					int diff_rssi_unf = (int)prev_rssi - (int)rssi_beacon;
-					//rssi already gets filtered at the radio_link.c
-					diff_rssi = diff_rssi_unf;
-					/*float diff_wanted_angle = 0;
+        	if(!outbound){
+        		// Reset sample gathering
+        		if(rssi_sample_reset)
+        		{
+        			pos_x_sample = current_pos_x;
+        			pos_y_sample = current_pos_y;
+        			rssi_sample_reset = false;
+        			prev_rssi = rssi_beacon;
+        		}
+
+
+        		// if the crazyflie traveled for 1 meter, than measure if it went into the right path
+        		float rel_x_sample = current_pos_x- pos_x_sample;
+        		float rel_y_sample = current_pos_y -pos_y_sample;
+        		float distance = sqrt(rel_x_sample*rel_x_sample+rel_y_sample*rel_y_sample);
+        		if(distance>1.0f)
+        		{
+        			rssi_sample_reset = true;
+        			heading_rssi = current_heading;
+        			int diff_rssi_unf = (int)prev_rssi - (int)rssi_beacon;
+        			//rssi already gets filtered at the radio_link.c
+        			diff_rssi = diff_rssi_unf;
+        			/*float diff_wanted_angle = 0;
 					float alpha = 0.8;
 					// if the rssi difference is positive, then the drone is going into the right way
 					if(diff_rssi>0)
@@ -393,15 +402,15 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
 						//diff_wanted_angle =wraptopi(3.14f+(heading_rssi-wanted_angle));
 					}*/
-					//wanted_angle = wraptopi(wanted_angle +(float)fabs((float)(diff_rssi)/10.0f)*(diff_wanted_angle));
-					// Increment the value the existing wanted_angle.
-/*					if(diff_wanted_angle != 0)
+        			//wanted_angle = wraptopi(wanted_angle +(float)fabs((float)(diff_rssi)/10.0f)*(diff_wanted_angle));
+        			// Increment the value the existing wanted_angle.
+        			/*					if(diff_wanted_angle != 0)
 					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));*/
-					wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi);
-					//printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
-					//for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
-
-				}
+        			wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi);
+        			//printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
+        			//for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
+        		}
+        	}
 
 		}else{
 			rssi_sample_reset = true;
@@ -411,8 +420,10 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		// once the drone has gone by, rotate to goal
 		if(rssi_inter>=rssi_threshold)
 		{
+
 			state = transition(2); //rotate_to_goal
 		}
+
 	}
 
 
