@@ -500,8 +500,11 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
    *vel_w = temp_vel_w;
 
 
-   //printf("state = %d\n",state);
+#ifndef GB_ONBOARD
 
+	printf("state_wf %d\n",state);
+
+#endif
 return state;
 
 }

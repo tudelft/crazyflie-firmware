@@ -30,8 +30,8 @@ float state_start_time;
 static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
-uint8_t rssi_threshold = 55;
-uint8_t rssi_collision_threshold = 35;
+uint8_t rssi_threshold = 50;
+uint8_t rssi_collision_threshold = 41;
 
 
 // Converts degrees to radians.
@@ -127,14 +127,14 @@ static float fillHeadingArray(uint8_t* correct_heading_array, float rssi_heading
 		{
 			if(diff_rssi>0)
 			{
-				correct_heading_array[it]=correct_heading_array[it]+1;//(uint8_t)abs(diff_rssi);
+				correct_heading_array[it]=1;//correct_heading_array[it]+1;//(uint8_t)abs(diff_rssi);
 				if(correct_heading_array[(it+4)%8]>0)
-				correct_heading_array[(it+4)%8]=correct_heading_array[(it+4)%8]-1;//(uint8_t)abs(diff_rssi);
+				correct_heading_array[(it+4)%8]=0;//correct_heading_array[(it+4)%8]-1;//(uint8_t)abs(diff_rssi);
 
 			}else if(diff_rssi<0){
 				if(correct_heading_array[it]>0)
-				correct_heading_array[it]=correct_heading_array[it]-1;//(uint8_t)abs(diff_rssi);
-				correct_heading_array[(it+4)%8]=correct_heading_array[(it+4)%8]+1;//(uint8_t)abs(diff_rssi);
+				correct_heading_array[it]=0;//correct_heading_array[it]-1;//(uint8_t)abs(diff_rssi);
+				correct_heading_array[(it+4)%8]=1;//correct_heading_array[(it+4)%8]+1;//(uint8_t)abs(diff_rssi);
 			}
 
 		}
@@ -207,6 +207,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	static float heading_rssi = 0;
 	static uint8_t correct_heading_array[8] = {0};
 
+	static bool first_time_inbound = true;
+
 
 /*
 #ifndef GB_ONBOARD
@@ -235,6 +237,13 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 		first_run = false;
 	}
 
+	if(first_time_inbound)
+	{
+		wraptopi(wanted_angle-3.14f);
+		wanted_angle_dir = wraptopi(current_heading-wanted_angle);
+		state = transition(2);
+		first_time_inbound = false;
+	}
 
 	/***********************************************************
 	 * State definitions
@@ -289,7 +298,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	{
 		// check if heading is close to the preferred_angle
 		bool goal_check = logicIsCloseTo(wraptopi(current_heading- wanted_angle),0,0.1f);
-		if(front_range<ref_distance_from_wall+0.3f)
+		if(front_range<ref_distance_from_wall+0.2f)
 		{
 			//pos_x_hit = current_pos_x;
 			//pos_y_hit = current_pos_y;
@@ -316,7 +325,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 				{
 					wanted_angle = -1*wanted_angle;
 					wanted_angle_dir = wraptopi(current_heading-wanted_angle);
-					state= transition(2);
+					//state= transition(2);
 				}
 			}
 			if(rssi_inter<rssi_collision_threshold)
@@ -513,6 +522,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 #ifndef GB_ONBOARD
 
 	printf("state %d\n",state);
+	printf("direction %f\n",direction);
 
 #endif
 	*rssi_angle = wanted_angle;

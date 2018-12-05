@@ -260,7 +260,7 @@ void gradientBugTask(void *param)
 
 		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
 		//TODO: add flowdeck init here
-		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||rssi_beacon_filtered<10))
+		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||(!outbound&&rssi_beacon_filtered<33)))
 			keep_flying = 0;
 
 		state = 0;
@@ -345,7 +345,7 @@ void gradientBugTask(void *param)
 				 * 	but the crazyflie  has not taken off
 				 * 	 then take off
 				 */
-				take_off(&setpoint_BG, 0.2f);
+				take_off(&setpoint_BG, 0.4f);
 				if(height>nominal_height)
 				{
 					taken_off = true;
@@ -408,7 +408,7 @@ void gradientBugTask(void *param)
 
 		commanderSetSetpoint(&setpoint_BG, GRADIENT_BUG_COMMANDER_PRI);
 		//float test_float = (float)(own_id)*10.0f;
-		radiolinkSendInfoGradientBug(1,rssi_angle);
+		radiolinkSendInfoGradientBug(state,rssi_angle);
 
 	}
 }

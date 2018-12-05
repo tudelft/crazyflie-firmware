@@ -57,7 +57,7 @@ uint8_t movingAvg(int *ptrArrNumbers, long *ptrSum, int pos, int len, int nextNu
 //static uint8_t rssi_beacon_filtered;
 	  int pos_avg = 0;
 	  long sum = 0;
-	  int arrNumbers[10] = {35};
+	  int arrNumbers[51] = {35};
 	  int len = sizeof(arrNumbers) / sizeof(int);
 
 	  int pos_avg_2 = 0;
