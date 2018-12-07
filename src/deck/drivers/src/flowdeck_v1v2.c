@@ -42,6 +42,8 @@
 
 #include <stdlib.h>
 
+#include "flowdeck_v1v2.h"
+
 #define AVERAGE_HISTORY_LENGTH 4
 #define OULIER_LIMIT 100
 #define LP_CONSTANT 0.8f
@@ -63,6 +65,8 @@ static uint8_t outlierCount = 0;
 
 static bool isInit1 = false;
 static bool isInit2 = false;
+
+bool flowdeck_isinit = false;
 
 motionBurst_t currentMotion;
 
@@ -147,6 +151,7 @@ static void flowdeck1Init()
                 FLOW_TASK_PRI, NULL);
 
     isInit1 = true;
+    flowdeck_isinit = true;
   }
 }
 
@@ -192,6 +197,7 @@ static void flowdeck2Init()
                 FLOW_TASK_PRI, NULL);
 
     isInit2 = true;
+    flowdeck_isinit = true;
   }
 }
 

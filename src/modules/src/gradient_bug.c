@@ -42,6 +42,7 @@
 #include "median_filter.h"
 
 #include "stereoboard.h"
+#include "flowdeck_v1v2.h"
 
 
 //#define GRADIENT_BUG_NAME "GRADIENTBUG"
@@ -238,7 +239,7 @@ void gradientBugTask(void *param)
 
 		//TODO: shut off engines when crazyflie is on it's back.
 
-		// indicate if top range is hit while it is not flying yet, then start counting
+/*		// indicate if top range is hit while it is not flying yet, then start counting
 		if (keep_flying == false && manual_startup==false && up_range <0.2f && on_the_ground == true)
 		{
 			manual_startup = true;
@@ -255,12 +256,12 @@ void gradientBugTask(void *param)
 				  keep_flying = true;
 				  manual_startup = false;
 			  }
-		}
+		}*/
 
 
 		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
 		//TODO: add flowdeck init here
-		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||(!outbound&&rssi_beacon_filtered<41)))
+		if (keep_flying == true && (flowdeck_isinit == false || multiranger_isinit == false || up_range<0.2f||(!outbound&&rssi_beacon_filtered<41)))
 			keep_flying = 0;
 
 		state = 0;
@@ -368,7 +369,7 @@ void gradientBugTask(void *param)
 					init_lobe_bug_loop_controller(0.4, 0.5);
 #endif
 #if METHOD==7
-					if(own_id>3.9&&own_id<4.1)
+					if(own_id==4&&own_id==8)
 					init_gradient_bug_loop_controller(0.4, 0.5,-0.8);
 					else
 						init_gradient_bug_loop_controller(0.4, 0.5,0.8);

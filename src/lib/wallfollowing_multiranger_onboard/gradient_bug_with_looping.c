@@ -224,7 +224,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	// if it is reinitialized
 	if (first_run)
 	{
-		wanted_angle = 0.8;
+		//wanted_angle = 0.8;
 		//previous_heading = current_heading;
 		wanted_angle_dir = wraptopi(current_heading-wanted_angle); // to determine the direction when turning to goal
 
