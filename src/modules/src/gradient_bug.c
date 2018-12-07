@@ -260,7 +260,7 @@ void gradientBugTask(void *param)
 
 		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
 		//TODO: add flowdeck init here
-		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||(!outbound&&rssi_beacon_filtered<33)))
+		if (keep_flying == true && (multiranger_isinit == false || up_range<0.2f||(!outbound&&rssi_beacon_filtered<41)))
 			keep_flying = 0;
 
 		state = 0;
@@ -368,7 +368,11 @@ void gradientBugTask(void *param)
 					init_lobe_bug_loop_controller(0.4, 0.5);
 #endif
 #if METHOD==7
-					init_gradient_bug_loop_controller(0.4, 0.5);
+					if(own_id>3.9&&own_id<4.1)
+					init_gradient_bug_loop_controller(0.4, 0.5,-0.8);
+					else
+						init_gradient_bug_loop_controller(0.4, 0.5,0.8);
+
 #endif
 
 

@@ -171,10 +171,13 @@ static float fillHeadingArray(uint8_t* correct_heading_array, float rssi_heading
 }
 
 // statemachine functions
-void init_gradient_bug_loop_controller(float new_ref_distance_from_wall, float max_speed_ref)
+static float wanted_angle = 0.8;
+
+void init_gradient_bug_loop_controller(float new_ref_distance_from_wall, float max_speed_ref, float begin_wanted_heading)
 {
 	ref_distance_from_wall = new_ref_distance_from_wall;
 	max_speed = max_speed_ref;
+	wanted_angle = begin_wanted_heading;
 	//init_median_filter_i(&medFiltdiffRssi,101);
 	first_run = true;
 }
@@ -190,7 +193,6 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	static int state = 2;
 	//static float previous_heading = 0;
 	static int state_wf=0;
-	static float wanted_angle = 0.8;
 	static float wanted_angle_dir = 0;
 	static float pos_x_hit = 0;
 	static float pos_y_hit = 0;
