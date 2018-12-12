@@ -58,11 +58,12 @@ static VL53L0xDev devUp;
 static VL53L0xDev devLeft;
 static VL53L0xDev devRight;
 
-uint16_t rangeFront;
-uint16_t rangeBack;
-uint16_t rangeUp;
-uint16_t rangeLeft;
-uint16_t rangeRight;
+uint16_t rangeFront_oa;
+uint16_t rangeBack_oa;
+uint16_t rangeUp_oa;
+uint16_t rangeLeft_oa;
+uint16_t rangeRight_oa;
+bool oa_isinit = false;
 
 static void oaTask(void *param)
 {
@@ -79,11 +80,11 @@ static void oaTask(void *param)
   while(1) {
     vTaskDelayUntil(&lastWakeTime, M2T(50));
 
-    rangeFront = vl53l0xReadRangeContinuousMillimeters(&devFront);
-    rangeBack = vl53l0xReadRangeContinuousMillimeters(&devBack);
-    rangeUp = vl53l0xReadRangeContinuousMillimeters(&devUp);
-    rangeLeft = vl53l0xReadRangeContinuousMillimeters(&devLeft);
-    rangeRight = vl53l0xReadRangeContinuousMillimeters(&devRight);
+    rangeFront_oa = vl53l0xReadRangeContinuousMillimeters(&devFront);
+    rangeBack_oa = vl53l0xReadRangeContinuousMillimeters(&devBack);
+    rangeUp_oa = vl53l0xReadRangeContinuousMillimeters(&devUp);
+    rangeLeft_oa = vl53l0xReadRangeContinuousMillimeters(&devLeft);
+    rangeRight_oa = vl53l0xReadRangeContinuousMillimeters(&devRight);
   }
 }
 
@@ -108,6 +109,7 @@ static void oaInit()
                      OA_PIN_BACK);
 
   isInit = true;
+  oa_isinit = true;
 
   xTaskCreate(oaTask, "oa", 2*configMINIMAL_STACK_SIZE, NULL,
               /*priority*/3, NULL);
@@ -181,11 +183,11 @@ static const DeckDriver oa_deck = {
 DECK_DRIVER(oa_deck);
 
 LOG_GROUP_START(oa)
-LOG_ADD(LOG_UINT16, front, &rangeFront)
-LOG_ADD(LOG_UINT16, back, &rangeBack)
-LOG_ADD(LOG_UINT16, up, &rangeUp)
-LOG_ADD(LOG_UINT16, left, &rangeLeft)
-LOG_ADD(LOG_UINT16, right, &rangeRight)
+LOG_ADD(LOG_UINT16, front, &rangeFront_oa)
+LOG_ADD(LOG_UINT16, back, &rangeBack_oa)
+LOG_ADD(LOG_UINT16, up, &rangeUp_oa)
+LOG_ADD(LOG_UINT16, left, &rangeLeft_oa)
+LOG_ADD(LOG_UINT16, right, &rangeRight_oa)
 LOG_GROUP_STOP(oa)
 
 PARAM_GROUP_START(deck)

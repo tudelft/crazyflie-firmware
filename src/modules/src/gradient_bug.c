@@ -160,6 +160,7 @@ static float wraptopi(float number)
 bool manual_startup = false;
 bool on_the_ground = true;
 uint32_t time_stamp_manual_startup_command = 0;
+bool correctly_initialized;
 #define MANUAL_STARTUP_TIMEOUT  M2T(3000)
 /*static double wraptopi(double number)
 {
@@ -214,7 +215,15 @@ void gradientBugTask(void *param)
 			}*/
 
 
-		}else if(stereoboard_isinit){
+		}else if(oa_isinit){
+			front_range = (float)rangeFront_oa/1000.0f;
+			right_range = (float)rangeRight_oa/1000.0f;
+			left_range = (float)rangeLeft_oa/1000.0f;
+			back_range = (float)rangeBack_oa/1000.0f;
+			up_range = (float)rangeUp_oa/1000.0f;
+		}else
+
+			if(stereoboard_isinit){
 				front_range = (float)front_range_UD/1000.0f;
 				right_range = (float)right_range_UD/1000.0f;
 				left_range = (float)left_range_UD/1000.0f;
@@ -258,11 +267,14 @@ void gradientBugTask(void *param)
 			  }
 		}*/
 
-
+        if(flowdeck_isinit&&(multiranger_isinit||oa_isinit||stereoboard_isinit))
+        	correctly_initialized = true;
 		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
 		//TODO: add flowdeck init here
-		if (keep_flying == true && (flowdeck_isinit == false || multiranger_isinit == false || up_range<0.2f||(!outbound&&rssi_beacon_filtered<41)))
+		if (keep_flying == true && (!correctly_initialized || up_range<0.2f||(!outbound&&rssi_beacon_filtered<41)))
+			{
 			keep_flying = 0;
+			}
 
 		state = 0;
 		rssi_beacon_filtered = rssi_ext;
@@ -369,10 +381,18 @@ void gradientBugTask(void *param)
 					init_lobe_bug_loop_controller(0.4, 0.5);
 #endif
 #if METHOD==7
-					if(own_id==4&&own_id==8)
-					init_gradient_bug_loop_controller(0.4, 0.5,-0.8);
+					if(own_id==4||own_id==8)
+						init_gradient_bug_loop_controller(0.4, 0.5,-0.8);
+					else if(own_id==2||own_id==6)
+						init_gradient_bug_loop_controller(0.4, 0.5,0.8);
+					else if(own_id==3||own_id==7)
+						init_gradient_bug_loop_controller(0.4, 0.5,-2.4);
+					else if(own_id==5||own_id==9)
+						init_gradient_bug_loop_controller(0.4, 0.5,2.4);
 					else
 						init_gradient_bug_loop_controller(0.4, 0.5,0.8);
+
+
 
 #endif
 

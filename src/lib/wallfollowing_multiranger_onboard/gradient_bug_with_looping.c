@@ -31,7 +31,7 @@ static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
 uint8_t rssi_threshold = 50;
-uint8_t rssi_collision_threshold = 41;
+uint8_t rssi_collision_threshold = 42;
 
 
 // Converts degrees to radians.

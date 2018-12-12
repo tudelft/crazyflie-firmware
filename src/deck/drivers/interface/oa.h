@@ -8,10 +8,12 @@
 #ifndef SRC_DECK_DRIVERS_INTERFACE_OA_H_
 #define SRC_DECK_DRIVERS_INTERFACE_OA_H_
 
-/*extern uint16_t rangeFront;
-extern uint16_t rangeBack;
-extern uint16_t rangeUp;
-extern uint16_t rangeLeft;
-extern uint16_t rangeRight;*/
+extern uint16_t rangeFront_oa;
+extern uint16_t rangeBack_oa;
+extern uint16_t rangeUp_oa;
+extern uint16_t rangeLeft_oa;
+extern uint16_t rangeRight_oa;
+
+extern bool oa_isinit;
 
 #endif /* SRC_DECK_DRIVERS_INTERFACE_OA_H_ */
