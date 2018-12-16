@@ -30,8 +30,8 @@ float state_start_time;
 static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
-uint8_t rssi_threshold = 50;
-uint8_t rssi_collision_threshold = 42;
+uint8_t rssi_threshold = 59;// normal batteries 50/52/53/53 bigger bbatteries 55/57/59
+uint8_t rssi_collision_threshold = 52; // normal batteris 43/45/45/46 bigger batteries 48/50/52
 
 
 // Converts degrees to radians.
