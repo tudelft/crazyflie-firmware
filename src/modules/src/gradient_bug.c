@@ -56,7 +56,7 @@ static bool keep_flying = false;
 float height;
 
 static bool taken_off = false;
-static float nominal_height = 0.5;
+static float nominal_height = 0.4;
 
 //1= wall_following, 2=lobe navigator, 3 = wallfollowing with avoid, 4 = com_bug_loop_controller
 // 5 = com_bug_loop_avoid_controller 6=lobe_bug_loop_controller 7=gradient_bug_loop_controller
@@ -141,6 +141,8 @@ int state;
 int state_wf;
 float up_range_filtered;
 uint8_t rssi_beacon_filtered;
+bool made_it = false;
+uint8_t send_to_number = 0;
 
 //#define REVERSE
 
@@ -273,6 +275,8 @@ void gradientBugTask(void *param)
 		//TODO: add flowdeck init here
 		if (keep_flying == true && (!correctly_initialized || up_range<0.2f||(!outbound&&rssi_beacon_filtered<55)))
 			{
+			if(!outbound&&rssi_beacon_filtered<55)
+				made_it = true;
 			keep_flying = 0;
 			}
 
@@ -426,6 +430,9 @@ void gradientBugTask(void *param)
 				 */
 				shut_off_engines(&setpoint_BG);
 				on_the_ground = true;
+				if(made_it)
+					state=10;
+
 
 			}
 
@@ -433,7 +440,7 @@ void gradientBugTask(void *param)
 
 		commanderSetSetpoint(&setpoint_BG, GRADIENT_BUG_COMMANDER_PRI);
 		//float test_float = (float)(own_id)*10.0f;
-		radiolinkSendInfoGradientBug(state,rssi_angle);
+		radiolinkSendInfoGradientBug(state,rssi_angle,send_to_number);
 
 	}
 }
@@ -454,6 +461,7 @@ void gradientBugInit()
 PARAM_GROUP_START(gbug)
 PARAM_ADD(PARAM_UINT8, keep_flying, &keep_flying)
 PARAM_ADD(PARAM_UINT8, outbound, &outbound)
+PARAM_ADD(PARAM_UINT8, sendnum, &send_to_number)
 PARAM_GROUP_STOP(gbug)
 
 

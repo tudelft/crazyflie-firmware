@@ -169,14 +169,15 @@ void radiolinkSetPowerDbm(int8_t powerDbm)
   syslinkSendPacket(&slp);
 }
 
-void radiolinkSendInfoGradientBug(int8_t state, float angle_rssi )
+void radiolinkSendInfoGradientBug(int8_t state, float angle_rssi, uint8_t send_to_number)
 {
 	SyslinkPacket slp;
 
 	slp.type = SYSLINK_GRADIENT_BUG;
-	slp.length = 5;
+	slp.length = 6;
 	slp.data[0] = state;
-	memcpy(&slp.data[1], &angle_rssi, sizeof(float));
+	slp.data[1] = send_to_number;
+	memcpy(&slp.data[2], &angle_rssi, sizeof(float));
 
 	syslinkSendPacket(&slp);
 }

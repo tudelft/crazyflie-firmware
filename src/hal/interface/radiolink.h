@@ -46,6 +46,6 @@ void radiolinkSetAddress(uint64_t address);
 void radiolinkSetPowerDbm(int8_t powerDbm);
 void radiolinkSyslinkDispatch(SyslinkPacket *slp);
 struct crtpLinkOperations * radiolinkGetLink();
-void radiolinkSendInfoGradientBug(int8_t state, float angle_rssi);
+void radiolinkSendInfoGradientBug(int8_t state, float angle_rssi, uint8_t send_to_number);
 
 #endif //__RADIO_H__

@@ -30,10 +30,15 @@ float state_start_time;
 static bool first_run = true;
 static float ref_distance_from_wall = 0;
 static float max_speed = 0.5;
+
+#ifndef GB_ONBOARD
+uint8_t rssi_threshold = 55;// normal batteries 50/52/53/53 bigger bbatteries 55/57/59
+uint8_t rssi_collision_threshold = 46; // normal batteris 43/45/45/46 bigger batteries 48/50/52
+#else
 uint8_t rssi_threshold = 59;// normal batteries 50/52/53/53 bigger bbatteries 55/57/59
-uint8_t rssi_collision_threshold = 52; // normal batteris 43/45/45/46 bigger batteries 48/50/52
+uint8_t rssi_collision_threshold = 54; // normal batteris 43/45/45/46 bigger batteries 48/50/52
 
-
+#endif
 // Converts degrees to radians.
 #define deg2rad(angleDegrees) (angleDegrees * (float)M_PI / 180.0f)
 
@@ -171,7 +176,7 @@ static float fillHeadingArray(uint8_t* correct_heading_array, float rssi_heading
 }
 
 // statemachine functions
-static float wanted_angle = 0.8;
+static float wanted_angle = 0;
 
 void init_gradient_bug_loop_controller(float new_ref_distance_from_wall, float max_speed_ref, float begin_wanted_heading)
 {
@@ -501,7 +506,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 	}else if(state==4)           //MOVE_AWAY
 	{
 
-		float save_distance = 1.0f;
+		float save_distance = 0.7f;
 		if(left_range<save_distance)
 		{
 			temp_vel_y =temp_vel_y- 0.5f;
