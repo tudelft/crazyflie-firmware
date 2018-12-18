@@ -345,7 +345,7 @@ int wall_follower(float* vel_x, float* vel_y, float* vel_w, float front_range, f
 
    }else if(state==6)   		//ROTATE_AROUND_WALL
    {
-	   if(front_range < ref_distance_from_wall + 0.1f)
+	   if(front_range < ref_distance_from_wall + 0.2f)
 	   {
 		   state=transition(3);
 	   }

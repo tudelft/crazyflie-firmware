@@ -273,9 +273,11 @@ void gradientBugTask(void *param)
         	correctly_initialized = true;
 		// Don't fly if multiranger/updownlaser is not connected or the uprange is activated
 		//TODO: add flowdeck init here
-		if (keep_flying == true && (!correctly_initialized || up_range<0.2f||(!outbound&&rssi_beacon_filtered<55)))
+
+                uint8_t rssi_beacon_threshold = 58;
+		if (keep_flying == true && (!correctly_initialized || up_range<0.2f||(!outbound&&rssi_beacon_filtered<rssi_beacon_threshold)))
 			{
-			if(!outbound&&rssi_beacon_filtered<55)
+			if(!outbound&&rssi_beacon_filtered<rssi_beacon_threshold)
 				made_it = true;
 			keep_flying = 0;
 			}
