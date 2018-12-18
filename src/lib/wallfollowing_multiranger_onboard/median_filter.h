@@ -31,7 +31,7 @@
 
 //#include "std.h"
 struct MedianFilterInt {
-	int data[MAX_MEDIAN_DATASIZE_I], sortData[MAX_MEDIAN_DATASIZE_I];
+  int data[MAX_MEDIAN_DATASIZE_I], sortData[MAX_MEDIAN_DATASIZE_I];
   uint8_t dataIndex;
   uint8_t size;
 };
@@ -39,7 +39,7 @@ struct MedianFilterInt {
 static inline void init_median_filter_i(struct MedianFilterInt *filter, uint8_t size)
 {
   uint8_t i;
-  if (size > MAX_MEDIAN_DATASIZE_I){
+  if (size > MAX_MEDIAN_DATASIZE_I) {
     filter->size = MAX_MEDIAN_DATASIZE_I;
   } else if ((size % 2) == 0) {
     // force filter to have odd number of entries so that
@@ -57,7 +57,7 @@ static inline void init_median_filter_i(struct MedianFilterInt *filter, uint8_t 
 
 static inline int32_t get_median_filter_i(struct MedianFilterInt *filter)
 {
-  if (filter->size % 2){
+  if (filter->size % 2) {
     return filter->sortData[filter->size >> 1];
   } else {
     // this should not be used if init_median_filter was used
@@ -67,7 +67,7 @@ static inline int32_t get_median_filter_i(struct MedianFilterInt *filter)
 
 static inline int32_t update_median_filter_i(struct MedianFilterInt *filter, int32_t new_data)
 {
-	int temp, i, j; // used to sort array
+  int temp, i, j; // used to sort array
 
   // Insert new data into raw data array round robin style
   filter->data[filter->dataIndex] = new_data;
@@ -99,9 +99,9 @@ struct MedianFilterFloat {
 static inline void init_median_filter_f(struct MedianFilterFloat *filter, uint8_t size)
 {
   uint8_t i;
-  if (size > MAX_MEDIAN_DATASIZE_F){
+  if (size > MAX_MEDIAN_DATASIZE_F) {
     filter->size = MAX_MEDIAN_DATASIZE_F;
-  } else if ((size % 2) == 0){
+  } else if ((size % 2) == 0) {
     filter->size = size + 1;
   } else {
     filter->size = size;
@@ -115,7 +115,7 @@ static inline void init_median_filter_f(struct MedianFilterFloat *filter, uint8_
 
 static inline float get_median_filter_f(struct MedianFilterFloat *filter)
 {
-  if (filter->size % 2){
+  if (filter->size % 2) {
     return filter->sortData[filter->size >> 1];
   } else {
     // this should not be used if init_median_filter was used

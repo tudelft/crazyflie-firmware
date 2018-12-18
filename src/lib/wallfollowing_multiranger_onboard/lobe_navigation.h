@@ -9,7 +9,8 @@
 #define SRC_LIB_WALLFOLLOWING_MULTIRANGER_ONBOARD_LOBE_NAVIGATION_H_
 #include <stdint.h>
 #include <stdbool.h>
-int lobe_navigator(float* vel_x, float* vel_y, float* vel_w, float* rssi_angle_save, float front_range, float side_range, float current_heading, float current_pos_x, float current_pos_y, uint8_t rssi);
+int lobe_navigator(float *vel_x, float *vel_y, float *vel_w, float *rssi_angle_save, float front_range,
+                   float side_range, float current_heading, float current_pos_x, float current_pos_y, uint8_t rssi);
 void init_lobe_navigator();
 
 #endif /* SRC_LIB_WALLFOLLOWING_MULTIRANGER_ONBOARD_LOBE_NAVIGATION_H_ */
