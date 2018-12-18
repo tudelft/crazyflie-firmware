@@ -135,22 +135,27 @@ uint8_t maxValue(uint8_t myArray[], int size)
 
 static float fillHeadingArray(uint8_t *correct_heading_array, float rssi_heading, int diff_rssi, int max_meters)
 {
+
+	//Heading array of action choices
   static float heading_array[8] = { -135.0f, -90.0f, -45.0f, 0.0f, 45.0f, 90.0f, 135.0f, 180.0f};
   float rssi_heading_deg = rad2deg(rssi_heading);
   //printf("%f \n", rssi_heading_deg);
 
   for (int it = 0; it < 8; it++) {
 
+	  // Fill array based on heading and rssi heading
     if ((rssi_heading_deg >= heading_array[it] - 22.5f && rssi_heading_deg < heading_array[it] + 22.5f && it != 7) || (
           it == 7 && (rssi_heading_deg >= heading_array[it] - 22.5f || rssi_heading_deg < -135.0f - 22.5f))) {
       uint8_t temp_value_forward = correct_heading_array[it];
       uint8_t temp_value_backward = correct_heading_array[(it + 4) % 8];
 
+      // if gradient is good, increment the array corresponding to the current heading and decrement the exact opposite
       if (diff_rssi > 0) {
         correct_heading_array[it] = temp_value_forward + 1; //(uint8_t)abs(diff_rssi);
         if (temp_value_backward > 0) {
           correct_heading_array[(it + 4) % 8] = temp_value_backward - 1;  //(uint8_t)abs(diff_rssi);
         }
+        // if gradient is bad, decrement the array corresponding to the current heading and increment the exact opposite
 
       } else if (diff_rssi < 0) {
         if (temp_value_forward > 0) {
@@ -162,10 +167,9 @@ static float fillHeadingArray(uint8_t *correct_heading_array, float rssi_heading
     }
   }
 
-
+// degrading function
+  //    If one of the arrays goes over maximum amount of points (meters), then decrement all values
   if (maxValue(correct_heading_array, 8) > max_meters) {
-    //printf("degrade\n");
-
     for (int it = 0; it < 8; it++) {
       if (correct_heading_array[it] > 0) {
         correct_heading_array[it] = correct_heading_array[it] - 1;
@@ -173,6 +177,8 @@ static float fillHeadingArray(uint8_t *correct_heading_array, float rssi_heading
     }
   }
 
+
+  // Calculate heading where the beacon might be
   int count = 0;
   float y_part = 0, x_part = 0;
 
@@ -183,11 +189,9 @@ static float fillHeadingArray(uint8_t *correct_heading_array, float rssi_heading
 
       //sum += heading_array[it];
       count = count + correct_heading_array[it];
-      //printf("heading_array[it], %f x_part %f, y_part %f, count %d\n",heading_array[it],x_part,y_part,count);
 
     }
   }
-
   float wanted_angle_return = 0;
   if (count != 0) {
     wanted_angle_return = atan2(y_part / (float)count, x_part / (float)count);
@@ -195,7 +199,6 @@ static float fillHeadingArray(uint8_t *correct_heading_array, float rssi_heading
 
 
   return wanted_angle_return;
-
 
 }
 
@@ -253,8 +256,7 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
 
   // if it is reinitialized
   if (first_run) {
-    //wanted_angle = 0.8;
-    //previous_heading = current_heading;
+
     wanted_angle_dir = wraptopi(current_heading - wanted_angle); // to determine the direction when turning to goal
 
     overwrite_and_reverse_direction = false;
@@ -313,9 +315,6 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
 
       wall_follower_init(0.4, 0.5);
 
-      //reset correct heading array
-      //printf("RESET\n");
-
       for (int it = 0; it < 8; it++) { correct_heading_array[it] = 0; }
 
       state = transition(3); //wall_following
@@ -325,8 +324,6 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
     // check if heading is close to the preferred_angle
     bool goal_check = logicIsCloseTo(wraptopi(current_heading - wanted_angle), 0, 0.1f);
     if (front_range < ref_distance_from_wall + 0.2f) {
-      //pos_x_hit = current_pos_x;
-      //pos_y_hit = current_pos_y;
       cannot_go_to_goal =  true;
       wall_follower_init(0.4, 0.5);
 
@@ -340,8 +337,6 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
 
     // if another drone is close and there is no right of way, move out of the way
     if (priority == false && rssi_inter < rssi_threshold) {
-      //  pos_x_move = current_pos_x;
-      //  pos_y_move = current_pos_y;
       if (outbound) {
         if ((rssi_angle_inter < 0 && wanted_angle < 0) || (rssi_angle_inter > 0 && wanted_angle > 0)) {
           wanted_angle = -1 * wanted_angle;
@@ -380,17 +375,23 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
 
     //if(outbound)
     //{
+
+
     if (fabs(wraptopi(wanted_angle_hit + 3.14f - loop_angle)) < 1.0) {
       overwrite_and_reverse_direction = true;
     } else {
+     // TODO: check following line causes deadlocks!!!!
       //overwrite_and_reverse_direction = false; // this didn't really work...
     }
+
+
     //}else{
     //  overwrite_and_reverse_direction = false;
     //}
 
     // if during wallfollowing, agent goes around wall, and heading is close to rssi _angle
     //      got to rotate to goal
+    // TODO check if the cannot go to goal still does anything useful...
     if ((state_wf == 6 || state_wf == 8) && goal_check_WF && front_range > ref_distance_from_wall + 0.4f
         && !cannot_go_to_goal) {
       wanted_angle_dir = wraptopi(current_heading - wanted_angle); // to determine the direction when turning to goal
@@ -423,28 +424,12 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
 
           //rssi already gets filtered at the radio_link.c
           diff_rssi = diff_rssi_unf;
-          /*float diff_wanted_angle = 0;
-          float alpha = 0.8;
-          // if the rssi difference is positive, then the drone is going into the right way
-          if(diff_rssi>0)
-          {
-          wanted_angle = wraptopi(alpha * wanted_angle + (1-alpha)*heading_rssi);
-          //diff_wanted_angle = wraptopi(heading_rssi-wanted_angle);
-          }else if(diff_rssi<0) // if it is negative, the wronge way
-          {
-          wanted_angle = wraptopi(alpha * wanted_angle + (1-alpha)*wraptopi(3.14f+heading_rssi));
 
-          //diff_wanted_angle =wraptopi(3.14f+(heading_rssi-wanted_angle));
-          }*/
-          //wanted_angle = wraptopi(wanted_angle +(float)fabs((float)(diff_rssi)/10.0f)*(diff_wanted_angle));
-          // Increment the value the existing wanted_angle.
-          /*          if(diff_wanted_angle != 0)
-          wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));*/
-
-
+          // Estimate the angle to the beacon
           wanted_angle = fillHeadingArray(correct_heading_array, heading_rssi, diff_rssi, 4);
 
 
+          // for simulation
           //printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
           //for(int it=0;it<8;it++)printf("%d, ",correct_heading_array[it]);printf("\n");
         }
@@ -474,13 +459,6 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
 
   if (state == 1) {        //FORWARD
     // stop moving if there is another drone in the way
-    /*    if(rssi_inter<rssi_threshold && priority == false)
-        {
-          temp_vel_x= 0;
-          temp_vel_y= 0;
-
-        }else{*/
-
     // forward max speed
     if (left_range < ref_distance_from_wall) {
       temp_vel_y = -0.2f;
@@ -527,8 +505,8 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
 
 #ifndef GB_ONBOARD
 
-//printf("state %d\n",state);
-  //printf("direction %f\n",direction);
+  //printf("state %d\n",state);
+  // printf("direction %f\n",direction);
 
 #endif
   *rssi_angle = wanted_angle;

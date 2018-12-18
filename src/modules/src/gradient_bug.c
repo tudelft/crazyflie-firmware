@@ -181,17 +181,6 @@ void gradientBugTask(void *param)
   struct MedianFilterFloat medFilt;
   init_median_filter_f(&medFilt, 5);
 
-  /*  struct MedianFilterInt medFiltRssi;
-    init_median_filter_i(&medFiltRssi,101);
-
-    struct MedianFilterInt medFiltRssibeacon;
-    init_median_filter_i(&medFiltRssibeacon,99);
-
-    struct MedianFilterInt medFiltRssibeacon2;
-    init_median_filter_i(&medFiltRssibeacon2,99);*/
-
-
-
   systemWaitStart();
   vTaskDelay(M2T(3000));
   while (1) {
@@ -206,15 +195,6 @@ void gradientBugTask(void *param)
       left_range = (float)rangeLeft / 1000.0f;
       back_range = (float)rangeBack / 1000.0f;
       up_range = (float)rangeUp / 1000.0f;
-
-      //up_range = (float)2.0f;
-
-      /*if (rangeUp<20)
-      {
-      up_range = (float)2.0f;
-      }else{
-      up_range = (float)rangeUp/1000.0f;
-      }*/
 
 
     } else if (oa_isinit) {
@@ -303,6 +283,8 @@ void gradientBugTask(void *param)
 
         // wall following state machine
         state = wall_follower(&vel_x_cmd, &vel_y_cmd, &vel_w_cmd, front_range, left_range, current_heading, -1);
+
+        // if reverse navigation is wanted in the future?
         /*
 
         #ifndef REVERSE
@@ -443,7 +425,6 @@ void gradientBugTask(void *param)
     }
 
     commanderSetSetpoint(&setpoint_BG, GRADIENT_BUG_COMMANDER_PRI);
-    //float test_float = (float)(own_id)*10.0f;
     radiolinkSendInfoGradientBug(state, rssi_angle, send_to_number);
 
   }
