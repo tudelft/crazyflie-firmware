@@ -117,8 +117,21 @@ static float meanAngle (double *angles, int size)
 }
 */
 
+uint8_t maxValue(uint8_t myArray[], int size) {
+    /* enforce the contract */
+    //assert(myArray && size);
+    int i;
+    uint8_t maxValue = myArray[0];
 
-static float fillHeadingArray(uint8_t* correct_heading_array, float rssi_heading, int diff_rssi)
+    for (i = 1; i < size; ++i) {
+        if ( myArray[i] > maxValue ) {
+            maxValue = myArray[i];
+        }
+    }
+    return maxValue;
+}
+
+static float fillHeadingArray(uint8_t* correct_heading_array, float rssi_heading, int diff_rssi, int max_meters)
 {
 	static float heading_array[8] = {-135.0f, -90.0f, -45.0f,0.0f,45.0f, 90.0f,135.0f,180.0f};
 	float rssi_heading_deg = rad2deg(rssi_heading);
@@ -130,22 +143,34 @@ static float fillHeadingArray(uint8_t* correct_heading_array, float rssi_heading
 		if((rssi_heading_deg>=heading_array[it]-22.5f &&rssi_heading_deg<heading_array[it]+22.5f && it!=7)||(
 				it==7&&(rssi_heading_deg>=heading_array[it]-22.5f || rssi_heading_deg<-135.0f-22.5f	)))
 		{
+			uint8_t temp_value_forward = correct_heading_array[it];
+			uint8_t temp_value_backward = correct_heading_array[(it+4)%8];
+
 			if(diff_rssi>0)
 			{
-				correct_heading_array[it]=1;//correct_heading_array[it]+1;//(uint8_t)abs(diff_rssi);
-				if(correct_heading_array[(it+4)%8]>0)
-				correct_heading_array[(it+4)%8]=0;//correct_heading_array[(it+4)%8]-1;//(uint8_t)abs(diff_rssi);
+				correct_heading_array[it]=temp_value_forward+1;//(uint8_t)abs(diff_rssi);
+				if(temp_value_backward>0)
+				correct_heading_array[(it+4)%8]=temp_value_backward-1;//(uint8_t)abs(diff_rssi);
 
 			}else if(diff_rssi<0){
-				if(correct_heading_array[it]>0)
-				correct_heading_array[it]=0;//correct_heading_array[it]-1;//(uint8_t)abs(diff_rssi);
-				correct_heading_array[(it+4)%8]=1;//correct_heading_array[(it+4)%8]+1;//(uint8_t)abs(diff_rssi);
+				if(temp_value_forward>0)
+				correct_heading_array[it]=temp_value_forward-1;//(uint8_t)abs(diff_rssi);
+				correct_heading_array[(it+4)%8]=temp_value_backward+1;//(uint8_t)abs(diff_rssi);
 			}
 
 		}
-
 	}
 
+
+    if(maxValue(correct_heading_array,8)>max_meters){
+    	//printf("degrade\n");
+
+    	for(int it = 0;it<8;it++)
+    	{
+			if(correct_heading_array[it]>0)
+        	correct_heading_array[it] = correct_heading_array[it]-1;
+        }
+    }
 
 	int count = 0;
 	  float y_part = 0, x_part = 0;
@@ -296,6 +321,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 			wall_follower_init(0.4,0.5);
 
 			//reset correct heading array
+	    	//printf("RESET\n");
+
 			for(int it=0;it<8;it++)correct_heading_array[it]=0;
 
 			state = transition(3); //wall_following
@@ -433,7 +460,7 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 					wanted_angle = wraptopi(wanted_angle +0.4f*((float)fabs(diff_wanted_angle)/diff_wanted_angle));*/
 
 
-        			wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi);
+        			wanted_angle = fillHeadingArray(correct_heading_array,heading_rssi,diff_rssi, 4);
 
 
         			//printf("wanted_angle %f, heading_rssi %f, diff_rssi, %d \n",wanted_angle,heading_rssi,diff_rssi);
@@ -528,8 +555,8 @@ int gradient_bug_loop_controller(float* vel_x, float* vel_y, float* vel_w, float
 
 #ifndef GB_ONBOARD
 
-	printf("state %d\n",state);
-	printf("direction %f\n",direction);
+//printf("state %d\n",state);
+	//printf("direction %f\n",direction);
 
 #endif
 	*rssi_angle = wanted_angle;
