@@ -60,6 +60,9 @@ VPATH += $(LIB)/STM32_USB_Device_Library/Core/src
 VPATH += $(LIB)/STM32_USB_OTG_Driver/src
 VPATH += src/deck/api src/deck/core src/deck/drivers/src src/deck/drivers/src/test
 VPATH += src/utils/src/tdoa src/utils/src/lighthouse
+#add wallfollowing files
+VPATH += $(LIB)/wallfollowing_multiranger_onboard
+
 CRT0 = startup_stm32f40xx.o system_stm32f4xx.o
 
 # Add ST lib object files
@@ -189,6 +192,11 @@ PROJ_OBJ += flowdeck_v1v2.o
 PROJ_OBJ += oa.o
 PROJ_OBJ += multiranger.o
 PROJ_OBJ += lighthouse.o
+
+#multiranger wall following
+PROJ_OBJ += wallfollowing_multiranger_onboard.o
+PROJ_OBJ += gradient_bug.o
+CFLAGS += -DGB_ONBOARD
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE

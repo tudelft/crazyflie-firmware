@@ -228,6 +228,11 @@ static float variance(float *buffer, uint32_t length)
   return sumSq - (sum * sum) / length;
 }
 
+float getHeading()
+{
+  return state.attitude.yaw;
+}
+
 /** Evaluate the values from the propeller test
  * @param low The low limit of the self test
  * @param high The high limit of the self test

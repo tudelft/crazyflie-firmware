@@ -64,5 +64,7 @@ void stabilizerResetEmergencyStop();
  */
 void stabilizerSetEmergencyStopTimeout(int timeout);
 
+float getHeading();
+
 
 #endif /* STABILIZER_H_ */

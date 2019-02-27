@@ -250,7 +250,7 @@ int wall_follower(float *vel_x, float *vel_y, float *vel_w, float front_range, f
 
 
   direction = direction_turn;
-  static int state = 3;
+  static int state = 1;
   static float previous_heading = 0;
   static float angle = 0;
   // static bool around_corner_first_turn = false;
@@ -267,7 +267,7 @@ int wall_follower(float *vel_x, float *vel_y, float *vel_w, float front_range, f
 
   if (first_run) {
     previous_heading = current_heading;
-    state = 3;
+    state = 1;
     //  around_corner_first_turn = false;
     around_corner_go_back = false;
     first_run = false;

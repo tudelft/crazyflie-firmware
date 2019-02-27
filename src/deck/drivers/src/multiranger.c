@@ -42,6 +42,8 @@
 
 #include <stdlib.h>
 
+bool multiranger_isinit = false;
+
 static bool isInit = false;
 static bool isTested = false;
 static bool isPassed = false;
@@ -57,6 +59,7 @@ static VL53L1_Dev_t devBack;
 static VL53L1_Dev_t devUp;
 static VL53L1_Dev_t devLeft;
 static VL53L1_Dev_t devRight;
+
 
 static uint16_t mrGetMeasurementAndRestart(VL53L1_Dev_t *dev)
 {
@@ -136,6 +139,7 @@ static void mrInit()
                        MR_PIN_BACK);
 
     isInit = true;
+    multiranger_isinit = isInit;
 
     xTaskCreate(mrTask, MULTIRANGER_TASK_NAME, MULTIRANGER_TASK_STACKSIZE, NULL,
         MULTIRANGER_TASK_PRI, NULL);

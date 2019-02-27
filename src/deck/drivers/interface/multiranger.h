@@ -8,13 +8,6 @@
 #ifndef SRC_DECK_DRIVERS_INTERFACE_MULTIRANGER_H_
 #define SRC_DECK_DRIVERS_INTERFACE_MULTIRANGER_H_
 
-
-extern uint16_t rangeFront;
-extern uint16_t rangeBack;
-extern uint16_t rangeUp;
-extern uint16_t rangeLeft;
-extern uint16_t rangeRight;
-
 extern bool multiranger_isinit;
 
 #endif /* SRC_DECK_DRIVERS_INTERFACE_MULTIRANGER_H_ */

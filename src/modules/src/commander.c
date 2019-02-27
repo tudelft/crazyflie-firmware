@@ -32,6 +32,7 @@
 #include "commander.h"
 #include "crtp_commander.h"
 #include "crtp_commander_high_level.h"
+#include "gradient_bug.h"
 
 #include "param.h"
 
@@ -58,6 +59,7 @@ void commanderInit(void)
 
   crtpCommanderInit();
   crtpCommanderHighLevelInit();
+  gradientBugInit();
   lastUpdate = xTaskGetTickCount();
 
   isInit = true;
