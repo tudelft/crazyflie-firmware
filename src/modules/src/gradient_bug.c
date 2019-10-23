@@ -209,7 +209,7 @@ void gradientBugTask(void *param)
         front_range = (float)front_range_UD / 1000.0f;
         right_range = (float)right_range_UD / 1000.0f;
         left_range = (float)left_range_UD / 1000.0f;
-        back_range = 2.0f;//(float)back_range_UD / 1000.0f;
+        back_range = (float)back_range_UD / 1000.0f;
         up_range = 2.0f;
       }
 
@@ -256,7 +256,7 @@ void gradientBugTask(void *param)
     // Don't fly if multiranger/updownlaser is not connected or the uprange is activated
     //TODO: add flowdeck init here
 
-    uint8_t rssi_beacon_threshold = 54; 
+    uint8_t rssi_beacon_threshold = 58;
     if (keep_flying == true && (!correctly_initialized || up_range < 0.2f || (!outbound
                                 && rssi_beacon_filtered < rssi_beacon_threshold))) {
       if (!outbound && rssi_beacon_filtered < rssi_beacon_threshold) {
