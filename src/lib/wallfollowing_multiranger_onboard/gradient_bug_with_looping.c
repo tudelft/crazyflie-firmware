@@ -35,8 +35,8 @@ static float max_speed = 0.5;
 uint8_t rssi_threshold = 55;// normal batteries 50/52/53/53 bigger bbatteries 55/57/59
 uint8_t rssi_collision_threshold = 46; // normal batteris 43/45/45/46 bigger batteries 48/50/52
 #else
-uint8_t rssi_threshold = 58;// normal batteries 50/52/53/53 bigger bbatteries 55/57/59
-uint8_t rssi_collision_threshold = 50; // normal batteris 43/45/45/46 bigger batteries 48/50/52
+uint8_t rssi_threshold = 59;// normal batteries 50/52/53/53 bigger bbatteries 55/57/59
+uint8_t rssi_collision_threshold = 54; // normal batteris 43/45/45/46 bigger batteries 48/50/52
 
 #endif
 // Converts degrees to radians.
@@ -362,9 +362,9 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
     float bearing_to_goal = wraptopi(wanted_angle - current_heading);
     bool goal_check_WF = false;
     if (direction == -1) {
-      goal_check_WF = (bearing_to_goal < 0 && bearing_to_goal > -2.8f);
+      goal_check_WF = (bearing_to_goal < 0 && bearing_to_goal > -1.57f);
     } else {
-      goal_check_WF = (bearing_to_goal > 0 && bearing_to_goal < 2.8f);
+      goal_check_WF = (bearing_to_goal > 0 && bearing_to_goal < 1.57f);
     }
 
     // Check if bug went into a looping while wall following,
@@ -424,7 +424,7 @@ int gradient_bug_loop_controller(float *vel_x, float *vel_y, float *vel_w, float
           diff_rssi = diff_rssi_unf;
 
           // Estimate the angle to the beacon
-          wanted_angle = fillHeadingArray(correct_heading_array, heading_rssi, diff_rssi, 5);
+          wanted_angle = fillHeadingArray(correct_heading_array, heading_rssi, diff_rssi, 4);
 
 
           // for simulation
