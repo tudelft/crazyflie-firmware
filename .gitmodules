@@ -9,4 +9,4 @@
 	url = https://github.com/throwtheswitch/cmock.git
 [submodule "vendor/CMSIS"]
 	path = vendor/CMSIS
-	url = https://github.com/ARM-software/CMSISgit
+	url = https://github.com/ARM-software/CMSIS
