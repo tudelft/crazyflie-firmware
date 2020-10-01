@@ -24,6 +24,7 @@ static float Qr = 0.7f; // yaw rate deviation
 static float Ruwb = 3.5f; // ranging deviation
 static float InitCovPos = 1000.0f;
 static float InitCovYaw = 1.0f;
+static int num_steps_wait = 100; // num steps of 10 ms to wait before communication is classified as failed
 
 static relaVariable_t relaVar[NumUWB];
 static float_t inputVar[NumUWB][STATE_DIM_rl];
@@ -113,7 +114,7 @@ void relativeLocoTask(void* arg)
       }
     }
     connectCount++;
-    if(connectCount>100){
+    if(connectCount>num_steps_wait){
       fullConnect = false; // disable control if there is no ranging after 1 second
     }
   }
