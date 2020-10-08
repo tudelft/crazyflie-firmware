@@ -19,24 +19,33 @@
 
 // static float RAD2DEG = 57.29578049;
 // static float critical_laser = 0.5; // no laser ranger should ever see lower than this
-static float desired_laser = 1.5; // start correcting if a laser ranger sees smaller than this
+static float warning_laser = 2.0; // start correcting if a laser ranger sees smaller than this
+// static float critical_laser = 1.0;
 static float desired_velocity = 0.5; // speed in m/s that we aim for
 
+// static int status = 0;
 static bool isInit;
 static bool onGround = true;
 static bool keepFlying = false;
+static int heighest_reached = 0;
+// static bool follow_x = true;
 // static bool wall_following = false;
 static setpoint_t setpoint;
 static float_t relaVarInCtrl[NumUWB][STATE_DIM_rl];
 static float_t inputVarInCtrl[NumUWB][STATE_DIM_rl];
 static uint8_t selfID;
 static float_t height;
-
+static int start_checking;
+static int max_turns = 2;
+static int free_lasers[4];
+static int start_laser = 0;
+static int previous_free_laser = 0;
 float lasers[4];
 static float relaCtrl_p = 2.0f;
 static float relaCtrl_i = 0.0001f;
 static float relaCtrl_d = 0.01f;
 static float wp_reached_thres = 0.2; // [m]
+static bool turn_positive = true;
 // static float NDI_k = 2.0f;
 static char c = 0; // monoCam
 float search_range = 10.0; // search range in meters
@@ -81,38 +90,7 @@ float get_min(float* d)
 // return 0 if 'yawing' positive is desired (ENU)
 // return 1 if 'yawing' negative is desired (ENU)
 // return 2 if no danger is present in the current movement direction
-int decide_direction(float* d, float yaw )
-{
-  // making yaw positive
-  // yaw is its desired direction
-  if( yaw < 0)
-  {
-    yaw += (float)(M_PI)*2.f;
-  }
-  int quadrant = (int)(yaw/(float)(M_PI_2));
-  int right_laser_id = quadrant;
-  int left_laser_id = quadrant+1;
-  if ( left_laser_id == 4)
-  {
-    left_laser_id = 0;
-  }
-  // there's no danger in the moving direction
-  if (d[left_laser_id] > desired_laser && d[right_laser_id] > desired_laser )
-  {
-    return 2;
-  }
-  // more space left, so move in postiive ENU
-  else if (d[left_laser_id] > d[right_laser_id])
-  {
-    return 0;
-  }
-  // more space right, move in negative ENU
-  else 
-  {
-    return 1;
-  }
 
-}
 
 struct Point agent_pos,goal, random_point;
 
@@ -128,17 +106,6 @@ static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, 
   setpoint->velocity.y = vy;
   setpoint->velocity_body = true;
   commanderSetSetpoint(setpoint, 3);
-}
-
-static void flyRandomIn1meter(void){
-  float_t rand_x = (rand()/(float)RAND_MAX)*(1.0f)-0.5f;
-  float_t rand_y = (rand()/(float)RAND_MAX)*(1.0f)-0.5f;
-
-  for (int i=1; i<100; i++) {
-    setHoverSetpoint(&setpoint, rand_x, rand_y, height, 0);
-    vTaskDelay(M2T(10));
-  }
-
 }
 
 void flyVerticalInterpolated(float startz, float endz, float interpolate_time) {
@@ -178,10 +145,9 @@ float get_distance_points(struct Point p1, struct Point p2)
 
 void relativeControlTask(void* arg)
 {
-  static uint32_t ctrlTick;
   systemWaitStart();
   // height = (float)selfID*0.1f+0.2f;
-  height = 1.5f;
+  height = 0.5f;
 
   float heading = 0.f;
   float vx = 0.f;
@@ -198,20 +164,17 @@ void relativeControlTask(void* arg)
     if(keepFlying){
       // take off
       if(onGround){
-        for (int i=0; i<5; i++) {
+        for (int i=0; i<50; i++) {
           setHoverSetpoint(&setpoint, 0, 0, 0.3f, 0);
           vTaskDelay(M2T(100));
         }
 
-        onGround = false;
-        ctrlTick = xTaskGetTickCount();
-      }
+        for (int i=0; i<50; i++) {
+          setHoverSetpoint(&setpoint, 0, 0, height, 0.0f);
+          vTaskDelay(M2T(100));
+        }
 
-      // control loop
-      // setHoverSetpoint(&setpoint, 0, 0, height, 0); // hover
-      uint32_t tickInterval = xTaskGetTickCount() - ctrlTick;
-      if( tickInterval < 200){
-        flyRandomIn1meter(); // random flight within first 10 seconds
+        onGround = false;
       }
       else
       {
@@ -231,45 +194,134 @@ void relativeControlTask(void* arg)
           agent_pos.y = state.y;
           wp_dist = get_distance_points(agent_pos,random_point);
 
+          int first_free_laser = -1;
           if ( wp_dist > wp_reached_thres)
           {
- 
-
-          float heading_accumulator = 0.0f;
-          //avoid obstacle
-          // for all lasers
-          for (int i = 0; i<4; i++ )
-          {
-            float laser_val = lasers[i];
-            if (laser_val < desired_laser)
+            if (heighest_reached > start_laser)
             {
-              heading_accumulator += 2.0f*powf((desired_laser-laser_val),2);
+              start_checking = heighest_reached -1;
             }
-          }
-          heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x)) + heading_accumulator; // heading in deg (ENU) to desired waypoint
-          vx = desired_velocity*cosf(heading);
-          vy = desired_velocity*sinf(heading);
+            else
+            {
+              start_checking = start_laser;
+            }
+            
+            if (turn_positive)
+            {
+              for (int i = start_checking; i < (start_laser+4); i++)
+              {
+                int laser_idx;
+                if (i > 3)
+                {
+                  laser_idx = i - 4;
+                }
+                else if(i < 0)
+                {
+                  laser_idx = i + 4;
+                }
+                else
+                {
+                  laser_idx = i;
+                }
+                
 
+                if (lasers[laser_idx] > warning_laser)
+                {
+                  free_lasers[laser_idx] = 1;
+                  if (first_free_laser == -1)
+                  {
+                    first_free_laser = i;
+                  }
+                }
+                else
+                {
+                  free_lasers[laser_idx] = 0;
+                }
+                
+              }
+            }
+            else
+            {
+              if (heighest_reached < start_laser)
+              {
+                start_checking = heighest_reached + 1;
+              }
+              else
+              {
+                start_checking = start_laser;
+              }
+            
+              for (int i = start_checking; i > (start_laser-4); i--)
+              {
+                int laser_idx;
+                if (i > 3)
+                {
+                  laser_idx = i - 4;
+                }
+                else if(i < 0)
+                {
+                  laser_idx = i + 4;
+                }
+                else
+                {
+                  laser_idx = i;
+                }
+                
 
+                if (lasers[laser_idx] > warning_laser)
+                {
+                  free_lasers[laser_idx] = 1;
+                  if (first_free_laser == -1)
+                  {
+                    first_free_laser = i;
+                  }
+                }
+                else
+                {
+                  free_lasers[laser_idx] = 0;
+                }
+              }
+            }
+            
+            if (turn_positive)
+            {
+              previous_free_laser = first_free_laser;
+              if (first_free_laser > heighest_reached)
+              {
+                heighest_reached = first_free_laser;
+              }
+              if ((abs(heighest_reached - start_laser)) > max_turns)
+              {
+                turn_positive = false;
+                start_laser = heighest_reached;
+                max_turns = 4;
+              }
 
+            }
+            else
+            {
+              previous_free_laser = first_free_laser;
+
+              if (first_free_laser < heighest_reached)
+              {
+                heighest_reached = first_free_laser;
+              }
+              if ((abs(heighest_reached - start_laser)) > max_turns)
+              {
+                turn_positive = true;
+                start_laser = heighest_reached;
+                max_turns = 4;
+              }
+
+            }
+
+            heading = M_PI_2*first_free_laser;
+
+            // heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x)); // heading in deg (ENU) to desired waypoint
+            vx = desired_velocity*cosf(heading);
+            vy = desired_velocity*sinf(heading);
           
-          // else
-          // {
-          //   if(check_collision())
-          //   {
-          //     random_point.x = (rand()/(float)RAND_MAX)*search_range;
-          //     random_point.y = (rand()/(float)RAND_MAX)*search_range;
-          //     // give some time to get away
-          //     for (int i = 0; i <10 ; i++)
-          //     {
-          //       setHoverSetpoint(&setpoint,random_point.x,random_point.y,height,0);
-          //       vTaskDelay(M2T(100));
-          //     }
-          //   }
-          // }
-          
-
-          setHoverSetpoint(&setpoint,vx,vy,height,0);
+            setHoverSetpoint(&setpoint,vx,vy,height,0);
           }
           else
           {
@@ -278,8 +330,8 @@ void relativeControlTask(void* arg)
           
           vTaskDelay(M2T(100));
         }
-      }
       
+      } 
     }
     else{
       // landing procedure
