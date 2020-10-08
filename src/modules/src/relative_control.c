@@ -19,7 +19,7 @@
 
 // static float RAD2DEG = 57.29578049;
 // static float critical_laser = 0.5; // no laser ranger should ever see lower than this
-static float warning_laser = 2.0; // start correcting if a laser ranger sees smaller than this
+static float warning_laser = 1.3; // start correcting if a laser ranger sees smaller than this
 // static float critical_laser = 1.0;
 static float desired_velocity = 0.5; // speed in m/s that we aim for
 
@@ -195,6 +195,7 @@ void relativeControlTask(void* arg)
           wp_dist = get_distance_points(agent_pos,random_point);
 
           int first_free_laser = -1;
+          // DEBUG_PRINT("%d",turn_positive);
           if ( wp_dist > wp_reached_thres)
           {
             if (heighest_reached > start_laser)
@@ -210,6 +211,7 @@ void relativeControlTask(void* arg)
             {
               for (int i = start_checking; i < (start_laser+4); i++)
               {
+                DEBUG_PRINT("%d \n",i);
                 int laser_idx;
                 if (i > 3)
                 {
@@ -253,6 +255,7 @@ void relativeControlTask(void* arg)
             
               for (int i = start_checking; i > (start_laser-4); i--)
               {
+                DEBUG_PRINT("%d \n",i);
                 int laser_idx;
                 if (i > 3)
                 {
@@ -293,11 +296,12 @@ void relativeControlTask(void* arg)
               if ((abs(heighest_reached - start_laser)) > max_turns)
               {
                 turn_positive = false;
-                start_laser = heighest_reached;
-                max_turns = 4;
+                // start_laser = heighest_reached - 1;
+                max_turns = 2;
               }
 
             }
+
             else
             {
               previous_free_laser = first_free_laser;
@@ -309,8 +313,10 @@ void relativeControlTask(void* arg)
               if ((abs(heighest_reached - start_laser)) > max_turns)
               {
                 turn_positive = true;
-                start_laser = heighest_reached;
-                max_turns = 4;
+                // start_laser = heighest_reached + 1;
+                // heighest_reached = start_laser;
+                max_turns = 2;
+                // max_turns = 4;
               }
 
             }
