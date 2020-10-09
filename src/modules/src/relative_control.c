@@ -42,6 +42,7 @@ static int start_laser = 0;
 static int previous_free_laser = 0;
 float lasers[4];
 static float relaCtrl_p = 2.0f;
+static float desired_heading = 0.0f;
 static float relaCtrl_i = 0.0001f;
 static float relaCtrl_d = 0.01f;
 static float wp_reached_thres = 0.2; // [m]
@@ -221,13 +222,48 @@ void relativeControlTask(void* arg)
           agent_pos.x = state.x;
           agent_pos.y = state.y;
           wp_dist = get_distance_points(agent_pos,random_point);
-
+          
+          // if some other member of the swarm is in close proximity
           if (check_collision())
           {
-            flyVerticalInterpolated(height,0.0f,6000.0f);
-            keepFlying = 0;
-            break;
+            // attraction to source
+            desired_heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x));
+            vx = desired_velocity*cosf(heading);
+            vy = desired_velocity*sinf(heading);
+
+            // repulsion from other agents
+              for (int i = 0; i<NumUWB; i++)
+              {
+                if ( i != selfID)
+                {
+                  float distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
+                  if (distance < 0.5f)
+                  {
+                    float heading_to_agent = atan2f(relaVarInCtrl[i][STATE_rlY],relaVarInCtrl[i][STATE_rlX]);
+                    float repulsion_heading = heading_to_agent + (float)(M_PI);
+                    vx+= 2.0f*(0.5f-distance)*cosf(repulsion_heading);
+                    vy+= 2.0f*(0.5f-distance)*sinf(repulsion_heading);
+                  }       
+                }
+              }
+
+            // repulsion from lasers
+            for (int i =0; i < 4; i++)
+            {
+              if (lasers[i] < warning_laser)
+              {
+                float laser_repulsion_heading = (float)(i)*(float)(M_PI_2) + (float)(M_PI);
+                vx+= 2.0f*(warning_laser-lasers[i])*cosf(laser_repulsion_heading);
+                vy+= 2.0f*(warning_laser-lasers[i])*sinf(laser_repulsion_heading);
+              }
+            }
+            float vector_size = sqrtf(powf(vx,2) + powf(vy,2));
+            vx = vx/vector_size*desired_velocity;
+            vy = vy/vector_size*desired_velocity;
+            setHoverSetpoint(&setpoint,vx,vy,height,0);
           }
+          else
+          {
           int first_free_laser = -1;
           // DEBUG_PRINT("%d",turn_positive);
           if ( wp_dist > wp_reached_thres)
@@ -370,7 +406,10 @@ void relativeControlTask(void* arg)
             setHoverSetpoint(&setpoint,0,0,height,0);
           }
           
-          vTaskDelay(M2T(100));
+          vTaskDelay(M2T(100));         
+
+          }
+          
         }
       
       } 
