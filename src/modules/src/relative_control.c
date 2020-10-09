@@ -67,6 +67,9 @@ void getDistances(float* d) {
     *(d+3) = rangeGet(rangeRight)*0.001f;
 }
 
+
+
+
 float get_min(float* d)
 {
   float min = d[0];
@@ -107,6 +110,31 @@ static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, 
   setpoint->velocity_body = true;
   commanderSetSetpoint(setpoint, 3);
 }
+static void setHover_pos_Setpoint(setpoint_t *setpoint, float vx, float vy, float z, float yawrate)
+{
+  setpoint->mode.z = modeAbs;
+  setpoint->position.z = z;
+  setpoint->mode.yaw = modeVelocity;
+  setpoint->attitudeRate.yaw = yawrate;
+  setpoint->mode.x = modeAbs;
+  setpoint->mode.y = modeAbs;
+  setpoint->position.x = vx;
+  setpoint->position.y = vy;
+  setpoint->velocity_body = true;
+  commanderSetSetpoint(setpoint, 3);
+}
+
+
+static void flyRandomIn1meter(void){
+  float_t rand_x = (rand()/(float)RAND_MAX)*(1.0f)-0.5f;
+  float_t rand_y = (rand()/(float)RAND_MAX)*(1.0f)-0.5f;
+
+  for (int i=1; i<100; i++) {
+    setHover_pos_Setpoint(&setpoint, rand_x, rand_y, height, 0);
+    vTaskDelay(M2T(10));
+  }
+}
+
 
 void flyVerticalInterpolated(float startz, float endz, float interpolate_time) {
     setpoint_t setpoint;
@@ -160,18 +188,18 @@ void relativeControlTask(void* arg)
     getDistances(lasers);
     keepFlying = command_share(selfID, keepFlying);
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
-    // if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
-    if(keepFlying){
+    if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
+    // if(keepFlying){
       // take off
       if(onGround){
+        // flyVerticalInterpolated(0.0,height,3000.0f);
+        estimatorKalmanInit(); // reseting kalman filter
         for (int i=0; i<50; i++) {
-          setHoverSetpoint(&setpoint, 0, 0, 0.3f, 0);
+          setHover_pos_Setpoint(&setpoint, 0, 0, 0.3f, 0);
           vTaskDelay(M2T(100));
         }
-
-        for (int i=0; i<50; i++) {
-          setHoverSetpoint(&setpoint, 0, 0, height, 0.0f);
-          vTaskDelay(M2T(100));
+        for (int i=0; i<20; i++) {
+          flyRandomIn1meter();
         }
 
         onGround = false;
@@ -194,6 +222,12 @@ void relativeControlTask(void* arg)
           agent_pos.y = state.y;
           wp_dist = get_distance_points(agent_pos,random_point);
 
+          if (check_collision())
+          {
+            flyVerticalInterpolated(height,0.0f,6000.0f);
+            keepFlying = 0;
+            break;
+          }
           int first_free_laser = -1;
           // DEBUG_PRINT("%d",turn_positive);
           if ( wp_dist > wp_reached_thres)
@@ -255,7 +289,7 @@ void relativeControlTask(void* arg)
             
               for (int i = start_checking; i > (start_laser-4); i--)
               {
-                DEBUG_PRINT("%d \n",i);
+                
                 int laser_idx;
                 if (i > 3)
                 {
@@ -276,6 +310,8 @@ void relativeControlTask(void* arg)
                   free_lasers[laser_idx] = 1;
                   if (first_free_laser == -1)
                   {
+                    
+                    DEBUG_PRINT("%d \n",i);
                     first_free_laser = i;
                   }
                 }
