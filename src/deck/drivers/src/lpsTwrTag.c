@@ -6,6 +6,7 @@
 #include "task.h"
 #include "configblock.h"
 #include "estimator_kalman.h"
+#include "relative_control.h"
 
 #define ANTENNA_OFFSET 154.6   // In meter
 #define basicAddr 0xbccf000000000000
@@ -21,6 +22,7 @@ typedef struct {
   float_t gz[NumUWB];
   float_t h[NumUWB];
   bool refresh[NumUWB];
+  float_t R_s[NumUWB];
   bool keep_flying;
 } swarmInfo_t;
 static swarmInfo_t state;
@@ -174,6 +176,7 @@ static void rxcallback(dwDevice_t *dev) {
           state.vy[current_receiveID] = report->selfVy;
           state.gz[current_receiveID] = report->selfGz;
           state.h[current_receiveID]  = report->selfh;
+          state.R_s[current_receiveID] = report->R_s;
           if(current_receiveID==0)
             state.keep_flying = report->keep_flying;
           state.refresh[current_receiveID] = true;
@@ -185,6 +188,8 @@ static void rxcallback(dwDevice_t *dev) {
         report2->reciprocalDistance = calcDist;
         estimatorKalmanGetSwarmInfo(&report2->selfVx, &report2->selfVy, &report2->selfGz, &report2->selfh);
         report2->keep_flying = state.keep_flying;
+        // gas
+        get_RS(&report2->R_s);
         dwNewTransmit(dev);
         dwSetData(dev, (uint8_t*)&txPacket, MAC802154_HEADER_LENGTH+2+sizeof(lpsTwrTagReportPayload_t));
         dwWaitForResponse(dev, true);
@@ -220,6 +225,8 @@ static void rxcallback(dwDevice_t *dev) {
         memcpy(&report->finalRx, &final_rx, 5);
         estimatorKalmanGetSwarmInfo(&report->selfVx, &report->selfVy, &report->selfGz, &report->selfh);
         report->keep_flying = state.keep_flying;
+        //load gas sensor into report
+        get_RS(&report->R_s);
         dwNewTransmit(dev);
         dwSetData(dev, (uint8_t*)&txPacket, MAC802154_HEADER_LENGTH+2+sizeof(lpsTwrTagReportPayload_t));
         dwWaitForResponse(dev, true);
@@ -248,6 +255,8 @@ static void rxcallback(dwDevice_t *dev) {
           state.h[rangingID]  = report2->selfh;
           if(rangingID==0)
             state.keep_flying = report2->keep_flying;
+          
+          state.R_s[rangingID] = report2->R_s;
           state.refresh[rangingID] = true;
         }
         rangingOk = true;
@@ -430,6 +439,14 @@ bool command_share(int RobIDfromControl, bool keep_flying) {
   }
 }
 
+void get_swarm_gas(float* gas_arr)
+{
+  for (int i = 0; i<NumUWB; i++)
+  {
+    *(gas_arr + i) = state.R_s[i];
+  }
+}
+
 uwbAlgorithm_t uwbTwrTagAlgorithm = {
   .init = twrTagInit,
   .onEvent = twrTagOnEvent,
@@ -446,3 +463,9 @@ LOG_ADD(LOG_UINT16, distance2, &state.distance[2])
 LOG_ADD(LOG_UINT16, distance3, &state.distance[3])
 LOG_ADD(LOG_UINT16, distance4, &state.distance[4])
 LOG_GROUP_STOP(ranging)
+
+LOG_GROUP_START(gas)
+LOG_ADD(LOG_FLOAT,gas0,&state.R_s[0])
+LOG_ADD(LOG_FLOAT,gas1,&state.R_s[1])
+LOG_ADD(LOG_FLOAT,gas2,&state.R_s[2])
+LOG_GROUP_STOP(gas)

@@ -3,5 +3,6 @@
 
 void relativeControlInit(void);
 void relativeControlTask(void* arg);
+void get_RS(float* R_s);
 
 #endif

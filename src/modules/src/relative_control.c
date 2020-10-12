@@ -16,10 +16,11 @@
 #define USE_MONOCAM 0
 #include "stabilizer_types.h"
 #include "estimator_kalman.h"
+#include "deck_analog.h"
 
 // static float RAD2DEG = 57.29578049;
 // static float critical_laser = 0.5; // no laser ranger should ever see lower than this
-static float warning_laser = 1.3; // start correcting if a laser ranger sees smaller than this
+static float warning_laser = 2.0; // start correcting if a laser ranger sees smaller than this
 // static float critical_laser = 1.0;
 static float desired_velocity = 0.5; // speed in m/s that we aim for
 
@@ -47,18 +48,67 @@ static float relaCtrl_i = 0.0001f;
 static float relaCtrl_d = 0.01f;
 static float wp_reached_thres = 0.2; // [m]
 static bool turn_positive = true;
+static float all_RS[NumUWB];
+static float voltage_bias[NumUWB] = {0.0,0.0,0.0};
+static float RS_lp[NumUWB] = {0.0,0.0,0.0};
 // static float NDI_k = 2.0f;
 static char c = 0; // monoCam
 float search_range = 10.0; // search range in meters
 
 float min_laser = 10.0f;
 int laser_decision;
+float r_p, r_g, v_x, v_y;
+// PSO-Specific
+float rand_p = 0.1;
+float omega = 0.5;
+float phi_p = 0.5;
+float phi_g = 2.5;
 
 struct Point
 {
     float x;
     float y;
 };
+
+struct gas_Point
+{
+    float x ;
+    float y ;
+    float gas_conc;
+};
+
+struct Point agent_pos,goal, random_point;
+struct gas_Point agent_best = {.x = 0.0f, .y=0.0f, .gas_conc = 0.0f};
+struct gas_Point swarm_best = {.x = 0.0f, .y=0.0f, .gas_conc = 0.0f};
+
+void get_RS(float* R_s)
+{
+  uint32_t pin = 10;
+  *(R_s) = analogReadVoltage(pin) - voltage_bias[selfID];
+}
+
+
+void get_all_RS(float* all_RS)
+{
+  get_swarm_gas(all_RS); // load all swarm gas data
+  get_RS(all_RS + selfID); // load individual swarm gas reading
+}
+
+void update_lowpass(float* all_RS)
+{
+  for (int i = 0; i<NumUWB; i++)
+  {
+    RS_lp[i] = RS_lp[i]*0.9f + 0.1f*(*(all_RS+i));
+  }
+}
+
+void set_voltage_offset(void)
+{
+  for (int i = 0; i <NumUWB; i++)
+  {
+    voltage_bias[i] = RS_lp[i];
+  }
+}
 
 // front, left, back right (ENU-based)
 void getDistances(float* d) {
@@ -96,7 +146,7 @@ float get_min(float* d)
 // return 2 if no danger is present in the current movement direction
 
 
-struct Point agent_pos,goal, random_point;
+
 
 static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, float yawrate)
 {
@@ -129,10 +179,11 @@ static void setHover_pos_Setpoint(setpoint_t *setpoint, float vx, float vy, floa
 static void flyRandomIn1meter(void){
   float_t rand_x = (rand()/(float)RAND_MAX)*(1.0f)-0.5f;
   float_t rand_y = (rand()/(float)RAND_MAX)*(1.0f)-0.5f;
-
+  
   for (int i=1; i<100; i++) {
     setHover_pos_Setpoint(&setpoint, rand_x, rand_y, height, 0);
     vTaskDelay(M2T(10));
+    get_all_RS(all_RS);
   }
 }
 
@@ -167,6 +218,31 @@ bool check_collision(void)
   return collision;
 }
 
+void update_wps(void)
+{
+  // update local wp
+  if (RS_lp[selfID] > agent_best.gas_conc)
+  {
+    agent_best.gas_conc = RS_lp[selfID];
+    agent_best.x = agent_pos.x;
+    agent_best.y = agent_pos.y;
+  }
+
+  // update global wp
+  for (int i = 0; i < NumUWB ; i++)
+  {
+    if ( RS_lp[i] > swarm_best.gas_conc)
+    {
+      swarm_best.gas_conc = RS_lp[i];
+      swarm_best.x = agent_pos.x + relaVarInCtrl[i][STATE_rlX];
+      swarm_best.y = agent_pos.y + relaVarInCtrl[i][STATE_rlY];
+    }
+  }
+
+}
+
+
+
 float get_distance_points(struct Point p1, struct Point p2)
 {
   return sqrtf(pow((p2.x-p1.x),2)+pow((p2.y-p1.y),2));
@@ -188,12 +264,18 @@ void relativeControlTask(void* arg)
     vTaskDelay(10);
     getDistances(lasers);
     keepFlying = command_share(selfID, keepFlying);
+    
+    get_all_RS(all_RS);
+    update_lowpass(all_RS);
+    
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
     if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
     // if(keepFlying){
       // take off
+      
       if(onGround){
         // flyVerticalInterpolated(0.0,height,3000.0f);
+        set_voltage_offset();
         estimatorKalmanInit(); // reseting kalman filter
         for (int i=0; i<50; i++) {
           setHover_pos_Setpoint(&setpoint, 0, 0, 0.3f, 0);
@@ -207,14 +289,31 @@ void relativeControlTask(void* arg)
       }
       else
       {
+        // update all gas readings and agent positions
+        get_all_RS(all_RS);
+        update_lowpass(all_RS);
         point_t state;
-        random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
-        random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
-        goal = random_point;
+        estimatorKalmanGetEstimatedPos(&state);
+        agent_pos.x = state.x;
+        agent_pos.y = state.y;
+
+        // compute next wp
+        random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range + agent_pos.x;
+        random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range + agent_pos.y;
+
+        r_g = (rand()/(float)RAND_MAX);
+        r_p = (rand()/(float)RAND_MAX);
+
+        v_x = rand_p*(random_point.x-agent_pos.x)+omega*(goal.x-agent_pos.x)+phi_p*r_p*(agent_best.x-agent_pos.x)+phi_g*r_g*(swarm_best.x-agent_pos.x);
+        v_y = rand_p*(random_point.y-agent_pos.y)+omega*(goal.y-agent_pos.y)+phi_p*r_p*(agent_best.y-agent_pos.y)+phi_g*r_g*(swarm_best.y-agent_pos.y);
+        goal.x = agent_pos.x + v_x;
+        goal.y = agent_pos.y + v_y; 
+
         // float accumulator_obs_avoidance = 0.0f;
 
-        for (int i = 0; i< 70; i++) //time before time-out
+        for (int i = 0; i< 50; i++) //time before time-out
         {
+          update_wps(); // update to new individual and swarm best
           estimatorKalmanGetEstimatedPos(&state); //read agent state from kalman filter
           relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl); //get relative state from other agents
           getDistances(lasers); // get laser ranger readings, order: front, left, back, right
@@ -223,8 +322,10 @@ void relativeControlTask(void* arg)
           agent_pos.y = state.y;
           wp_dist = get_distance_points(agent_pos,random_point);
           
+
           // if some other member of the swarm is in close proximity
-          if (check_collision())
+          bool fly_repulsion = true;
+          if (fly_repulsion)
           {
             // attraction to source
             desired_heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x));
@@ -237,26 +338,28 @@ void relativeControlTask(void* arg)
                 if ( i != selfID)
                 {
                   float distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
-                  if (distance < 0.5f)
+                  if (distance < 1.5f)
                   {
                     float heading_to_agent = atan2f(relaVarInCtrl[i][STATE_rlY],relaVarInCtrl[i][STATE_rlX]);
                     float repulsion_heading = heading_to_agent + (float)(M_PI);
-                    vx+= 2.0f*(0.5f-distance)*cosf(repulsion_heading);
-                    vy+= 2.0f*(0.5f-distance)*sinf(repulsion_heading);
+                    vx+= 5.0f*powf((1.5f-distance),2)*cosf(repulsion_heading);
+                    vy+= 5.0f*powf((1.5f-distance),2)*sinf(repulsion_heading);
                   }       
                 }
               }
 
             // repulsion from lasers
-            for (int i =0; i < 4; i++)
+            for (int i = 0; i < 4; i++)
             {
               if (lasers[i] < warning_laser)
               {
-                float laser_repulsion_heading = (float)(i)*(float)(M_PI_2) + (float)(M_PI);
-                vx+= 2.0f*(warning_laser-lasers[i])*cosf(laser_repulsion_heading);
-                vy+= 2.0f*(warning_laser-lasers[i])*sinf(laser_repulsion_heading);
+                float laser_heading = (float)(i)*(float)(M_PI_2);
+                float laser_repulse_heading = laser_heading + (float)(M_PI);
+                vx += cosf(laser_repulse_heading)*2.0f*powf((warning_laser-lasers[i]),2);
+                vy += sinf(laser_repulse_heading)*2.0f*powf((warning_laser-lasers[i]),2);
               }
             }
+
             float vector_size = sqrtf(powf(vx,2) + powf(vy,2));
             vx = vx/vector_size*desired_velocity;
             vy = vy/vector_size*desired_velocity;
@@ -281,7 +384,7 @@ void relativeControlTask(void* arg)
             {
               for (int i = start_checking; i < (start_laser+4); i++)
               {
-                DEBUG_PRINT("%d \n",i);
+                // DEBUG_PRINT("%d \n",i);
                 int laser_idx;
                 if (i > 3)
                 {
@@ -347,7 +450,7 @@ void relativeControlTask(void* arg)
                   if (first_free_laser == -1)
                   {
                     
-                    DEBUG_PRINT("%d \n",i);
+                    // DEBUG_PRINT("%d \n",i);
                     first_free_laser = i;
                   }
                 }
@@ -450,6 +553,12 @@ LOG_ADD(LOG_UINT8, charCam, &c)
 LOG_GROUP_STOP(mono_cam)
 
 LOG_GROUP_START(lasers)
+LOG_ADD(LOG_FLOAT,gas0,&all_RS[0])
+LOG_ADD(LOG_FLOAT,gas1,&all_RS[1])
+LOG_ADD(LOG_FLOAT,gas2,&all_RS[2])
+LOG_ADD(LOG_FLOAT,gas0_lp,&RS_lp[0])
+LOG_ADD(LOG_FLOAT,gas1_lp,&RS_lp[1])
+LOG_ADD(LOG_FLOAT,gas2_lp,&RS_lp[2])
 LOG_ADD(LOG_FLOAT,front,&lasers[0])
 LOG_ADD(LOG_FLOAT,left,&lasers[1])
 LOG_ADD(LOG_FLOAT,back,&lasers[2])
