@@ -58,20 +58,24 @@ float phi_g = 0.6;
 float old_vx = 0.0;
 float old_vy = 0.0;
 
-static float swarm_avoid_thres = 1.5; // 
+static float swarm_avoid_thres = 0.8; // 
 static float wp_reached_thres = 0.5; // [m]
 static float swarm_avoid_gain = 15.0f;
-static float laser_repulse_gain = 3.0f;
-static float warning_laser = 2.5; // start correcting if a laser ranger sees smaller than this
+static float laser_repulse_gain = 5.0f;
+static float warning_laser = 1.5; // start correcting if a laser ranger sees smaller than this
 static int status = 0;
+static int previous_status = 0;
 
 bool fly_repulsion = true;
-float laser_repulsion_thresh = 2.0;
+float laser_repulsion_thresh = 1.5;
 float line_max_dist = 0.2;
 float line_heading = 0.0;
 
 int upper_idx, lower_idx, following_laser;
+int current_ticks, started_wall_avoid_ticks, start_laser, max_reached_laser, start_laser_corrected, local_laser_idx;
+int ticks_to_follow = 10000;
 float following_heading;
+bool search_left = false;
 
 struct Point
 {
@@ -345,8 +349,10 @@ void compute_random_wp(void)
   goal.x = agent_pos.x + v_x;
   goal.y = agent_pos.y + v_y; 
 
-  // DEBUGGING!!!
-  goal = random_point;
+  // // DEBUGGING!!!
+  // goal = random_point;
+  // goal.x = 10.0;
+  // goal.y = -10.0;
 }
 
 void update_line_params(struct Line* line)
@@ -485,6 +491,169 @@ void follow_line( float* v_x, float* v_y)
   *(v_y) = sinf(following_heading)*desired_velocity;
 }
 
+bool free_to_goal(void)
+{
+  if (lasers[upper_idx] > warning_laser && lasers[lower_idx] > warning_laser)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+  
+}
+
+void wall_follow_init(void)
+{
+  float temp_line_heading = get_heading_to_point(agent_pos,goal); // used to follow the line
+  cap_heading(&temp_line_heading);
+
+  int lower_idx_temp = (int)(temp_line_heading /(float)(M_PI_2));
+  int upper_idx_temp = lower_idx_temp+1;
+  cap_laser(&lower_idx_temp);
+  cap_laser(&upper_idx_temp);
+
+  float lower_heading = lower_idx_temp*(float)(M_PI_2);
+  float upper_heading = upper_idx_temp*(float)(M_PI_2);
+  cap_heading(&lower_heading);
+  cap_heading(&upper_heading);
+
+  if ( fabsf(temp_line_heading-lower_heading) > fabsf(temp_line_heading-upper_heading))
+  {
+    start_laser = upper_idx_temp;
+    search_left = false;
+  }
+  else
+  {
+    start_laser = lower_idx_temp;
+    search_left = true;
+  }
+}
+
+void update_start_laser(void)
+{
+  if (search_left)
+  {
+    if (max_reached_laser > start_laser)
+    {
+      start_laser_corrected = max_reached_laser - 1;
+    }
+    else
+    {
+      start_laser_corrected = start_laser;
+    }
+  }
+  else
+  {
+    if (max_reached_laser < start_laser)
+    {
+      start_laser_corrected = max_reached_laser + 1;
+    }
+    else
+    {
+      start_laser_corrected = start_laser;
+    }
+  }
+}
+void reset_wall_follower()
+{
+  if (search_left)
+  {
+    search_left = false;
+  }
+  else
+  {
+    search_left = true;
+  }
+  max_reached_laser = start_laser;
+}
+
+void follow_wall(float* v_x, float* v_y)
+{
+    // terminalinfo::debug_msg(std::to_string(search_left));
+  update_start_laser(); // avoid osscialations
+
+  if (search_left)
+  {
+    for (int i = start_laser_corrected; i < (start_laser+4); i++)
+    {
+
+      local_laser_idx = i;
+      cap_laser(&local_laser_idx);
+
+      if (lasers[local_laser_idx] > warning_laser)
+      {
+        if (i > max_reached_laser)
+        {
+          max_reached_laser = i;
+        }
+        break;
+      }
+    }
+  }
+  else
+  {
+    for (int i = start_laser_corrected; i > (start_laser-4); i--)
+    {
+      local_laser_idx = i;
+      if (lasers[local_laser_idx] > warning_laser)
+      {
+        if (i < max_reached_laser)
+        {
+          max_reached_laser = i;
+        }
+        break;
+      }
+      
+    }
+  }
+
+  if(lasers[local_laser_idx] < warning_laser)
+  {
+    reset_wall_follower();
+  }
+
+  following_laser = local_laser_idx;
+  *(v_x) = cosf(following_laser*(float)(M_PI_2))*desired_velocity;
+  *(v_y) = sinf(following_laser*(float)(M_PI_2))*desired_velocity;
+}
+
+
+void update_status(void)
+{
+
+current_ticks = xTaskGetTickCount();
+
+
+
+  if (check_collision())
+  {
+    status = 2;
+  }
+  else if (previous_status ==2)
+  {
+    status = 0; 
+    update_line();
+    update_direction();
+  }
+  // else if (free_to_goal() && previous_status == 1)
+  else if ((current_ticks-started_wall_avoid_ticks)>ticks_to_follow && previous_status == 1)
+  {
+    status = 0;
+    update_line();
+    update_direction();
+  }
+  else if (!free_to_goal() && previous_status == 0)
+  {
+    status = 1;
+    wall_follow_init();
+    started_wall_avoid_ticks = xTaskGetTickCount();
+  }
+  previous_status = status;
+
+}
+
 void relativeControlTask(void* arg)
 {
   systemWaitStart();
@@ -505,11 +674,12 @@ void relativeControlTask(void* arg)
     update_lowpass(all_RS);
     
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
-    // if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
-    if(keepFlying){
+    if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
+    // if(keepFlying){
       // take off
       
       if(onGround){
+        xTaskGetTickCount();
         // flyVerticalInterpolated(0.0,height,3000.0f);
         set_voltage_offset();
         reset_lp();
@@ -550,8 +720,9 @@ void relativeControlTask(void* arg)
           update_line();
           update_direction();
         }
+        status = 0;
 
-        for (int i = 0; i< 500; i++) //time before time-out
+        for (int i = 0; i< 150; i++) //time before time-out
         {
           // update all gas sensors
           get_all_RS(all_RS);
@@ -565,6 +736,7 @@ void relativeControlTask(void* arg)
           agent_pos.x = state.x;
           agent_pos.y = state.y;
           wp_dist = get_distance_points(agent_pos,goal);
+          update_status();
           
           if (wp_dist < wp_reached_thres )
           {
@@ -578,8 +750,9 @@ void relativeControlTask(void* arg)
             break;
           
           case 1:
+            follow_wall(&vx,&vy);
             break;
-          
+      
           case 2:
             repulse_swarm(&vx,&vy);
             break;
