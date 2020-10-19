@@ -20,7 +20,6 @@
 
 // static float RAD2DEG = 57.29578049;
 // static float critical_laser = 0.5; // no laser ranger should ever see lower than this
-static float warning_laser = 2.5; // start correcting if a laser ranger sees smaller than this
 // static float critical_laser = 1.0;
 static float desired_velocity = 0.8; // speed in m/s that we aim for
 
@@ -36,19 +35,12 @@ static float_t relaVarInCtrl[NumUWB][STATE_DIM_rl];
 static float_t inputVarInCtrl[NumUWB][STATE_DIM_rl];
 static uint8_t selfID;
 static float_t height;
-static int start_checking;
-static int max_turns = 2;
-static int free_lasers[4];
-static int start_laser = 0;
-static bool turn_positive = true;
-static int heighest_reached = 0;
 
 float lasers[4];
 static float relaCtrl_p = 2.0f;
 static float desired_heading = 0.0f;
 static float relaCtrl_i = 0.0001f;
 static float relaCtrl_d = 0.01f;
-static float wp_reached_thres = 0.5; // [m]
 static float all_RS[NumUWB];
 static float voltage_bias[NumUWB] = {0.0,0.0,0.0};
 static float RS_lp[NumUWB] = {0.0,0.0,0.0};
@@ -56,19 +48,30 @@ static float RS_lp[NumUWB] = {0.0,0.0,0.0};
 static char c = 0; // monoCam
 float search_range = 10.0; // search range in meters
 
-float min_laser = 10.0f;
-int laser_decision;
-float r_p, r_g, v_x, v_y;
 // PSO-Specific
+float r_p, r_g, v_x, v_y;
 float rand_p = 0.1;
 float omega = 0.4;
 float phi_p = 0.4;
 float phi_g = 0.6;
+
 float old_vx = 0.0;
 float old_vy = 0.0;
 
+static float swarm_avoid_thres = 1.5; // 
+static float wp_reached_thres = 0.5; // [m]
+static float swarm_avoid_gain = 15.0f;
+static float laser_repulse_gain = 3.0f;
+static float warning_laser = 2.5; // start correcting if a laser ranger sees smaller than this
+static int status = 0;
+
 bool fly_repulsion = true;
 float laser_repulsion_thresh = 2.0;
+float line_max_dist = 0.5;
+float line_heading = 0.0;
+
+int upper_idx, lower_idx, following_laser;
+float following_heading;
 
 struct Point
 {
@@ -83,11 +86,21 @@ struct gas_Point
     float gas_conc;
 };
 
+struct Line {
+  struct Point p0;
+  struct Point p1;
+  float a;
+  float b; 
+  float c; 
+};
+
 struct Point agent_pos,random_point;
 struct Point goal = {.x = 0.0, .y= 0.0};
 
 struct gas_Point agent_best = {.x = 0.0f, .y=0.0f, .gas_conc = 0.0f};
 struct gas_Point swarm_best = {.x = 0.0f, .y=0.0f, .gas_conc = 0.0f};
+
+struct Line line_to_goal;
 
 void get_RS(float* R_s)
 {
@@ -126,7 +139,27 @@ void getDistances(float* d) {
     *(d+3) = rangeGet(rangeRight)*0.001f;
 }
 
+void cap_heading(float* heading)
+{
+  while (*heading > 2.0f*(float)(M_PI))
+  {
+    *heading = *heading - 2.0f*(float)(M_PI);
+  }
+  while (*heading < 0.0f)
+  {
+    *heading = *heading + 2.0f*(float)(M_PI);
+  }
+}
+float get_heading_to_point(struct Point agent, struct Point goal)
+{
+  float delta_x = goal.x - agent.x;
+  float delta_y = goal.y - agent.y;
+  float psi = atan2f(delta_x,delta_y);
 
+  cap_heading(&psi);
+
+  return psi;
+}
 
 
 float get_min(float* d)
@@ -225,7 +258,7 @@ bool check_collision(void)
     if ( i != selfID)
     {
        distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
-       if (distance < 2.0f)
+       if (distance < swarm_avoid_thres)
        {
          collision = true;
        }       
@@ -267,102 +300,190 @@ void update_wps(void)
 
 }
 
-void update_wps_test(void)
-{
-  float min = 0.0;
-  // update global wp
-  for (int i = 0; i < NumUWB ; i++)
-  {
-    if ( RS_lp[i] > min)
-    {
-      if (i != selfID)
-      {
-        swarm_best.gas_conc = RS_lp[i];
-        min = swarm_best.gas_conc;
-        swarm_best.x = agent_pos.x + relaVarInCtrl[i][STATE_rlX];
-        swarm_best.y = agent_pos.y + relaVarInCtrl[i][STATE_rlY];
-        agent_best = swarm_best;
-      }
-      else
-      {
-        swarm_best.gas_conc = RS_lp[i];
-        swarm_best.x = agent_pos.x; 
-        swarm_best.y = agent_pos.y;
-        agent_best = swarm_best;
-        min = swarm_best.gas_conc;
-      } 
-    }
-  }
-}
-
-
 
 float get_distance_points(struct Point p1, struct Point p2)
 {
   return sqrtf(pow((p2.x-p1.x),2)+pow((p2.y-p1.y),2));
 }
 
-void cap_heading(float* heading)
-{
-  if (*heading > 2.0f*(float)(M_PI))
-  {
-    *heading = *heading - 2.0f*(float)(M_PI);
-  }
-  else if (*heading < 0.0f)
-  {
-    *heading = *heading + 2.0f*(float)(M_PI);
-  }
-}
+
 
 void cap_laser(int* laser)
 {
-  if (*laser > 3)
+  while (*laser > 3)
   {
     *laser = *laser - 4;
   }
-  else if (*laser < 0)
+  while (*laser < 0)
   {
     *laser = *laser + 4;
   }
 }
 
 
-
-// turn_positive
-// start_laser
-void determine_direction(void)
+void compute_directed_wp(void)
 {
-  float capped_heading;
-  capped_heading = desired_heading;
-  cap_heading(&capped_heading);
+  random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
+  random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
+  r_g = (rand()/(float)RAND_MAX);
+  r_p = (rand()/(float)RAND_MAX);
 
-  int lower_idx = (int)(capped_heading/((float)M_PI_2)); // lower index of heading in ENU
-  float diff = capped_heading - (float)(lower_idx)*(float)(M_PI_2);
+  v_x = rand_p*(random_point.x)+omega*(goal.x-agent_pos.x)+phi_p*r_p*(agent_best.x-agent_pos.x)+phi_g*r_g*(swarm_best.x-agent_pos.x);
+  v_y = rand_p*(random_point.y)+omega*(goal.y-agent_pos.y)+phi_p*r_p*(agent_best.y-agent_pos.y)+phi_g*r_g*(swarm_best.y-agent_pos.y);
+  goal.x = agent_pos.x + v_x;
+  goal.y = agent_pos.y + v_y; 
+  
+}
 
-  if (diff >(float)(M_PI_2))
+void compute_random_wp(void)
+{
+  random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
+  random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
+
+  r_g = (rand()/(float)RAND_MAX);
+  r_p = (rand()/(float)RAND_MAX);
+
+  v_x = 0.5f*(random_point.x)+0.5f*(goal.x-agent_pos.x);
+  v_y = 0.5f*(random_point.y)+0.5f*(goal.y-agent_pos.y);
+  goal.x = agent_pos.x + v_x;
+  goal.y = agent_pos.y + v_y; 
+}
+
+void update_line_params(struct Line* line)
+{
+  float dx = line->p1.x - line->p0.x;
+  float dy = line->p1.y - line->p0.y;
+  // p0 and p1 are the same
+  if (dx == 0 && dy ==0) 
   {
-    start_laser = lower_idx + 1;
-    turn_positive = false;
+    line->a = 0;
+    line->b = 0;
+    line->c = 0;
+
+  }
+  // vertical line
+  else if (dx == 0)
+  {
+    line->a = 1;
+    line->b = 0;
+    line->c = -line->p0.x;
+  }
+  // horizontal line
+  else if (dy == 0)
+  {
+    line->a = 0;
+    line->b = 1;
+    line->c = -line->p0.y;
+  }
+  // neither horizontal nor vertical line
+  else
+  {
+    line->a = 1;
+    line->b = -dx/dy;
+    line->c = -line->a*line->p0.x - line->b*line->p0.y ;
+  }
+}
+
+void update_line(void)
+{
+  line_to_goal.p0 = agent_pos;
+  line_to_goal.p1 = goal;
+  update_line_params(&line_to_goal);
+}
+
+void update_direction(void)
+{
+  line_heading = get_heading_to_point(agent_pos,goal); // used to follow the line
+  cap_heading(&line_heading);
+
+  lower_idx = (int)(line_heading/(float)(M_PI_2));
+  upper_idx = lower_idx+1;
+
+  cap_laser(&lower_idx);
+  cap_laser(&upper_idx);
+
+  if (abs(line_heading-(lower_idx*(float)(M_PI_2))) > (float)(M_PI_4))
+  {
+    following_laser = upper_idx;
   }
   else
   {
-    start_laser = lower_idx;
-    turn_positive = true;
+    following_laser = lower_idx;
+  }
+}
+
+void repulse_swarm(float* vx, float* vy)
+{
+  // attraction to source
+  desired_heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x));
+  *(vx) = desired_velocity*cosf(desired_heading);
+  *(vy) = desired_velocity*sinf(desired_heading);
+  // fly_repulsion = false;
+  // repulsion from other agents
+  for (int i = 0; i<NumUWB; i++)
+  {
+    if ( i != selfID)
+    {
+      float distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
+      if (distance < swarm_avoid_thres)
+      {
+        fly_repulsion = true;
+        float heading_to_agent = atan2f(relaVarInCtrl[i][STATE_rlY],relaVarInCtrl[i][STATE_rlX]);
+        float repulsion_heading = heading_to_agent + (float)(M_PI);
+        *(vx) += swarm_avoid_gain*((swarm_avoid_thres-distance))*cosf(repulsion_heading);
+        *(vy) += swarm_avoid_gain*((swarm_avoid_thres-distance))*sinf(repulsion_heading);
+      }
+
+    }
   }
 
-  cap_laser(&start_laser);  
+  // repulsion from lasers
+  for (int i = 0; i < 4; i++)
+  {
+    if (lasers[i] < warning_laser)
+    {
+      float laser_heading = (float)(i)*(float)(M_PI_2);
+      float laser_repulse_heading = laser_heading + (float)(M_PI);
+      *(vx) += cosf(laser_repulse_heading)*laser_repulse_gain*powf((warning_laser-lasers[i]),2);
+      *(vy) += sinf(laser_repulse_heading)*laser_repulse_gain*powf((warning_laser-lasers[i]),2);
+    }
+  }
 
+  float vector_size = sqrtf(powf(*(vx),2) + powf(*(vy),2));
+  *(vx) = *(vx)/vector_size*desired_velocity;
+  *(vy) = *(vy)/vector_size*desired_velocity;       
+          
 }
 
-void reset_follow_vars(void)
+
+float get_distance_to_line(struct Line line , struct Point p0)
 {
-  start_checking = start_laser;
-  max_turns = 2;
-  heighest_reached = start_laser;
+  return( abs(line.a*p0.x+line.b*p0.y+line.c) / ( sqrt(pow(line.a,2)+pow(line.b,2)) ) );
 }
 
+void update_follow_laser(void)
+{
+  if (get_heading_to_point(agent_pos,goal) > line_heading)
+  {
+    following_laser = upper_idx;
+  }
+  else
+  {
+    following_laser = lower_idx;
+  }
+}
 
-
+void follow_line( float* v_x, float* v_y)
+{
+  // check_passed_goal(ID);
+  if (get_distance_to_line(line_to_goal,agent_pos) > line_max_dist)
+  {
+    update_follow_laser();
+  }
+  following_heading = following_laser*M_PI_2;
+  *(v_x) = cosf(following_heading)*desired_velocity;
+  *(v_y) = sinf(following_heading)*desired_velocity;
+}
 
 void relativeControlTask(void* arg)
 {
@@ -370,7 +491,6 @@ void relativeControlTask(void* arg)
   // height = (float)selfID*0.1f+0.2f;
   height = 0.5f;
 
-  float heading = 0.f;
   float vx = 0.f;
   float vy = 0.f;
   float wp_dist = 0.f;
@@ -385,8 +505,8 @@ void relativeControlTask(void* arg)
     update_lowpass(all_RS);
     
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
-    if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
-    // if(keepFlying){
+    // if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
+    if(keepFlying){
       // take off
       
       if(onGround){
@@ -416,38 +536,28 @@ void relativeControlTask(void* arg)
 
         update_wps();
         // compute next wp
-        random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
-        random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
-
-        r_g = (rand()/(float)RAND_MAX);
-        r_p = (rand()/(float)RAND_MAX);
+        
 
         if (swarm_best.gas_conc < 0.2f)
         {
-          v_x = 0.5f*(random_point.x)+0.5f*(goal.x-agent_pos.x);
-          v_y = 0.5f*(random_point.y)+0.5f*(goal.y-agent_pos.y);
-          goal.x = agent_pos.x + v_x;
-          goal.y = agent_pos.y + v_y; 
+          compute_random_wp();
+          update_line();
+          update_direction();
         }
         else
         {
-          v_x = rand_p*(random_point.x)+omega*(goal.x-agent_pos.x)+phi_p*r_p*(agent_best.x-agent_pos.x)+phi_g*r_g*(swarm_best.x-agent_pos.x);
-          v_y = rand_p*(random_point.y)+omega*(goal.y-agent_pos.y)+phi_p*r_p*(agent_best.y-agent_pos.y)+phi_g*r_g*(swarm_best.y-agent_pos.y);
-          goal.x = agent_pos.x + v_x;
-          goal.y = agent_pos.y + v_y; 
+          compute_directed_wp();
+          update_line();
+          update_direction();
         }
-        
 
-
-
-        // float accumulator_obs_avoidance = 0.0f;
-        determine_direction();
-        reset_follow_vars();
         for (int i = 0; i< 50; i++) //time before time-out
         {
+          // update all gas sensors
           get_all_RS(all_RS);
           update_lowpass(all_RS);
-          update_wps_test(); // update to new individual and swarm best
+          update_wps(); // update to new individual and swarm best
+
           estimatorKalmanGetEstimatedPos(&state); //read agent state from kalman filter
           relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl); //get relative state from other agents
           getDistances(lasers); // get laser ranger readings, order: front, left, back, right
@@ -461,210 +571,21 @@ void relativeControlTask(void* arg)
             break;
           }
 
-          // if some other member of the swarm is in close proximity
-          
-          if (fly_repulsion)
+          switch (status)
           {
-            // attraction to source
-            desired_heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x));
-            vx = desired_velocity*cosf(desired_heading);
-            vy = desired_velocity*sinf(desired_heading);
-            // fly_repulsion = false;
-            // repulsion from other agents
-            for (int i = 0; i<NumUWB; i++)
-            {
-              if ( i != selfID)
-              {
-                float distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
-                if (distance < 1.0f)
-                {
-                  fly_repulsion = true;
-                  float heading_to_agent = atan2f(relaVarInCtrl[i][STATE_rlY],relaVarInCtrl[i][STATE_rlX]);
-                  float repulsion_heading = heading_to_agent + (float)(M_PI);
-                  vx += 15.0f*((1.0f-distance))*cosf(repulsion_heading);
-                  vy += 15.0f*((1.0f-distance))*sinf(repulsion_heading);
-                }
-       
-              }
-            }
-
-            // repulsion from lasers
-            for (int i = 0; i < 4; i++)
-            {
-              if (lasers[i] < warning_laser)
-              {
-                float laser_heading = (float)(i)*(float)(M_PI_2);
-                float laser_repulse_heading = laser_heading + (float)(M_PI);
-                vx += cosf(laser_repulse_heading)*3.0f*powf((warning_laser-lasers[i]),2);
-                vy += sinf(laser_repulse_heading)*3.0f*powf((warning_laser-lasers[i]),2);
-              }
-            }
-
-            float vector_size = sqrtf(powf(vx,2) + powf(vy,2));
-            vx = vx/vector_size*desired_velocity;
-            vy = vy/vector_size*desired_velocity;
-            
-            vx = 0.9f*old_vx + 0.1f*vx;
-            vy = 0.9f*old_vy + 0.1f*vy;
-            old_vx = vx;
-            old_vy = vy;
-
-            setHoverSetpoint(&setpoint,vx,vy,height,0);
-            
-            if (fly_repulsion == false)
-            {
-              determine_direction();
-              reset_follow_vars();
-            }
-            // float effective_heading = atan2f(vy,vx);
-            // if (abs(effective_heading-desired_heading)>M_PI_2)
-            // {
-            //   break;
-            // }
- 
-          }
-          else
-          {
-          desired_heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x));
- 
+          case 0:
+            follow_line(&vx,&vy);
+            break;
           
-          int first_free_laser = -1;
-          // DEBUG_PRINT("%d",turn_positive);
-         
-            if (turn_positive)
-            {
-            
-              if (heighest_reached > start_laser)
-              {
-                start_checking = heighest_reached -1;
-              }
-              else
-              {
-                start_checking = start_laser;
-              }
-
-              for (int i = start_checking; i < (start_checking+4); i++)
-              {
-                // DEBUG_PRINT("%d \n",i);
-                int laser_idx;
-                if (i > 3)
-                {
-                  laser_idx = i - 4;
-                }
-                else if(i < 0)
-                {
-                  laser_idx = i + 4;
-                }
-                else
-                {
-                  laser_idx = i;
-                }
-                
-
-                if (lasers[laser_idx] > warning_laser)
-                {
-                  free_lasers[laser_idx] = 1;
-                  if (first_free_laser == -1)
-                  {
-                    first_free_laser = i;
-                  }
-                }
-                else
-                {
-                  free_lasers[laser_idx] = 0;
-                }
-                
-              }
-            }
-            else
-            {
-              if (heighest_reached < start_laser)
-              {
-                start_checking = heighest_reached + 1;
-              }
-              else
-              {
-                start_checking = start_laser;
-              }
-            
-              for (int i = start_checking; i > (start_checking-4); i--)
-              {
-                
-                int laser_idx;
-                if (i > 3)
-                {
-                  laser_idx = i - 4;
-                }
-                else if(i < 0)
-                {
-                  laser_idx = i + 4;
-                }
-                else
-                {
-                  laser_idx = i;
-                }
-                
-
-                if (lasers[laser_idx] > warning_laser)
-                {
-                  free_lasers[laser_idx] = 1;
-                  if (first_free_laser == -1)
-                  {
-                    
-                    // DEBUG_PRINT("%d \n",i);
-                    first_free_laser = i;
-                  }
-                }
-                else
-                {
-                  free_lasers[laser_idx] = 0;
-                }
-              }
-            }
-            
-            if (turn_positive)
-            {
-              if (first_free_laser > heighest_reached)
-              {
-                heighest_reached = first_free_laser;
-              }
-              if ((abs(heighest_reached - start_laser)) > max_turns)
-              {
-                determine_direction();
-                reset_follow_vars();
-              }
-
-            }
-
-            else
-            {
-              if (first_free_laser < heighest_reached)
-              {
-                heighest_reached = first_free_laser;
-              }
-              if ((abs(heighest_reached - start_laser)) > max_turns)
-              {
-                determine_direction();
-                reset_follow_vars();
-              }
-
-            }
-
-            if (check_collision())
-            {
-              fly_repulsion = true;
-            }
-
-            heading = M_PI_2*first_free_laser;
-
-            // heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x)); // heading in deg (ENU) to desired waypoint
-            vx = desired_velocity*cosf(heading);
-            vy = desired_velocity*sinf(heading);
+          case 1:
+            break;
           
-            setHoverSetpoint(&setpoint,vx,vy,height,0);
-     
+          case 2:
+            repulse_swarm(&vx,&vy);
+            break;
+          }          
 
-          }
+        setHoverSetpoint(&setpoint,vx,vy,height,0);
         vTaskDelay(M2T(100));    
         }
 
