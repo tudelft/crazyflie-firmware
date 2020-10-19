@@ -21,7 +21,7 @@
 // static float RAD2DEG = 57.29578049;
 // static float critical_laser = 0.5; // no laser ranger should ever see lower than this
 // static float critical_laser = 1.0;
-static float desired_velocity = 0.8; // speed in m/s that we aim for
+static float desired_velocity = 0.5; // speed in m/s that we aim for
 
 // static int status = 0;
 static bool isInit;
@@ -46,7 +46,7 @@ static float voltage_bias[NumUWB] = {0.0,0.0,0.0};
 static float RS_lp[NumUWB] = {0.0,0.0,0.0};
 // static float NDI_k = 2.0f;
 static char c = 0; // monoCam
-float search_range = 10.0; // search range in meters
+float search_range = 7.0; // search range in meters
 
 // PSO-Specific
 float r_p, r_g, v_x, v_y;
@@ -67,7 +67,7 @@ static int status = 0;
 
 bool fly_repulsion = true;
 float laser_repulsion_thresh = 2.0;
-float line_max_dist = 0.5;
+float line_max_dist = 0.2;
 float line_heading = 0.0;
 
 int upper_idx, lower_idx, following_laser;
@@ -154,7 +154,7 @@ float get_heading_to_point(struct Point agent, struct Point goal)
 {
   float delta_x = goal.x - agent.x;
   float delta_y = goal.y - agent.y;
-  float psi = atan2f(delta_x,delta_y);
+  float psi = atan2f(delta_y,delta_x);
 
   cap_heading(&psi);
 
@@ -337,16 +337,16 @@ void compute_directed_wp(void)
 
 void compute_random_wp(void)
 {
-  random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
+  random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range ;
   random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
-
-  r_g = (rand()/(float)RAND_MAX);
-  r_p = (rand()/(float)RAND_MAX);
 
   v_x = 0.5f*(random_point.x)+0.5f*(goal.x-agent_pos.x);
   v_y = 0.5f*(random_point.y)+0.5f*(goal.y-agent_pos.y);
   goal.x = agent_pos.x + v_x;
   goal.y = agent_pos.y + v_y; 
+
+  // DEBUGGING!!!
+  goal = random_point;
 }
 
 void update_line_params(struct Line* line)
@@ -458,7 +458,7 @@ void repulse_swarm(float* vx, float* vy)
 
 float get_distance_to_line(struct Line line , struct Point p0)
 {
-  return( abs(line.a*p0.x+line.b*p0.y+line.c) / ( sqrt(pow(line.a,2)+pow(line.b,2)) ) );
+  return( fabsf(line.a*p0.x+line.b*p0.y+line.c) / ( sqrtf(powf(line.a,2)+powf(line.b,2)) ) );
 }
 
 void update_follow_laser(void)
@@ -551,7 +551,7 @@ void relativeControlTask(void* arg)
           update_direction();
         }
 
-        for (int i = 0; i< 50; i++) //time before time-out
+        for (int i = 0; i< 500; i++) //time before time-out
         {
           // update all gas sensors
           get_all_RS(all_RS);
