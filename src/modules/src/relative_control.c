@@ -66,14 +66,12 @@ static float warning_laser = 1.5; // start correcting if a laser ranger sees sma
 static int status = 0;
 static int previous_status = 0;
 
-bool fly_repulsion = true;
 float laser_repulsion_thresh = 1.5;
 float line_max_dist = 0.2;
 float line_heading = 0.0;
 
 int upper_idx, lower_idx, following_laser;
-int current_ticks, started_wall_avoid_ticks, start_laser, max_reached_laser, start_laser_corrected, local_laser_idx;
-int ticks_to_follow = 10000;
+int  start_laser, max_reached_laser, start_laser_corrected, local_laser_idx;
 float following_heading;
 bool search_left = false;
 bool left_line = false;
@@ -113,7 +111,6 @@ void get_RS(float* R_s)
   *(R_s) = analogReadVoltage(pin) - voltage_bias[selfID];
 }
 
-
 void get_all_RS(float* all_RS)
 {
   get_swarm_gas(all_RS); // load all swarm gas data
@@ -143,8 +140,6 @@ void getDistances(float* d) {
     *(d+2) = rangeGet(rangeBack)*0.001f;
     *(d+3) = rangeGet(rangeRight)*0.001f;
 }
-
-
 
 void cap_heading(float* heading)
 {
@@ -307,13 +302,10 @@ void update_wps(void)
 
 }
 
-
 float get_distance_points(struct Point p1, struct Point p2)
 {
-  return sqrtf(pow((p2.x-p1.x),2)+pow((p2.y-p1.y),2));
+  return sqrtf(powf((p2.x-p1.x),2)+powf((p2.y-p1.y),2));
 }
-
-
 
 void cap_laser(int* laser)
 {
@@ -327,7 +319,6 @@ void cap_laser(int* laser)
   }
 }
 
-
 void compute_directed_wp(void)
 {
   r_g = (rand()/(float)RAND_MAX);
@@ -337,7 +328,6 @@ void compute_directed_wp(void)
   v_y = omega*(goal.y-agent_pos.y)+phi_p*r_p*(agent_best.y-agent_pos.y)+phi_g*r_g*(swarm_best.y-agent_pos.y);
   goal.x = agent_pos.x + v_x;
   goal.y = agent_pos.y + v_y; 
-  
 }
 
 void compute_random_wp(void)
@@ -349,11 +339,6 @@ void compute_random_wp(void)
   v_y = 2.935f*(random_point.y)+0.457f*(goal.y-agent_pos.y);
   goal.x = agent_pos.x + v_x;
   goal.y = agent_pos.y + v_y; 
-
-  // // DEBUGGING!!!
-  // goal = random_point;
-  // goal.x = 10.0;
-  // goal.y = -10.0;
 }
 
 void update_line_params(struct Line* line)
@@ -366,7 +351,6 @@ void update_line_params(struct Line* line)
     line->a = 0;
     line->b = 0;
     line->c = 0;
-
   }
   // vertical line
   else if (dx == 0)
@@ -409,7 +393,7 @@ void update_direction(void)
   cap_laser(&lower_idx);
   cap_laser(&upper_idx);
 
-  if (abs(line_heading-(lower_idx*(float)(M_PI_2))) > (float)(M_PI_4))
+  if (fabsf(line_heading-(lower_idx*(float)(M_PI_2))) > (float)(M_PI_4))
   {
     following_laser = upper_idx;
   }
@@ -425,7 +409,7 @@ void repulse_swarm(float* vx, float* vy)
   desired_heading = atan2f((goal.y-agent_pos.y),(goal.x-agent_pos.x));
   *(vx) = desired_velocity*cosf(desired_heading);
   *(vy) = desired_velocity*sinf(desired_heading);
-  // fly_repulsion = false;
+
   // repulsion from other agents
   for (int i = 0; i<NumUWB; i++)
   {
@@ -434,7 +418,6 @@ void repulse_swarm(float* vx, float* vy)
       float distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
       if (distance < swarm_avoid_thres)
       {
-        fly_repulsion = true;
         float heading_to_agent = atan2f(relaVarInCtrl[i][STATE_rlY],relaVarInCtrl[i][STATE_rlX]);
         float repulsion_heading = heading_to_agent + (float)(M_PI);
         *(vx) += swarm_avoid_gain*((swarm_avoid_thres-distance))*cosf(repulsion_heading);
@@ -451,8 +434,8 @@ void repulse_swarm(float* vx, float* vy)
     {
       float laser_heading = (float)(i)*(float)(M_PI_2);
       float laser_repulse_heading = laser_heading + (float)(M_PI);
-      *(vx) += cosf(laser_repulse_heading)*laser_repulse_gain*powf((warning_laser-lasers[i]),2);
-      *(vy) += sinf(laser_repulse_heading)*laser_repulse_gain*powf((warning_laser-lasers[i]),2);
+      *(vx) += cosf(laser_repulse_heading)*laser_repulse_gain*(warning_laser-lasers[i]);
+      *(vy) += sinf(laser_repulse_heading)*laser_repulse_gain*(warning_laser-lasers[i]);
     }
   }
 
@@ -505,7 +488,7 @@ void follow_line( float* v_x, float* v_y)
   {
     update_follow_laser();
   }
-  following_heading = following_laser*M_PI_2;
+  following_heading = (float)(following_laser)*(float)(M_PI_2);
   *(v_x) = cosf(following_heading)*desired_velocity;
   *(v_y) = sinf(following_heading)*desired_velocity;
 }
@@ -520,7 +503,6 @@ bool free_to_goal(void)
   {
     return false;
   }
-  
 }
 
 void wall_follow_init(void)
@@ -586,6 +568,7 @@ void reset_wall_follower()
     search_left = true;
   }
   max_reached_laser = start_laser;
+  start_laser_corrected = start_laser;
 }
 
 void follow_wall(float* v_x, float* v_y)
@@ -634,17 +617,13 @@ void follow_wall(float* v_x, float* v_y)
   }
 
   following_laser = local_laser_idx;
-  *(v_x) = cosf(following_laser*(float)(M_PI_2))*desired_velocity;
-  *(v_y) = sinf(following_laser*(float)(M_PI_2))*desired_velocity;
+  *(v_x) = cosf((float)(following_laser)*(float)(M_PI_2))*desired_velocity;
+  *(v_y) = sinf((float)(following_laser)*(float)(M_PI_2))*desired_velocity;
 }
 
 
 void update_status(void)
 {
-
-current_ticks = xTaskGetTickCount();
-
-
 
   if (check_collision())
   {
@@ -656,7 +635,6 @@ current_ticks = xTaskGetTickCount();
     update_line();
     update_direction();
   }
-  // else if (free_to_goal() && previous_status == 1)
   else if (back_in_line() && previous_status == 1)
   {
     status = 0;
@@ -667,10 +645,8 @@ current_ticks = xTaskGetTickCount();
   {
     status = 1;
     wall_follow_init();
-    started_wall_avoid_ticks = xTaskGetTickCount();
   }
   previous_status = status;
-
 }
 
 void relativeControlTask(void* arg)
