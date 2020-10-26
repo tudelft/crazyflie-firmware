@@ -27,6 +27,7 @@ static float desired_velocity = 0.5; // speed in m/s that we aim for
 static bool isInit;
 static bool onGround = true;
 static bool keepFlying = false;
+static int num_cycl;
 
 // static bool follow_x = true;
 // static bool wall_following = false;
@@ -46,14 +47,13 @@ static float voltage_bias[NumUWB] = {0.0,0.0,0.0};
 static float RS_lp[NumUWB] = {0.0,0.0,0.0};
 // static float NDI_k = 2.0f;
 static char c = 0; // monoCam
-float search_range = 7.0; // search range in meters
+float search_range = 10.0; // search range in meters
 
 // PSO-Specific
 float r_p, r_g, v_x, v_y;
-float rand_p = 0.1;
-float omega = 0.4;
-float phi_p = 0.4;
-float phi_g = 0.6;
+float omega = -0.166;
+float phi_p = -0.466;
+float phi_g = 2.665;
 
 float old_vx = 0.0;
 float old_vy = 0.0;
@@ -76,6 +76,7 @@ int current_ticks, started_wall_avoid_ticks, start_laser, max_reached_laser, sta
 int ticks_to_follow = 10000;
 float following_heading;
 bool search_left = false;
+bool left_line = false;
 
 struct Point
 {
@@ -142,6 +143,8 @@ void getDistances(float* d) {
     *(d+2) = rangeGet(rangeBack)*0.001f;
     *(d+3) = rangeGet(rangeRight)*0.001f;
 }
+
+
 
 void cap_heading(float* heading)
 {
@@ -327,13 +330,11 @@ void cap_laser(int* laser)
 
 void compute_directed_wp(void)
 {
-  random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
-  random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
   r_g = (rand()/(float)RAND_MAX);
   r_p = (rand()/(float)RAND_MAX);
 
-  v_x = rand_p*(random_point.x)+omega*(goal.x-agent_pos.x)+phi_p*r_p*(agent_best.x-agent_pos.x)+phi_g*r_g*(swarm_best.x-agent_pos.x);
-  v_y = rand_p*(random_point.y)+omega*(goal.y-agent_pos.y)+phi_p*r_p*(agent_best.y-agent_pos.y)+phi_g*r_g*(swarm_best.y-agent_pos.y);
+  v_x = omega*(goal.x-agent_pos.x)+phi_p*r_p*(agent_best.x-agent_pos.x)+phi_g*r_g*(swarm_best.x-agent_pos.x);
+  v_y = omega*(goal.y-agent_pos.y)+phi_p*r_p*(agent_best.y-agent_pos.y)+phi_g*r_g*(swarm_best.y-agent_pos.y);
   goal.x = agent_pos.x + v_x;
   goal.y = agent_pos.y + v_y; 
   
@@ -344,8 +345,8 @@ void compute_random_wp(void)
   random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range ;
   random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
 
-  v_x = 0.5f*(random_point.x)+0.5f*(goal.x-agent_pos.x);
-  v_y = 0.5f*(random_point.y)+0.5f*(goal.y-agent_pos.y);
+  v_x = 2.935f*(random_point.x)+0.457f*(goal.x-agent_pos.x);
+  v_y = 2.935f*(random_point.y)+0.457f*(goal.y-agent_pos.y);
   goal.x = agent_pos.x + v_x;
   goal.y = agent_pos.y + v_y; 
 
@@ -465,6 +466,24 @@ void repulse_swarm(float* vx, float* vy)
 float get_distance_to_line(struct Line line , struct Point p0)
 {
   return( fabsf(line.a*p0.x+line.b*p0.y+line.c) / ( sqrtf(powf(line.a,2)+powf(line.b,2)) ) );
+}
+
+bool back_in_line(void)
+{
+  if (get_distance_to_line(line_to_goal,agent_pos) > line_max_dist)
+  {
+    left_line = true;
+  }
+  if (left_line == true && get_distance_to_line(line_to_goal,agent_pos) < line_max_dist)
+  {
+    left_line = false;
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+
 }
 
 void update_follow_laser(void)
@@ -638,7 +657,7 @@ current_ticks = xTaskGetTickCount();
     update_direction();
   }
   // else if (free_to_goal() && previous_status == 1)
-  else if ((current_ticks-started_wall_avoid_ticks)>ticks_to_follow && previous_status == 1)
+  else if (back_in_line() && previous_status == 1)
   {
     status = 0;
     update_line();
@@ -713,16 +732,18 @@ void relativeControlTask(void* arg)
           compute_random_wp();
           update_line();
           update_direction();
+          num_cycl = 794;
         }
         else
         {
           compute_directed_wp();
           update_line();
           update_direction();
+          num_cycl = 111;
         }
         status = 0;
 
-        for (int i = 0; i< 150; i++) //time before time-out
+        for (int i = 0; i< num_cycl; i++) //time before time-out
         {
           // update all gas sensors
           get_all_RS(all_RS);
