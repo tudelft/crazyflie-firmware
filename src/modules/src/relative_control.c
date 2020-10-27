@@ -59,6 +59,7 @@ float old_vx = 0.0;
 float old_vy = 0.0;
 
 static float swarm_avoid_thres = 0.8; // 
+static float swarm_min_thres = 0.05;
 static float wp_reached_thres = 0.5; // [m]
 static float swarm_avoid_gain = 15.0f;
 static float laser_repulse_gain = 5.0f;
@@ -260,7 +261,7 @@ bool check_collision(void)
     if ( i != selfID)
     {
        distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
-       if (distance < swarm_avoid_thres)
+       if (distance < swarm_avoid_thres && distance > swarm_min_thres)
        {
          collision = true;
        }       
@@ -401,6 +402,8 @@ void update_direction(void)
   {
     following_laser = lower_idx;
   }
+  previous_status = 0;
+  status = 0;
 }
 
 void repulse_swarm(float* vx, float* vy)
@@ -416,7 +419,7 @@ void repulse_swarm(float* vx, float* vy)
     if ( i != selfID)
     {
       float distance = sqrtf(powf(relaVarInCtrl[i][STATE_rlX],2) + powf(relaVarInCtrl[i][STATE_rlY],2));
-      if (distance < swarm_avoid_thres)
+      if (distance < swarm_avoid_thres && distance > swarm_min_thres)
       {
         float heading_to_agent = atan2f(relaVarInCtrl[i][STATE_rlY],relaVarInCtrl[i][STATE_rlX]);
         float repulsion_heading = heading_to_agent + (float)(M_PI);
@@ -575,11 +578,14 @@ void follow_wall(float* v_x, float* v_y)
 {
     // terminalinfo::debug_msg(std::to_string(search_left));
   update_start_laser(); // avoid osscialations
-
+  DEBUG_PRINT("START LASER : %i",start_laser);
   if (search_left)
   {
+    DEBUG_PRINT("SEARCH LEFT \n");
     for (int i = start_laser_corrected; i < (start_laser+4); i++)
     {
+
+      DEBUG_PRINT("LASER: %i \n",i);
 
       local_laser_idx = i;
       cap_laser(&local_laser_idx);
@@ -596,9 +602,13 @@ void follow_wall(float* v_x, float* v_y)
   }
   else
   {
+    DEBUG_PRINT("NOT SEARCH LEFT \n");
     for (int i = start_laser_corrected; i > (start_laser-4); i--)
     {
+      DEBUG_PRINT("LASER: %i \n",i);
       local_laser_idx = i;
+      cap_laser(&local_laser_idx);
+
       if (lasers[local_laser_idx] > warning_laser)
       {
         if (i < max_reached_laser)
@@ -669,8 +679,8 @@ void relativeControlTask(void* arg)
     update_lowpass(all_RS);
     
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
-    if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
-    // if(keepFlying){
+    // if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
+    if(keepFlying){
       // take off
       
       if(onGround){
@@ -819,4 +829,5 @@ LOG_ADD(LOG_FLOAT,swarm_best_y,&swarm_best.y)
 LOG_ADD(LOG_FLOAT,gas0_lp,&RS_lp[0])
 LOG_ADD(LOG_FLOAT,gas1_lp,&RS_lp[1])
 LOG_ADD(LOG_FLOAT,gas2_lp,&RS_lp[2])
+LOG_ADD(LOG_INT16,status,&status)
 LOG_GROUP_STOP(PSO)
