@@ -51,25 +51,28 @@ float search_range = 10.0; // search range in meters
 
 // PSO-Specific
 float r_p, r_g, v_x, v_y;
-float omega = -0.166;
-float phi_p = -0.466;
-float phi_g = 2.665;
+static float omega = -0.085;
+static float phi_p = -0.860;
+static float phi_g = 3.578;
 
-float old_vx = 0.0;
-float old_vy = 0.0;
+static float omega_pre = 1.360;
+static float rand_p_pre = 3.115;
+// update time
 
-static float swarm_avoid_thres = 0.8; // 
-static float swarm_min_thres = 0.05;
 static float wp_reached_thres = 0.5; // [m]
-static float swarm_avoid_gain = 15.0f;
-static float laser_repulse_gain = 5.0f;
 static float warning_laser = 1.5; // start correcting if a laser ranger sees smaller than this
+static float swarm_avoid_thres = 1.0; // 
+static float line_max_dist = 0.2;
+static float laser_repulse_gain = 5.0;
+static float swarm_avoid_gain = 15.0;
+static float warning_laser_repulse = 1.5;
+
 static int status = 0;
 static int previous_status = 0;
 
-float laser_repulsion_thresh = 1.5;
-float line_max_dist = 0.2;
-float line_heading = 0.0;
+static float line_heading = 0.0;
+
+static float swarm_min_thres = 0.05;
 
 int upper_idx, lower_idx, following_laser;
 int  start_laser, max_reached_laser, start_laser_corrected, local_laser_idx;
@@ -336,8 +339,8 @@ void compute_random_wp(void)
   random_point.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range ;
   random_point.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
 
-  v_x = 2.935f*(random_point.x)+0.457f*(goal.x-agent_pos.x);
-  v_y = 2.935f*(random_point.y)+0.457f*(goal.y-agent_pos.y);
+  v_x = rand_p_pre*(random_point.x)+omega_pre*(goal.x-agent_pos.x);
+  v_y = rand_p_pre*(random_point.y)+omega_pre*(goal.y-agent_pos.y);
   goal.x = agent_pos.x + v_x;
   goal.y = agent_pos.y + v_y; 
 }
@@ -433,12 +436,12 @@ void repulse_swarm(float* vx, float* vy)
   // repulsion from lasers
   for (int i = 0; i < 4; i++)
   {
-    if (lasers[i] < warning_laser)
+    if (lasers[i] < warning_laser_repulse)
     {
       float laser_heading = (float)(i)*(float)(M_PI_2);
       float laser_repulse_heading = laser_heading + (float)(M_PI);
-      *(vx) += cosf(laser_repulse_heading)*laser_repulse_gain*(warning_laser-lasers[i]);
-      *(vy) += sinf(laser_repulse_heading)*laser_repulse_gain*(warning_laser-lasers[i]);
+      *(vx) += cosf(laser_repulse_heading)*laser_repulse_gain*(warning_laser_repulse-lasers[i]);
+      *(vy) += sinf(laser_repulse_heading)*laser_repulse_gain*(warning_laser_repulse-lasers[i]);
     }
   }
 
@@ -578,15 +581,10 @@ void follow_wall(float* v_x, float* v_y)
 {
     // terminalinfo::debug_msg(std::to_string(search_left));
   update_start_laser(); // avoid osscialations
-  DEBUG_PRINT("START LASER : %i",start_laser);
   if (search_left)
   {
-    DEBUG_PRINT("SEARCH LEFT \n");
     for (int i = start_laser_corrected; i < (start_laser+4); i++)
     {
-
-      DEBUG_PRINT("LASER: %i \n",i);
-
       local_laser_idx = i;
       cap_laser(&local_laser_idx);
 
@@ -602,10 +600,8 @@ void follow_wall(float* v_x, float* v_y)
   }
   else
   {
-    DEBUG_PRINT("NOT SEARCH LEFT \n");
     for (int i = start_laser_corrected; i > (start_laser-4); i--)
     {
-      DEBUG_PRINT("LASER: %i \n",i);
       local_laser_idx = i;
       cap_laser(&local_laser_idx);
 
