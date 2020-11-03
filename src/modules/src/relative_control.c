@@ -45,23 +45,24 @@ static float relaCtrl_d = 0.01f;
 static float all_RS[NumUWB];
 static float voltage_bias[NumUWB] = {0.0,0.0,0.0};
 static float RS_lp[NumUWB] = {0.0,0.0,0.0};
+static float init_dist_goal = 0.0;
 // static float NDI_k = 2.0f;
 static char c = 0; // monoCam
 float search_range = 10.0; // search range in meters
 
 // PSO-Specific
 float r_p, r_g, v_x, v_y;
-static float omega = -0.085;
-static float phi_p = -0.860;
-static float phi_g = 3.578;
+static float omega = 0.5;
+static float phi_p = 0.8;
+static float phi_g = 2.0;
 
-static float omega_pre = 1.360;
-static float rand_p_pre = 3.115;
+static float omega_pre = 0.3;
+static float rand_p_pre = 0.7;
 // update time
 
 static float wp_reached_thres = 0.5; // [m]
 static float warning_laser = 1.5; // start correcting if a laser ranger sees smaller than this
-static float swarm_avoid_thres = 1.0; // 
+static float swarm_avoid_thres = 1.5; // 
 static float line_max_dist = 0.2;
 static float laser_repulse_gain = 5.0;
 static float swarm_avoid_gain = 15.0;
@@ -459,11 +460,12 @@ float get_distance_to_line(struct Line line , struct Point p0)
 
 bool back_in_line(void)
 {
+  float dist_to_goal = get_distance_points(agent_pos,goal);
   if (get_distance_to_line(line_to_goal,agent_pos) > line_max_dist)
   {
     left_line = true;
   }
-  if (left_line == true && get_distance_to_line(line_to_goal,agent_pos) < line_max_dist)
+  if (left_line == true && get_distance_to_line(line_to_goal,agent_pos) < line_max_dist && dist_to_goal < init_dist_goal)
   {
     left_line = false;
     return true;
@@ -513,6 +515,8 @@ bool free_to_goal(void)
 
 void wall_follow_init(void)
 {
+  left_line = false;
+  init_dist_goal = get_distance_points(agent_pos,goal);
   float temp_line_heading = get_heading_to_point(agent_pos,goal); // used to follow the line
   cap_heading(&temp_line_heading);
 
@@ -714,14 +718,14 @@ void relativeControlTask(void* arg)
           compute_random_wp();
           update_line();
           update_direction();
-          num_cycl = 794;
+          num_cycl = 100;
         }
         else
         {
           compute_directed_wp();
           update_line();
           update_direction();
-          num_cycl = 111;
+          num_cycl = 100;
         }
         status = 0;
 
