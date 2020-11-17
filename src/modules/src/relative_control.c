@@ -38,6 +38,7 @@ static uint8_t selfID;
 static float_t height;
 
 float lasers[4];
+static float best_seen = 0.2f;
 static float relaCtrl_p = 2.0f;
 static float desired_heading = 0.0f;
 static float relaCtrl_i = 0.0001f;
@@ -52,21 +53,21 @@ float search_range = 10.0; // search range in meters
 
 // PSO-Specific
 float r_p, r_g, v_x, v_y;
-static float omega = 0.5;
-static float phi_p = 0.8;
-static float phi_g = 2.0;
+static float omega = 0.271;
+static float phi_p = -0.333;
+static float phi_g = 1.856;
 
-static float omega_pre = 0.3;
-static float rand_p_pre = 0.7;
+static float omega_pre = 1.571;
+static float rand_p_pre = 2.034;
 // update time
 
-static float wp_reached_thres = 0.5; // [m]
-static float warning_laser = 1.5; // start correcting if a laser ranger sees smaller than this
-static float swarm_avoid_thres = 1.5; // 
-static float line_max_dist = 0.2;
-static float laser_repulse_gain = 5.0;
-static float swarm_avoid_gain = 15.0;
-static float warning_laser_repulse = 1.5;
+static float wp_reached_thres = 2.690; // [m]
+static float warning_laser = 1.407; // start correcting if a laser ranger sees smaller than this
+static float swarm_avoid_thres = 0.782; // 
+static float line_max_dist = 0.469;
+static float laser_repulse_gain = 16.167;
+static float swarm_avoid_gain = 10.032;
+static float warning_laser_repulse = 0.594;
 
 static int status = 0;
 static int previous_status = 0;
@@ -698,6 +699,9 @@ void relativeControlTask(void* arg)
         }
 
         onGround = false;
+        // initialize a random goal in search area
+        goal.x = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
+        goal.y = (rand()/(float)RAND_MAX)*search_range-0.5f*search_range;
       }
       else
       {
@@ -718,19 +722,23 @@ void relativeControlTask(void* arg)
           compute_random_wp();
           update_line();
           update_direction();
-          num_cycl = 100;
+          num_cycl = 520;
         }
         else
         {
           compute_directed_wp();
           update_line();
           update_direction();
-          num_cycl = 100;
+          num_cycl = 520;
         }
         status = 0;
 
         for (int i = 0; i< num_cycl; i++) //time before time-out
         {
+          if (!keepFlying)
+          {
+            break;
+          }
           // update all gas sensors
           get_all_RS(all_RS);
           update_lowpass(all_RS);
@@ -745,11 +753,6 @@ void relativeControlTask(void* arg)
           wp_dist = get_distance_points(agent_pos,goal);
           update_status();
           
-          if (wp_dist < wp_reached_thres )
-          {
-            break;
-          }
-
           switch (status)
           {
           case 0:
@@ -767,6 +770,15 @@ void relativeControlTask(void* arg)
 
         setHoverSetpoint(&setpoint,vx,vy,height,0);
         vTaskDelay(M2T(100));    
+        
+        if (wp_dist < wp_reached_thres || swarm_best.gas_conc > best_seen )
+          {
+            best_seen = swarm_best.gas_conc;
+            setHoverSetpoint(&setpoint,vx,vy,height,0);
+            status = 0;
+            previous_status = 0;
+            break;
+          }
         }
 
         
