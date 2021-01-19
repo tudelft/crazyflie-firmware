@@ -17,6 +17,7 @@
 #include "stabilizer_types.h"
 #include "estimator_kalman.h"
 #include "deck_analog.h"
+#include "led.h"
 
 // static float RAD2DEG = 57.29578049;
 // static float critical_laser = 0.5; // no laser ranger should ever see lower than this
@@ -687,6 +688,7 @@ void relativeControlTask(void* arg)
     
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
     // if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
+    ledSetAll_force();
     if(keepFlying){
       // take off
       

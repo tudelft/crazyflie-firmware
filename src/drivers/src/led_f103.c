@@ -104,6 +104,21 @@ void ledSetAll(void)
 }
 void ledSet(led_t led, bool value)
 {
+  // if (led>LED_NUM)
+  //   return;
+
+  // if (led_polarity[led]==LED_POL_NEG)
+  //   value = !value;
+  
+  // if(value)
+  //   GPIO_SetBits(led_port[led], led_pin[led]);
+  // else
+  // GPIO_ResetBits(led_port[led], led_pin[led]); 
+}
+
+
+void ledSet_force(led_t led, bool value)
+{
   if (led>LED_NUM)
     return;
 
@@ -113,7 +128,29 @@ void ledSet(led_t led, bool value)
   if(value)
     GPIO_SetBits(led_port[led], led_pin[led]);
   else
-    GPIO_ResetBits(led_port[led], led_pin[led]); 
+  GPIO_ResetBits(led_port[led], led_pin[led]); 
+}
+
+void ledClearAll_force(void)
+{
+  int i;
+
+  for (i = 0; i < LED_NUM; i++)
+  {
+    //Turn off the LED:s
+    ledSet_force(i, 0);
+  }
+}
+
+void ledSetAll_force(void)
+{
+  int i;
+
+  for (i = 0; i < LED_NUM; i++)
+  {
+    //Turn on the LED:s
+    ledSet(i, 1);
+  }
 }
 
 

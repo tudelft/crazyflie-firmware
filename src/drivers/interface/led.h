@@ -73,6 +73,10 @@ void ledSet(led_t led, bool value);
 
 void ledTask(void *param);
 
+void ledSet_force(led_t led, bool value);
+void ledClearAll_force(void);
+void ledSetAll_force(void);
+
 //Legacy functions
 #define ledSetRed(VALUE) ledSet(LED_RED, VALUE)
 #define ledSetGreen(VALUE) ledSet(LED_GREEN, VALUE)
