@@ -26,6 +26,7 @@ static float desired_velocity = 0.5; // speed in m/s that we aim for
 // static int status = 0;
 static bool isInit;
 static bool onGround = true;
+static bool force_wp = false;
 static bool keepFlying = false;
 static int num_cycl;
 
@@ -38,6 +39,11 @@ static uint8_t selfID;
 static float_t height;
 
 float lasers[4];
+static float forced_wp_x = 0.0f;
+static float forced_wp_y = 0.0f;
+static float prev_forced_x = 0.0f;
+static float prev_forced_y = 0.0f;
+
 static float best_seen = 0.2f;
 static float relaCtrl_p = 2.0f;
 static float desired_heading = 0.0f;
@@ -716,8 +722,15 @@ void relativeControlTask(void* arg)
         update_wps();
         // compute next wp
         
-
-        if (swarm_best.gas_conc < 0.2f)
+        if (force_wp)
+        {
+          goal.x = forced_wp_x;
+          goal.y = forced_wp_y;
+          update_line();
+          update_direction();
+          num_cycl = 520;
+        }
+        else if (swarm_best.gas_conc < 0.2f)
         {
           compute_random_wp();
           update_line();
@@ -737,6 +750,12 @@ void relativeControlTask(void* arg)
         {
           if (!keepFlying)
           {
+            break;
+          }
+          else if (prev_forced_x != forced_wp_x || prev_forced_y != forced_wp_y)
+          {
+            prev_forced_x = forced_wp_x;
+            prev_forced_y = forced_wp_y;
             break;
           }
           // update all gas sensors
@@ -812,7 +831,9 @@ PARAM_ADD(PARAM_UINT8, keepFlying, &keepFlying)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_p, &relaCtrl_p)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_i, &relaCtrl_i)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_d, &relaCtrl_d)
-
+PARAM_ADD(PARAM_UINT8, force_wp, &force_wp)
+PARAM_ADD(PARAM_FLOAT, forced_wp_x, &forced_wp_x)
+PARAM_ADD(PARAM_FLOAT, forced_wp_y, &forced_wp_y)
 PARAM_GROUP_STOP(relative_ctrl)
 
 LOG_GROUP_START(mono_cam)
