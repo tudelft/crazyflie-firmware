@@ -24,7 +24,7 @@
  * led.c - LED handing functions
  */
 #include <stdbool.h>
-
+#include "param.h"
 #include "stm32fxxx.h"
 
 /*FreeRtos includes*/
@@ -59,7 +59,7 @@ static int led_polarity[] =
 };
 
 static bool isInit = false;
-
+static bool block_leds = false;
 //Initialize the green led pin as output
 void ledInit()
 {
@@ -132,16 +132,19 @@ void ledSetAll(void)
 }
 void ledSet(led_t led, bool value)
 {
-  // if (led>LED_NUM)
-  //   return;
+  if (!block_leds)
+  {
+    if (led>LED_NUM)
+      return;
 
-  // if (led_polarity[led]==LED_POL_NEG)
-  //   value = !value;
-  
-  // if(value)
-  //   GPIO_SetBits(led_port[led], led_pin[led]);
-  // else
-  // GPIO_ResetBits(led_port[led], led_pin[led]); 
+    if (led_polarity[led]==LED_POL_NEG)
+      value = !value;
+    
+    if(value)
+      GPIO_SetBits(led_port[led], led_pin[led]);
+    else
+    GPIO_ResetBits(led_port[led], led_pin[led]); 
+  }
 }
 
 void ledSet_force(led_t led, bool value)
@@ -176,9 +179,11 @@ void ledSetAll_force(void)
   for (i = 0; i < LED_NUM; i++)
   {
     //Turn on the LED:s
-    ledSet(i, 1);
+    ledSet_force(i, 1);
   }
 }
 
-
+PARAM_GROUP_START(led_f405)
+PARAM_ADD(PARAM_UINT8, block_leds, &block_leds)
+PARAM_GROUP_STOP(led_f103)
 

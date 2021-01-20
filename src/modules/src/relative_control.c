@@ -23,9 +23,10 @@
 // static float critical_laser = 0.5; // no laser ranger should ever see lower than this
 // static float critical_laser = 1.0;
 static float desired_velocity = 0.5; // speed in m/s that we aim for
-
 // static int status = 0;
+static bool leds_on = true;
 static bool isInit;
+static bool flash_leds = false;
 static bool onGround = true;
 static bool force_wp = false;
 static bool keepFlying = false;
@@ -78,6 +79,7 @@ static float warning_laser_repulse = 0.594;
 
 static int status = 0;
 static int previous_status = 0;
+static int led_period = 300; //period of leds flashing in ms
 
 static float line_heading = 0.0;
 
@@ -667,6 +669,21 @@ void update_status(void)
   previous_status = status;
 }
 
+void flip_leds(void)
+{
+  if(leds_on)
+  {
+    ledClearAll_force();
+    leds_on = false;
+  }
+  else
+  {
+    ledSetAll_force();
+    leds_on = true;
+  }
+  
+}
+
 void relativeControlTask(void* arg)
 {
   systemWaitStart();
@@ -676,7 +693,8 @@ void relativeControlTask(void* arg)
   float vx = 0.f;
   float vy = 0.f;
   float wp_dist = 0.f;
-
+  uint32_t start_ms = T2M(xTaskGetTickCount());
+  
   getDistances(lasers);
   while(1) {
     vTaskDelay(10);
@@ -686,13 +704,18 @@ void relativeControlTask(void* arg)
     get_all_RS(all_RS);
     update_lowpass(all_RS);
     
+    if( (T2M(xTaskGetTickCount())-start_ms)>led_period && flash_leds)
+    {
+      flip_leds();
+      start_ms = T2M(xTaskGetTickCount());
+    }
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
     // if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
-    ledSetAll_force();
     if(keepFlying){
       // take off
       
       if(onGround){
+        
         xTaskGetTickCount();
         // flyVerticalInterpolated(0.0,height,3000.0f);
         set_voltage_offset();
@@ -713,6 +736,11 @@ void relativeControlTask(void* arg)
       }
       else
       {
+        if( (T2M(xTaskGetTickCount())-start_ms)>led_period && flash_leds)
+        {
+          flip_leds();
+          start_ms = T2M(xTaskGetTickCount());
+        }
         // update all gas readings and agent positions
         get_all_RS(all_RS);
         update_lowpass(all_RS);
@@ -759,6 +787,12 @@ void relativeControlTask(void* arg)
             prev_forced_x = forced_wp_x;
             prev_forced_y = forced_wp_y;
             break;
+          }
+
+          if( (T2M(xTaskGetTickCount())-start_ms)>led_period && flash_leds)
+          {
+            flip_leds();
+            start_ms = T2M(xTaskGetTickCount());
           }
           // update all gas sensors
           get_all_RS(all_RS);
@@ -830,6 +864,7 @@ void relativeControlInit(void)
 
 PARAM_GROUP_START(relative_ctrl)
 PARAM_ADD(PARAM_UINT8, keepFlying, &keepFlying)
+PARAM_ADD(PARAM_UINT8, flash_leds, &flash_leds)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_p, &relaCtrl_p)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_i, &relaCtrl_i)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_d, &relaCtrl_d)
