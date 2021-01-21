@@ -27,6 +27,7 @@ static float desired_velocity = 0.5; // speed in m/s that we aim for
 static bool leds_on = true;
 static bool isInit;
 static bool flash_leds = false;
+static bool green_leds = false;
 static bool onGround = true;
 static bool force_wp = false;
 static bool keepFlying = false;
@@ -684,6 +685,14 @@ void flip_leds(void)
   
 }
 
+void set_green_leds(void)
+{
+  ledClearAll_force();
+  ledSet_force(LED_GREEN_L,1);
+  ledSet_force(LED_GREEN_R,1);
+  ledSet_force(LED_BLUE_L,1);
+}
+
 void relativeControlTask(void* arg)
 {
   systemWaitStart();
@@ -708,6 +717,10 @@ void relativeControlTask(void* arg)
     {
       flip_leds();
       start_ms = T2M(xTaskGetTickCount());
+    }
+    else if (green_leds)
+    {
+      set_green_leds();
     }
     // DEBUG_PRINT("%d %d \n", keepFlying,relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) );
     // if(relativeInfoRead((float_t *)relaVarInCtrl, (float_t *)inputVarInCtrl) && keepFlying){
@@ -740,6 +753,10 @@ void relativeControlTask(void* arg)
         {
           flip_leds();
           start_ms = T2M(xTaskGetTickCount());
+        }
+        else if (green_leds)
+        {
+          set_green_leds();
         }
         // update all gas readings and agent positions
         get_all_RS(all_RS);
@@ -794,6 +811,10 @@ void relativeControlTask(void* arg)
             flip_leds();
             start_ms = T2M(xTaskGetTickCount());
           }
+          else if (green_leds)
+          {
+            set_green_leds();
+          }
           // update all gas sensors
           get_all_RS(all_RS);
           update_lowpass(all_RS);
@@ -823,10 +844,11 @@ void relativeControlTask(void* arg)
             break;
           }          
 
-        setHoverSetpoint(&setpoint,vx,vy,height,0);
-        vTaskDelay(M2T(100));    
-        
-        if (wp_dist < wp_reached_thres || swarm_best.gas_conc > best_seen )
+
+           
+        if(!force_wp)
+        {
+          if (wp_dist < wp_reached_thres || swarm_best.gas_conc > best_seen )
           {
             best_seen = swarm_best.gas_conc;
             setHoverSetpoint(&setpoint,vx,vy,height,0);
@@ -834,7 +856,24 @@ void relativeControlTask(void* arg)
             previous_status = 0;
             break;
           }
+          else
+          {
+            setHoverSetpoint(&setpoint,vx,vy,height,0);
+          } 
         }
+        else if(wp_dist < wp_reached_thres)
+        {
+          setHoverSetpoint(&setpoint,0,0,height,0);
+        }
+        else
+        {
+          setHoverSetpoint(&setpoint,vx,vy,height,0);
+        }
+
+        vTaskDelay(M2T(100)); 
+        
+
+      }
 
         
       } 
@@ -864,6 +903,7 @@ void relativeControlInit(void)
 
 PARAM_GROUP_START(relative_ctrl)
 PARAM_ADD(PARAM_UINT8, keepFlying, &keepFlying)
+PARAM_ADD(PARAM_UINT8, green_leds, &green_leds)
 PARAM_ADD(PARAM_UINT8, flash_leds, &flash_leds)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_p, &relaCtrl_p)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_i, &relaCtrl_i)
