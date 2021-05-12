@@ -302,16 +302,30 @@ static void sensorsTask(void *param)
       {
          processAccScale(accelRaw.x, accelRaw.y, accelRaw.z);
       }
+
+#ifdef IMU_ORIENTATION_mZmYmX // Body +X+Y+Z corresponds to IMU -Z-Y-X
+      /* Gyro */
+      sensorData.gyro.x =  -(gyroRaw.z - gyroBias.z) * SENSORS_BMI088_DEG_PER_LSB_CFG;
+      sensorData.gyro.y =  -(gyroRaw.y - gyroBias.y) * SENSORS_BMI088_DEG_PER_LSB_CFG;
+      sensorData.gyro.z =  -(gyroRaw.x - gyroBias.x) * SENSORS_BMI088_DEG_PER_LSB_CFG;
+      
+      /* Acelerometer */
+      accScaled.x = -accelRaw.z * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
+      accScaled.y = -accelRaw.y * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
+      accScaled.z = -accelRaw.x * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
+#else // Stadard orientation: Body +X+Y+Z corresponds to IMU +X+Y+Z
       /* Gyro */
       sensorData.gyro.x =  (gyroRaw.x - gyroBias.x) * SENSORS_BMI088_DEG_PER_LSB_CFG;
       sensorData.gyro.y =  (gyroRaw.y - gyroBias.y) * SENSORS_BMI088_DEG_PER_LSB_CFG;
       sensorData.gyro.z =  (gyroRaw.z - gyroBias.z) * SENSORS_BMI088_DEG_PER_LSB_CFG;
-      applyAxis3fLpf((lpf2pData*)(&gyroLpf), &sensorData.gyro);
-
+      
       /* Acelerometer */
       accScaled.x = accelRaw.x * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
       accScaled.y = accelRaw.y * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
       accScaled.z = accelRaw.z * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
+#endif      
+      applyAxis3fLpf((lpf2pData*)(&gyroLpf), &sensorData.gyro);
+      
       sensorsAccAlignToGravity(&accScaled, &sensorData.acc);
       applyAxis3fLpf((lpf2pData*)(&accLpf), &sensorData.acc);
     }
