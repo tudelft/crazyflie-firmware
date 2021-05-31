@@ -52,7 +52,7 @@
 
 #ifdef EXTRX_BETA_FPV_RADIO
   // BetaFPV Radio Lite 2
-  #define EXTRX_CH_TRUST     2
+  #define EXTRX_CH_THRUST     2
   #define EXTRX_CH_ROLL      0
   #define EXTRX_CH_PITCH     1
   #define EXTRX_CH_YAW       3
@@ -62,7 +62,7 @@
   #define EXTRX_SIGN_YAW     (-1)
 #else
   // Taranis X-Lite
-  #define EXTRX_CH_TRUST     0
+  #define EXTRX_CH_THRUST     0
   #define EXTRX_CH_ROLL      1
   #define EXTRX_CH_PITCH     2
   #define EXTRX_CH_YAW       3
@@ -124,7 +124,7 @@ static void extRxTask(void *param)
 
 static void extRxDecodeChannels(void)
 {
-  extrxSetpoint.thrust = EXTRX_SCALE_THRUST * cppmConvert2Float(ch[EXTRX_CH_TRUST], 0, 1, 0);
+  extrxSetpoint.thrust = cppmConvert2uint16(ch[EXTRX_CH_THRUST]);
   extrxSetpoint.attitude.roll = EXTRX_SIGN_ROLL * EXTRX_SCALE_ROLL * cppmConvert2Float(ch[EXTRX_CH_ROLL], -1, 1, EXTRX_DEADBAND_ROLL);
   extrxSetpoint.attitude.pitch = EXTRX_SIGN_PITCH * EXTRX_SCALE_PITCH * cppmConvert2Float(ch[EXTRX_CH_PITCH], -1, 1, EXTRX_DEADBAND_PITCH);
   extrxSetpoint.attitudeRate.yaw = EXTRX_SIGN_YAW * EXTRX_SCALE_YAW *cppmConvert2Float(ch[EXTRX_CH_YAW], -1, 1, EXTRX_DEADBAND_YAW);
@@ -203,16 +203,9 @@ LOG_ADD(LOG_UINT16, ch0, &ch[0])
 LOG_ADD(LOG_UINT16, ch1, &ch[1])
 LOG_ADD(LOG_UINT16, ch2, &ch[2])
 LOG_ADD(LOG_UINT16, ch3, &ch[3])
-LOG_ADD(LOG_UINT16, ch4, &ch[4])
-LOG_ADD(LOG_UINT16, ch5, &ch[5])
-LOG_ADD(LOG_UINT16, ch6, &ch[6])
-LOG_ADD(LOG_UINT16, ch7, &ch[7])
-LOG_GROUP_STOP(extrx)
-
-LOG_GROUP_START(extrx_cmd)
-LOG_ADD(LOG_UINT16, thrust, &extrxSetpoint.thrust)
+LOG_ADD(LOG_FLOAT, thrust, &extrxSetpoint.thrust)
 LOG_ADD(LOG_FLOAT, roll, &extrxSetpoint.attitude.roll)
 LOG_ADD(LOG_FLOAT, pitch, &extrxSetpoint.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &extrxSetpoint.attitude.yaw)
-LOG_GROUP_STOP(extrx_cmd)
+LOG_GROUP_STOP(extrx)
 #endif
