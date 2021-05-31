@@ -2,61 +2,24 @@
 ###################################################
 
 ## Setup for Bolt
-# DEFAULT_ESTIMATOR = complementary # use for RC flying
-# DEFAULT_ESTIMATOR = kalman # only works when positioning system is available
 POWER_DISTRIBUTION = nimble_FD_PCB
 
-# CFLAGS += -DPOWER_MOTORS_AT_STARTUP
+CFLAGS += -DIMU_ORIENTATION_mZmYmX
 
 CFLAGS += -DMOTOR_M2_NEUTRAL=32767 # pitch servo
 CFLAGS += -DMOTOR_M3_NEUTRAL=32767 # yaw servo
 
 # CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
+
 CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck
 # CFLAGS += -DEXTRX_BETA_FPV_RADIO # channel mapping for BetaFPV Radio Lite 2
 
-# CFLAGS += -DDECK_FORCE=bcUSD:bcLedRing # force the SD card deck and the LED Ring deck
+# CFLAGS += -DDECK_FORCE=bcLedRing
 # CFLAGS += -DTURN_OFF_LED
 # CFLAGS += -DLEDRING_DEFAULT_EFFECT=19
 # CFLAGS += -DLED_RING_NBR_LEDS=20
-# CFLAGS += -DDECK_FORCE=bcLedRing
 
-#################################################
-## Setup for Roadrunner
-# PLATFORM = tag
-# POWER_DISTRIBUTION = nimble_roadrunner
-
-# # Disable UWB 
-# DEFAULT_ESTIMATOR = complementary
-# CFLAGS += -DDISABLE_LOCO_DECK
-# CFLAGS += -DDECK_FORCE=bcBigQuad
-# CFLAGS += -DENABLE_BQ_DECK
-
-# # Enable UWB
-# DEFAULT_ESTIMATOR = kalman
-# # CFLAGS += -DDECK_FORCE=bcBigQuad:bcDWM1000
-# CFLAGS += -DDECK_FORCE=bcBigQuad:bcDWM1000:bcUSD
-# CFLAGS += -DENABLE_BQ_DECK
-
-# CFLAGS += -DTURN_OFF_LED
-# CFLAGS += -DLEDRING_DEFAULT_EFFECT=1
-# CFLAGS += -DLED_RING_NBR_LEDS=9
-# CFLAGS += -DDECK_FORCE=bcLedRing
-
-###############################################
-
-# ## Setup for CF2 (for debugging only)
-# PLATFORM = cf2
-# # DEFAULT_ESTIMATOR = complementary
-# DEFAULT_ESTIMATOR = kalman
-# POWER_DISTRIBUTION = stock
-
-# # CFLAGS += -DUSDDECK_USE_ALT_PINS_AND_SPI # enables SD card on alternate pins
-# # CFLAGS += -DLOCODECK_USE_ALT_PINS # use alternate pins for PATCHED Loco Deck (to enable simultaneous SD card logging)
-# # CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
-# # CFLAGS += -DDECK_FORCE=bcBigQuad:bcUSD # force the SD card deck & BigQuad deck
-# CFLAGS += -DDECK_FORCE=bcBigQuad
-# CFLAGS += -DENABLE_BQ_DECK
+# CFLAGS += -DDECK_FORCE=bcUSD:bcLedRing # force the SD card deck and the LED Ring deck
 
 ###############################################
 
