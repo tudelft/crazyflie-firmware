@@ -61,6 +61,19 @@ const uint32_t MOTORS[] = { MOTOR_M1, MOTOR_M2, MOTOR_M3, MOTOR_M4 };
 
 const uint16_t testsound[NBR_OF_MOTORS] = {A4, A5, F5, D5 };
 
+#ifndef MOTOR_M1_NEUTRAL
+  #define MOTOR_M1_NEUTRAL 0
+#endif
+#ifndef MOTOR_M2_NEUTRAL
+  #define MOTOR_M2_NEUTRAL 0
+#endif
+#ifndef MOTOR_M3_NEUTRAL
+  #define MOTOR_M3_NEUTRAL 0
+#endif
+#ifndef MOTOR_M4_NEUTRAL
+  #define MOTOR_M4_NEUTRAL 0
+#endif
+
 static bool isInit = false;
 
 /* Private functions */
@@ -169,10 +182,10 @@ void motorsInit(const MotorPerifDef** motorMapSelect)
   isInit = true;
 
   // Output zero power
-  motorsSetRatio(MOTOR_M1, 0);
-  motorsSetRatio(MOTOR_M2, 0);
-  motorsSetRatio(MOTOR_M3, 0);
-  motorsSetRatio(MOTOR_M4, 0);
+  motorsSetRatio(MOTOR_M1, MOTOR_M1_NEUTRAL);
+  motorsSetRatio(MOTOR_M2, MOTOR_M2_NEUTRAL);
+  motorsSetRatio(MOTOR_M3, MOTOR_M3_NEUTRAL);
+  motorsSetRatio(MOTOR_M4, MOTOR_M4_NEUTRAL);
 }
 
 void motorsDeInit(const MotorPerifDef** motorMapSelect)
