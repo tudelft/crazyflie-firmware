@@ -45,9 +45,9 @@
 #define PID_YAW_RATE_KD  0.0
 #define PID_YAW_RATE_INTEGRATION_LIMIT     166.7
 
-#define PID_ROLL_KP  15.0
+#define PID_ROLL_KP  10.0
 #define PID_ROLL_KI  0.0
-#define PID_ROLL_KD  1.0
+#define PID_ROLL_KD  0.2
 #define PID_ROLL_INTEGRATION_LIMIT    20.0
 
 #define PID_PITCH_KP  13.0

@@ -64,9 +64,9 @@ struct this_s {
 };
 
 // Maximum roll/pitch angle permited
-static float rpLimit  = 30; // global control
-static float rLimit  = 30; // in-body control
-static float pLimit  = 30;
+static float rpLimit  = 45; // global control
+static float rLimit  = 45; // in-body control
+static float pLimit  = 45;
 static float rpLimitOverhead = 1.10f;
 // Velocity maximums
 static float xyVelMax = 1.0f; // global control
@@ -78,7 +78,7 @@ static float velMaxOverhead = 1.10f;
 static const float thrustScale = 1000.0f;
 
 static float kFFx = 10.0; // feedforward term for x direction [deg / m/s]
-static float kFFy = 10.0; // feedforward term for x direction [deg / m/s]
+static float kFFy = 5.0; // feedforward term for x direction [deg / m/s]
 
 float bank_roll = 0.0f; // for logging & debugging
 float bank_pitch = 0.0f;
@@ -116,60 +116,60 @@ float velZFiltCutoff = ZVELOCITY_LPF_CUTOFF_FREQ;
 static struct this_s this = {
   .pidVX = {
     .init = {
-      .kp = 0.0f,
+      .kp = 15.0f,
       .ki = 0.0f,
-      .kd = 0.0f,
+      .kd = 1.0f,
     },
     .pid.dt = DT,
   },
 
   .pidVY = {
     .init = {
-      .kp = 0.0f,
+      .kp = 15.0f,
       .ki = 0.0f,
-      .kd = 0.0f,
+      .kd = 1.0f,
     },
     .pid.dt = DT,
   },
 
   .pidVZ = {
     .init = {
-      .kp = 0,
-      .ki = 0,
-      .kd = 0,
+      .kp = 12.5f,
+      .ki = 0.5f,
+      .kd = 0.0f,
     },
     .pid.dt = DT,
   },
 
   .pidX = {
     .init = {
-      .kp = 32.0f,
-      .ki = 0,
-      .kd = 8.0f,
+      .kp = 1.5f,
+      .ki = 0.0f,
+      .kd = 0.0f,
     },
     .pid.dt = DT,
   },
 
   .pidY = {
     .init = {
-      .kp = 17.0f,
-      .ki = 0,
-      .kd = 10.0f,
+      .kp = 1.5f,
+      .ki = 0.0f,
+      .kd = 0.0f,
     },
     .pid.dt = DT,
   },
 
   .pidZ = {
     .init = {
-      .kp = 62.5f,
-      .ki = 6.0f,
-      .kd = 12.5f,
+      .kp = 5.0f,
+      .ki = 0.5f,
+      .kd = 0.0f,
     },
     .pid.dt = DT,
   },
 
-  .thrustBase = 27000,
-  .thrustMin  = 15000,
+  .thrustBase = 40000,
+  .thrustMin  = 20000,
 };
 #endif
 

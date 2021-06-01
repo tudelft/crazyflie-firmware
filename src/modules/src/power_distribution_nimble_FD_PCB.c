@@ -86,10 +86,10 @@ void powerDistributionInit(void)
   servoTrims.pitch = -0.05;
   servoTrims.yaw = 0.125;
 
-  // "Remco" Flapper #05
-  servoTrims.roll = 0.0;
-  servoTrims.pitch = -0.05;
-  servoTrims.yaw = 0.1;
+  // // "Remco" Flapper #05
+  // servoTrims.roll = 0.0;
+  // servoTrims.pitch = -0.05;
+  // servoTrims.yaw = 0.1;
 
   // // values used for MAVLab order: #10, #14, #18
   // servoTrims.roll = 0.0;
