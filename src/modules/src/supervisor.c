@@ -35,7 +35,7 @@
 #include "supervisor.h"
 
 /* Minimum summed motor PWM that means we are flying */
-#define SUPERVISOR_FLIGHT_THRESHOLD 1000
+#define SUPERVISOR_FLIGHT_THRESHOLD 500
 
 /* Number of times in a row we need to see a condition before acting upon it */
 #define SUPERVISOR_HYSTERESIS_THRESHOLD 30
@@ -103,7 +103,7 @@ static bool isTumbledCheck(const sensorData_t *data)
   // We need a SUPERVISOR_HYSTERESIS_THRESHOLD amount of readings that indicate
   // that we are tumbled before we act on it. This is to reduce false positives.
   //
-  if (-data->acc.x <= tolerance) {
+  if (data->acc.z <= tolerance) {
     hysteresis++;
     if (hysteresis > SUPERVISOR_HYSTERESIS_THRESHOLD) {
       return true;
