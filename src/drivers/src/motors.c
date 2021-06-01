@@ -80,12 +80,12 @@ static bool isInit = false;
 
 static uint16_t motorsBLConvBitsTo16(uint16_t bits)
 {
-  return (0xFFFF * (bits - MOTORS_BL_PWM_CNT_FOR_HIGH) / MOTORS_BL_PWM_CNT_FOR_HIGH);
+  return (0xFFFF * (bits - MOTORS_BL_PWM_CNT_FOR_HIGH_ZERO) / MOTORS_BL_PWM_CNT_FOR_HIGH_STROKE);
 }
 
 static uint16_t motorsBLConv16ToBits(uint16_t bits)
 {
-  return (MOTORS_BL_PWM_CNT_FOR_HIGH + ((bits * MOTORS_BL_PWM_CNT_FOR_HIGH) / 0xFFFF));
+  return (MOTORS_BL_PWM_CNT_FOR_HIGH_ZERO + ((bits * MOTORS_BL_PWM_CNT_FOR_HIGH_STROKE) / 0xFFFF));
 }
 
 static uint16_t motorsConvBitsTo16(uint16_t bits)
@@ -118,6 +118,10 @@ void motorsInit(const MotorPerifDef** motorMapSelect)
   motorMap = motorMapSelect;
 
   DEBUG_PRINT("Using %s motor driver\n", motorMap[0]->drvType == BRUSHED ? "brushed" : "brushless");
+  #ifdef ENABLE_PWM_EXTENDED
+    DEBUG_PRINT("Using PWM EXTENDED motor driver\n");
+  #endif
+
 
   for (i = 0; i < NBR_OF_MOTORS; i++)
   {

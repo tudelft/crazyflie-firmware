@@ -72,9 +72,9 @@
   #define EXTRX_SIGN_YAW     (-1)
 #endif
 
-#define EXTRX_SCALE_ROLL   (44.0f)
+#define EXTRX_SCALE_ROLL   (45.0f)
 #define EXTRX_SCALE_PITCH  (60.0f)
-#define EXTRX_SCALE_YAW    (100.0f)
+#define EXTRX_SCALE_YAW    (200.0f)
 #define EXTRX_SCALE_THRUST   (65535.0f)
 
 #define EXTRX_DEADBAND_ROLL (0.05f)

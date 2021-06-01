@@ -61,6 +61,17 @@ static struct {
 
 static uint16_t act_max = 32767;
 
+#ifdef ENABLE_PWM_EXTENDED
+  static uint16_t motor_zero = 9362; // for extended PWM (stroke = 1.4 ms): motor_min = act_max - act_max/1.4
+  static float pwm_extended_ratio = 1.4;
+  static float pitch_ampl = 0.4f/1.4f; // 1 = full servo stroke
+#else
+  static uint16_t motor_zero = 0; // for extended PWM (stroke = 1.4 ms): motor_min = act_max - act_max/1.4
+  static float pwm_extended_ratio = 1.0;
+  static float pitch_ampl = 0.4f; // 1 = full servo stroke
+#endif
+
+
 void powerDistributionInit(void)
 
 {
@@ -156,13 +167,11 @@ void powerStop()
 
 void powerDistribution(const control_t *control)
 {
-  static float pitch_ampl = 0.4; // 1 = full servo stroke
-  
   motorPower.m2 = limitThrust(MOTOR_M2_NEUTRAL + servoTrims.pitch*act_max + pitch_ampl*control->pitch); // pitch servo
   motorPower.m3 = limitThrust(MOTOR_M3_NEUTRAL + servoTrims.yaw*act_max - control->yaw); // yaw servo
   
-  motorPower.m1 = limitThrust( 0.5f * control->roll + control->thrust * (1 + servoTrims.roll) ); // left motor
-  motorPower.m4 = limitThrust(-0.5f * control->roll + control->thrust * (1 - servoTrims.roll) ); // right motor
+  motorPower.m1 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust( 0.5f * control->roll + control->thrust * (1 + servoTrims.roll) ); // left motor
+  motorPower.m4 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust(-0.5f * control->roll + control->thrust * (1 - servoTrims.roll) ); // right motor
 
   if (motorSetEnable)
   {
