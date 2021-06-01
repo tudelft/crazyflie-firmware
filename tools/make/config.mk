@@ -9,9 +9,9 @@ CFLAGS += -DIMU_ORIENTATION_mZmYmX
 CFLAGS += -DMOTOR_M2_NEUTRAL=32767 # pitch servo
 CFLAGS += -DMOTOR_M3_NEUTRAL=32767 # yaw servo
 
-# CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
+CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
 
-CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck
+# CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck
 # CFLAGS += -DEXTRX_BETA_FPV_RADIO # channel mapping for BetaFPV Radio Lite 2
 
 # CFLAGS += -DDECK_FORCE=bcLedRing

@@ -81,9 +81,15 @@ void powerDistributionInit(void)
   motorsInit(platformConfigGetMotorMapping());
   DEBUG_PRINT("Using Flapper Drone power distribution\n");
   
+  // "Demo" Insect Flapper #02
   servoTrims.roll = 0.0;
-  servoTrims.pitch = 0.0;
-  servoTrims.yaw = 0.0;
+  servoTrims.pitch = -0.05;
+  servoTrims.yaw = 0.125;
+
+  // "Remco" Flapper #05
+  servoTrims.roll = 0.0;
+  servoTrims.pitch = 0.1;
+  servoTrims.yaw = 0.1;
 
   // // values used for MAVLab order: #10, #14, #18
   // servoTrims.roll = 0.0;
