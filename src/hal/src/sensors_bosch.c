@@ -122,6 +122,13 @@
 #define SENSORS_BMM150          0x08
 #define SENSORS_BMP280          0x10
 
+#ifndef SENSORS_ACC_ALIGNMENT_PITCH
+  #define SENSORS_ACC_ALIGNMENT_PITCH 0.0f
+#endif
+#ifndef SENSORS_ACC_ALIGNMENT_ROLL
+  #define SENSORS_ACC_ALIGNMENT_ROLL 0.0f
+#endif
+
 /* configure sensor's use
  * PRIMARIES are the sensors which are used for stabilization
  * SECONDARIES are only added to the log if compilations is
@@ -378,10 +385,10 @@ static void sensorsDeviceInit(void)
   varianceSampleTime = -GYRO_MIN_BIAS_TIMEOUT_MS + 1;
   sensorsAccLpfAttFactor = IMU_ACC_IIR_LPF_ATT_FACTOR;
 
-  cosPitch = cosf(configblockGetCalibPitch() * (float) M_PI / 180);
-  sinPitch = sinf(configblockGetCalibPitch() * (float) M_PI / 180);
-  cosRoll = cosf(configblockGetCalibRoll() * (float) M_PI / 180);
-  sinRoll = sinf(configblockGetCalibRoll() * (float) M_PI / 180);
+  cosPitch = cosf(SENSORS_ACC_ALIGNMENT_PITCH * (float) M_PI/180);
+  sinPitch = sinf(SENSORS_ACC_ALIGNMENT_PITCH * (float) M_PI/180);
+  cosRoll = cosf(SENSORS_ACC_ALIGNMENT_ROLL * (float) M_PI/180);
+  sinRoll = sinf(SENSORS_ACC_ALIGNMENT_ROLL * (float) M_PI/180);
 }
 
 static void sensorsTaskInit(void)

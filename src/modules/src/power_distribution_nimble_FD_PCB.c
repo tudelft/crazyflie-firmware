@@ -92,10 +92,15 @@ void powerDistributionInit(void)
   motorsInit(platformConfigGetMotorMapping());
   DEBUG_PRINT("Using Flapper Drone power distribution\n");
   
-  // "Demo" Insect Flapper #02
-  servoTrims.roll = 0.0;
-  servoTrims.pitch = -0.05;
-  servoTrims.yaw = 0.125;
+  // Reading out servo trims stored in EEPROM
+  servoTrims.pitch = configblockGetCalibPitch()/10;
+  servoTrims.yaw = configblockGetCalibRoll()/10; // This is intentional, not a typo (reusing EEPROM memory meant of accelerometer alignment)
+  servoTrims.roll = 0;
+  
+  // // "Demo" Insect Flapper #02
+  // servoTrims.roll = 0.0;
+  // servoTrims.pitch = -0.05;
+  // servoTrims.yaw = 0.125;
 
   // // "Remco" Flapper #05
   // servoTrims.roll = 0.0;
@@ -141,8 +146,6 @@ void powerDistributionInit(void)
   // servoTrims.roll = 0.0;
   // servoTrims.pitch = -0.22;
   // servoTrims.yaw = 0.1;
-
-  // servoTrims.pitch = configblockGetCalibPitch()/10;
 
 }
 
