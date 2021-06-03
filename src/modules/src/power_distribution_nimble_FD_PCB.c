@@ -94,8 +94,8 @@ void powerDistributionInit(void)
   
   // Reading out servo trims stored in EEPROM
   servoTrims.pitch = configblockGetCalibPitch()/10;
-  servoTrims.yaw = configblockGetCalibRoll()/10; // This is intentional, not a typo (reusing EEPROM memory meant of accelerometer alignment)
-  servoTrims.roll = 0;
+  servoTrims.yaw = configblockGetCalibYaw()/10;
+  servoTrims.roll = configblockGetCalibRoll()/10;
   
   // // "Demo" Insect Flapper #02
   // servoTrims.roll = 0.0;

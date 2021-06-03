@@ -40,5 +40,6 @@ uint64_t configblockGetRadioAddress(void);
 
 float configblockGetCalibPitch(void);
 float configblockGetCalibRoll(void);
+float configblockGetCalibYaw(void);
 
 #endif //__CONFIGBLOCK_H__
