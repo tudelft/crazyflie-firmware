@@ -40,6 +40,8 @@ uint64_t configblockGetRadioAddress(void);
 
 float configblockGetCalibPitch(void);
 float configblockGetCalibRoll(void);
-float configblockGetCalibYaw(void);
+uint8_t configblockGetServoNeutralPitch(void);
+uint8_t configblockGetServoNeutralYaw(void);
+int8_t configblockGetMotorBiasRoll(void);
 
 #endif //__CONFIGBLOCK_H__

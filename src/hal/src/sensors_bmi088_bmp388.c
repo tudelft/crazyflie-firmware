@@ -88,13 +88,6 @@
 
 #define SENSORS_ACC_SCALE_SAMPLES  200
 
-#ifndef SENSORS_ACC_ALIGNMENT_PITCH
-  #define SENSORS_ACC_ALIGNMENT_PITCH 0.0f
-#endif
-#ifndef SENSORS_ACC_ALIGNMENT_ROLL
-  #define SENSORS_ACC_ALIGNMENT_ROLL 0.0f
-#endif
-
 typedef struct
 {
   Axis3f     bias;
@@ -518,11 +511,11 @@ static void sensorsDeviceInit(void)
     lpf2pInit(&accLpf[i],  1000, ACCEL_LPF_CUTOFF_FREQ);
   }
 
-  cosPitch = cosf(SENSORS_ACC_ALIGNMENT_PITCH * (float) M_PI/180);
-  sinPitch = sinf(SENSORS_ACC_ALIGNMENT_PITCH * (float) M_PI/180);
-  cosRoll = cosf(SENSORS_ACC_ALIGNMENT_ROLL * (float) M_PI/180);
-  sinRoll = sinf(SENSORS_ACC_ALIGNMENT_ROLL * (float) M_PI/180);
-
+  cosPitch = cosf(configblockGetCalibPitch() * (float) M_PI / 180);
+  sinPitch = sinf(configblockGetCalibPitch() * (float) M_PI / 180);
+  cosRoll = cosf(configblockGetCalibRoll() * (float) M_PI / 180);
+  sinRoll = sinf(configblockGetCalibRoll() * (float) M_PI / 180);
+  
   isInit = true;
 }
 

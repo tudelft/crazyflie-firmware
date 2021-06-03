@@ -93,13 +93,6 @@
 #define GYRO_VARIANCE_THRESHOLD_Y   (GYRO_VARIANCE_BASE)
 #define GYRO_VARIANCE_THRESHOLD_Z   (GYRO_VARIANCE_BASE)
 
-#ifndef SENSORS_ACC_ALIGNMENT_PITCH
-  #define SENSORS_ACC_ALIGNMENT_PITCH 0.0f
-#endif
-#ifndef SENSORS_ACC_ALIGNMENT_ROLL
-  #define SENSORS_ACC_ALIGNMENT_ROLL 0.0f
-#endif
-
 typedef struct
 {
   Axis3f     bias;
@@ -425,10 +418,10 @@ static void sensorsDeviceInit(void)
   }
 #endif
 
-  cosPitch = cosf(SENSORS_ACC_ALIGNMENT_PITCH * (float) M_PI/180);
-  sinPitch = sinf(SENSORS_ACC_ALIGNMENT_PITCH * (float) M_PI/180);
-  cosRoll = cosf(SENSORS_ACC_ALIGNMENT_ROLL * (float) M_PI/180);
-  sinRoll = sinf(SENSORS_ACC_ALIGNMENT_ROLL * (float) M_PI/180);
+  cosPitch = cosf(configblockGetCalibPitch() * (float) M_PI / 180);
+  sinPitch = sinf(configblockGetCalibPitch() * (float) M_PI / 180);
+  cosRoll = cosf(configblockGetCalibRoll() * (float) M_PI / 180);
+  sinRoll = sinf(configblockGetCalibRoll() * (float) M_PI / 180);
 }
 
 

@@ -54,19 +54,20 @@ static struct {
 } motorPowerSet;
 
 static struct {
-  float roll;
-  float pitch;
-  float yaw;
-} servoTrims;
+  uint8_t pitchServoNeutral;
+  uint8_t yawServoNeutral;
+  int8_t rollBias;
+} flapperConfig;
 
-static uint16_t act_max = 32767;
+// static uint16_t act_max = 32767;
+static uint16_t act_max = 65535;
 
 #ifdef ENABLE_PWM_EXTENDED
-  static uint16_t motor_zero = 9362; // for extended PWM (stroke = 1.4 ms): motor_min = act_max - act_max/1.4
+  static uint16_t motor_zero = 9362; // for extended PWM (stroke = 1.4 ms): motor_min = (act_max - act_max/1.4)/2
   static float pwm_extended_ratio = 1.4;
   static float pitch_ampl = 0.4f/1.4f; // 1 = full servo stroke
 #else
-  static uint16_t motor_zero = 0; // for extended PWM (stroke = 1.4 ms): motor_min = act_max - act_max/1.4
+  static uint16_t motor_zero = 0;
   static float pwm_extended_ratio = 1.0;
   static float pitch_ampl = 0.4f; // 1 = full servo stroke
 #endif
@@ -93,9 +94,9 @@ void powerDistributionInit(void)
   DEBUG_PRINT("Using Flapper Drone power distribution\n");
   
   // Reading out servo trims stored in EEPROM
-  servoTrims.pitch = configblockGetCalibPitch()/10;
-  servoTrims.yaw = configblockGetCalibYaw()/10;
-  servoTrims.roll = configblockGetCalibRoll()/10;
+  flapperConfig.pitchServoNeutral = configblockGetServoNeutralPitch();
+  flapperConfig.yawServoNeutral = configblockGetServoNeutralYaw();
+  flapperConfig.rollBias = configblockGetMotorBiasRoll();
   
   // // "Demo" Insect Flapper #02
   // servoTrims.roll = 0.0;
@@ -163,18 +164,17 @@ bool powerDistributionTest(void)
 void powerStop()
 {
   motorsSetRatio(MOTOR_M1, MOTOR_M1_NEUTRAL);
-  motorsSetRatio(MOTOR_M2, MOTOR_M2_NEUTRAL + servoTrims.pitch*act_max);
-  motorsSetRatio(MOTOR_M3, MOTOR_M3_NEUTRAL + servoTrims.yaw*act_max);
+  motorsSetRatio(MOTOR_M2, limitThrust(flapperConfig.pitchServoNeutral*act_max/100.0f));
+  motorsSetRatio(MOTOR_M3, limitThrust(flapperConfig.yawServoNeutral*act_max/100.0f));
   motorsSetRatio(MOTOR_M4, MOTOR_M4_NEUTRAL);
 }
 
 void powerDistribution(const control_t *control)
 {
-  motorPower.m2 = limitThrust(MOTOR_M2_NEUTRAL + servoTrims.pitch*act_max + pitch_ampl*control->pitch); // pitch servo
-  motorPower.m3 = limitThrust(MOTOR_M3_NEUTRAL + servoTrims.yaw*act_max - control->yaw); // yaw servo
-  
-  motorPower.m1 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust( 0.5f * control->roll + control->thrust * (1 + servoTrims.roll) ); // left motor
-  motorPower.m4 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust(-0.5f * control->roll + control->thrust * (1 - servoTrims.roll) ); // right motor
+  motorPower.m2 = limitThrust(flapperConfig.pitchServoNeutral*act_max/100.0f + pitch_ampl*control->pitch); // pitch servo
+  motorPower.m3 = limitThrust(flapperConfig.yawServoNeutral*act_max/100.0f - control->yaw); // yaw servo
+  motorPower.m1 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust( 0.5f * control->roll + control->thrust * (1.0f + flapperConfig.rollBias/100.0f) ); // left motor
+  motorPower.m4 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust(-0.5f * control->roll + control->thrust * (1.0f - flapperConfig.rollBias/100.0f) ); // right motor
 
   if (motorSetEnable)
   {
@@ -200,11 +200,12 @@ PARAM_ADD(PARAM_UINT16, m3, &motorPowerSet.m3)
 PARAM_ADD(PARAM_UINT16, m4, &motorPowerSet.m4)
 PARAM_GROUP_STOP(motorPowerSet)
 
-PARAM_GROUP_START(_servoTrims)
-PARAM_ADD(PARAM_FLOAT, rollTrim, &servoTrims.roll)
-PARAM_ADD(PARAM_FLOAT, pitchTrim, &servoTrims.pitch)
-PARAM_ADD(PARAM_FLOAT, yawTrim, &servoTrims.yaw)
-PARAM_GROUP_STOP(servoTrims)
+PARAM_GROUP_START(_flapper)
+// PARAM_ADD(PARAM_UINT8, enable, &motorSetEnable)
+PARAM_ADD(PARAM_INT8, motBiasRoll, &flapperConfig.rollBias)
+PARAM_ADD(PARAM_UINT8, servPitchNeutr, &flapperConfig.pitchServoNeutral)
+PARAM_ADD(PARAM_UINT8, servYawNeutr, &flapperConfig.yawServoNeutral)
+PARAM_GROUP_STOP(_flapper)
 
 LOG_GROUP_START(motor)
 LOG_ADD(LOG_UINT32, m1, &motorPower.m1)

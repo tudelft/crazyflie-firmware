@@ -83,14 +83,16 @@ struct configblock_v2_s {
   uint8_t radioSpeed;
   float calibPitch;
   float calibRoll;
-  float calibYaw;
+  uint8_t servoNeutralPitch;
+  uint8_t servoNeutralYaw;
+  int8_t motorBiasRoll;
   uint8_t radioAddress_upper;
   uint32_t radioAddress_lower;
   /* Simple modulo 256 checksum */
   uint8_t cksum;
 } __attribute__((__packed__));
 
-// Set Flapper version as current version
+// Set version 2 as current version
 typedef struct configblock_v2_s configblock_t;
 
 static configblock_t configblock;
@@ -102,7 +104,9 @@ static configblock_t configblockDefault =
     .radioSpeed = RADIO_DATARATE,
     .calibPitch = 0.0,
     .calibRoll = 0.0,
-    .calibYaw = 0.0,
+    .servoNeutralPitch = 50,
+    .servoNeutralYaw = 50,
+    .motorBiasRoll = 0,
     .radioAddress_upper = ((uint64_t)RADIO_ADDRESS >> 32),
     .radioAddress_lower = (RADIO_ADDRESS & 0xFFFFFFFFULL),
 };
@@ -336,10 +340,26 @@ float configblockGetCalibRoll(void)
     return 0;
 }
 
-float configblockGetCalibYaw(void)
+uint8_t configblockGetServoNeutralPitch(void)
 {
   if (cb_ok)
-    return configblock.calibYaw;
+    return configblock.servoNeutralPitch;
+  else
+    return 50;
+}
+
+uint8_t configblockGetServoNeutralYaw(void)
+{
+  if (cb_ok)
+    return configblock.servoNeutralYaw;
+  else
+    return 50;
+}
+
+int8_t configblockGetMotorBiasRoll(void)
+{
+  if (cb_ok)
+    return configblock.motorBiasRoll;
   else
     return 0;
 }
