@@ -49,11 +49,6 @@
 
 #define EXTRX_NR_CHANNELS  8
 
-#define EXTRX_CH_TRUST     2
-#define EXTRX_CH_ROLL      0
-#define EXTRX_CH_PITCH     1
-#define EXTRX_CH_YAW       3
-
 #ifdef EXTRX_BETA_FPV_RADIO
   // BetaFPV Radio Lite 2
   #define EXTRX_CH_THRUST     2

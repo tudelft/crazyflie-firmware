@@ -552,7 +552,7 @@ PARAM_ADD(PARAM_FLOAT, vzKd, &this.pidVZ.pid.kd)
  * @brief Feed-forward gain for the velocity PID in the body X direction
  */
 PARAM_ADD(PARAM_FLOAT, vxKFF, &kFFx)
-P**
+/**
  * @brief Feed-forward gain for the velocity PID in the body Y direction
  */
 PARAM_ADD(PARAM_FLOAT, vyKFF, &kFFy)

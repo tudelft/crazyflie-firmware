@@ -321,16 +321,16 @@ static void sensorsTask(void *param)
       sensorData.gyro.y =  (gyroRaw.y - gyroBias.y) * SENSORS_BMI088_DEG_PER_LSB_CFG;
       sensorData.gyro.z =  (gyroRaw.z - gyroBias.z) * SENSORS_BMI088_DEG_PER_LSB_CFG;
 
-      measurement.type = MeasurementTypeGyroscope;
-      measurement.data.gyroscope.gyro = sensorData.gyro;
-      estimatorEnqueue(&measurement);
-
       /* Accelerometer */
       accScaled.x = accelRaw.x * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
       accScaled.y = accelRaw.y * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
       accScaled.z = accelRaw.z * SENSORS_BMI088_G_PER_LSB_CFG / accScale;
 #endif      
       applyAxis3fLpf((lpf2pData*)(&gyroLpf), &sensorData.gyro);
+      
+      measurement.type = MeasurementTypeGyroscope;
+      measurement.data.gyroscope.gyro = sensorData.gyro;
+      estimatorEnqueue(&measurement);
       
       sensorsAccAlignToGravity(&accScaled, &sensorData.acc);
       applyAxis3fLpf((lpf2pData*)(&accLpf), &sensorData.acc);
