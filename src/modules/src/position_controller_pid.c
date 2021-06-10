@@ -405,103 +405,245 @@ void positionControllerResetAllPID()
 
 LOG_GROUP_START(posCtl)
 
-// LOG_ADD(LOG_FLOAT, targetVX, &this.pidVX.pid.desired)
-// LOG_ADD(LOG_FLOAT, targetVY, &this.pidVY.pid.desired)
+/**
+ * @brief PID controller target desired velocity x [m/s]
+ * Note: Same as stabilizer log
+ */
+LOG_ADD(LOG_FLOAT, targetVX, &setpointvx)
+/**
+ * @brief PID controller target desired velocity y [m/s]
+ * Note: Same as stabilizer log
+ */
+LOG_ADD(LOG_FLOAT, targetVY, &setpointvy)
+/**
+ * @brief PID controller target desired velocity z [m/s]
+ * Note: Same as stabilizer log
+ */
 LOG_ADD(LOG_FLOAT, targetVZ, &this.pidVZ.pid.desired)
-
-// LOG_ADD(LOG_FLOAT, targetX, &this.pidX.pid.desired)
-// LOG_ADD(LOG_FLOAT, targetY, &this.pidY.pid.desired)
+/**
+ * @brief PID controller target desired position x [m]
+ * Note: Same as stabilizer log
+ */
+LOG_ADD(LOG_FLOAT, targetX, &setpointx)
+/**
+ * @brief PID controller target desired position y [m]
+ * Note: Same as stabilizer log
+ */
+LOG_ADD(LOG_FLOAT, targetY, &setpointy)
+/**
+ * @brief PID controller target desired position z [m]
+ * Note: Same as stabilizer log
+ */
 LOG_ADD(LOG_FLOAT, targetZ, &this.pidZ.pid.desired)
 
-LOG_ADD(LOG_FLOAT, targetVX, &setpointvx)
-LOG_ADD(LOG_FLOAT, targetVY, &setpointvy)
-
-LOG_ADD(LOG_FLOAT, targetX, &setpointx)
-LOG_ADD(LOG_FLOAT, targetY, &setpointy)
-
+/**
+ * @brief PID proportional output position x
+ */
 LOG_ADD(LOG_FLOAT, Xp, &this.pidX.pid.outP)
+/**
+ * @brief PID Integral output position x
+ */
 LOG_ADD(LOG_FLOAT, Xi, &this.pidX.pid.outI)
+/**
+ * @brief PID Derivative output position x
+ */
 LOG_ADD(LOG_FLOAT, Xd, &this.pidX.pid.outD)
 
+/**
+ * @brief PID proportional output position y
+ */
 LOG_ADD(LOG_FLOAT, Yp, &this.pidY.pid.outP)
+/**
+ * @brief PID Integral output position y
+ */
 LOG_ADD(LOG_FLOAT, Yi, &this.pidY.pid.outI)
+/**
+ * @brief PID Derivative output position y
+ */
 LOG_ADD(LOG_FLOAT, Yd, &this.pidY.pid.outD)
 
+/**
+ * @brief PID proportional output position z
+ */
 LOG_ADD(LOG_FLOAT, Zp, &this.pidZ.pid.outP)
+/**
+ * @brief PID Integral output position z
+ */
 LOG_ADD(LOG_FLOAT, Zi, &this.pidZ.pid.outI)
+/**
+ * @brief PID derivative output position z
+ */
 LOG_ADD(LOG_FLOAT, Zd, &this.pidZ.pid.outD)
 
+/**
+ * @brief PID proportional output velocity x
+ */
 LOG_ADD(LOG_FLOAT, VXp, &this.pidVX.pid.outP)
+/**
+ * @brief PID integral output velocity x
+ */
 LOG_ADD(LOG_FLOAT, VXi, &this.pidVX.pid.outI)
+/**
+ * @brief PID derivative output velocity x
+ */
 LOG_ADD(LOG_FLOAT, VXd, &this.pidVX.pid.outD)
 
+/**
+ * @brief PID proportional output velocity z
+ */
 LOG_ADD(LOG_FLOAT, VZp, &this.pidVZ.pid.outP)
+/**
+ * @brief PID integral output velocity z
+ */
 LOG_ADD(LOG_FLOAT, VZi, &this.pidVZ.pid.outI)
+/**
+ * @brief PID intrgral output velocity z
+ */
 LOG_ADD(LOG_FLOAT, VZd, &this.pidVZ.pid.outD)
-
-// LOG_ADD(LOG_FLOAT, VXp, &bank_pitch)
-// LOG_ADD(LOG_FLOAT, VZp, &bank_roll)
 
 LOG_GROUP_STOP(posCtl)
 
+/**
+ * Tuning settings for the gains of the PID
+ * controller for the velocity of the Crazyflie ¨
+ * in the X, Y and Z direction in the body fixed
+ * coordinate system.
+ */
 PARAM_GROUP_START(velCtlPid)
-
+/**
+ * @brief Proportional gain for the velocity PID in the body X direction
+ */
 PARAM_ADD(PARAM_FLOAT, vxKp, &this.pidVX.pid.kp)
+/**
+ * @brief Integral gain for the velocity PID in the body X direction
+ */
 PARAM_ADD(PARAM_FLOAT, vxKi, &this.pidVX.pid.ki)
+/**
+ * @brief Derivative gain for the velocity PID in the body X direction
+ */
 PARAM_ADD(PARAM_FLOAT, vxKd, &this.pidVX.pid.kd)
 
+/**
+ * @brief Proportional gain for the velocity PID in the body Y direction
+ */
 PARAM_ADD(PARAM_FLOAT, vyKp, &this.pidVY.pid.kp)
+/**
+ * @brief Integral gain for the velocity PID in the body Y direction
+ */
 PARAM_ADD(PARAM_FLOAT, vyKi, &this.pidVY.pid.ki)
+/**
+ * @brief Derivative gain for the velocity PID in the body Y direction
+ */
 PARAM_ADD(PARAM_FLOAT, vyKd, &this.pidVY.pid.kd)
 
+/**
+ * @brief Proportional gain for the velocity PID in the body Z direction
+ */
 PARAM_ADD(PARAM_FLOAT, vzKp, &this.pidVZ.pid.kp)
+/**
+ * @brief Integral gain for the velocity PID in the body Z direction
+ */
 PARAM_ADD(PARAM_FLOAT, vzKi, &this.pidVZ.pid.ki)
+/**
+ * @brief Derivative gain for the velocity PID in the body Z direction
+ */
 PARAM_ADD(PARAM_FLOAT, vzKd, &this.pidVZ.pid.kd)
-
+/**
+ * @brief Feed-forward gain for the velocity PID in the body X direction
+ */
 PARAM_ADD(PARAM_FLOAT, vxKFF, &kFFx)
+P**
+ * @brief Feed-forward gain for the velocity PID in the body Y direction
+ */
 PARAM_ADD(PARAM_FLOAT, vyKFF, &kFFy)
 
 PARAM_GROUP_STOP(velCtlPid)
 
+/**
+ * Tuning settings for the gains of the PID
+ * controller for the position of the Crazyflie ¨
+ * in the X, Y and Z direction in the global
+ * coordinate system.
+ */
 PARAM_GROUP_START(posCtlPid)
-
+/**
+ * @brief Proportional gain for the position PID in the global X direction
+ */
 PARAM_ADD(PARAM_FLOAT, xKp, &this.pidX.pid.kp)
+/**
+ * @brief Proportional gain for the position PID in the global X direction
+ */
 PARAM_ADD(PARAM_FLOAT, xKi, &this.pidX.pid.ki)
+/**
+ * @brief Derivative gain for the position PID in the global X direction
+ */
 PARAM_ADD(PARAM_FLOAT, xKd, &this.pidX.pid.kd)
 
+/**
+ * @brief Proportional gain for the position PID in the global Y direction
+ */
 PARAM_ADD(PARAM_FLOAT, yKp, &this.pidY.pid.kp)
+/**
+ * @brief Integral gain for the position PID in the global Y direction
+ */
 PARAM_ADD(PARAM_FLOAT, yKi, &this.pidY.pid.ki)
+/**
+ * @brief Derivative gain for the position PID in the global Y direction
+ */
 PARAM_ADD(PARAM_FLOAT, yKd, &this.pidY.pid.kd)
 
+/**
+ * @brief Proportional gain for the position PID in the global Z direction
+ */
 PARAM_ADD(PARAM_FLOAT, zKp, &this.pidZ.pid.kp)
+/**
+ * @brief Integral gain for the position PID in the global Z direction
+ */
 PARAM_ADD(PARAM_FLOAT, zKi, &this.pidZ.pid.ki)
+/**
+ * @brief Derivative gain for the position PID in the global Z direction
+ */
 PARAM_ADD(PARAM_FLOAT, zKd, &this.pidZ.pid.kd)
 
+/**
+ * @brief Approx. thrust needed for hover
+ */
 PARAM_ADD(PARAM_UINT16, thrustBase, &this.thrustBase)
+/**
+ * @brief Min. thrust value to output
+ */
 PARAM_ADD(PARAM_UINT16, thrustMin, &this.thrustMin)
 
+/**
+ * @brief Roll/Pitch absolute limit
+ */
 PARAM_ADD(PARAM_FLOAT, rpLimit,  &rpLimit)
+/**
+ * @brief Roll absolute limit
+ */
 PARAM_ADD(PARAM_FLOAT, rLimit,  &rLimit)
+/**
+ * @brief Pitch absolute limit
+ */
 PARAM_ADD(PARAM_FLOAT, pLimit,  &pLimit)
+/**
+ * @brief Maximum X/Y velocity
+ */
 PARAM_ADD(PARAM_FLOAT, xyVelMax, &xyVelMax)
+/**
+ * @brief Maximum Z Velocity
+ */
 PARAM_ADD(PARAM_FLOAT, zVelMax,  &zVelMax)
+/**
+ * @brief Maximum X velocity
+ */
 PARAM_ADD(PARAM_FLOAT, xBodyVelMax, &xBodyVelMax)
+/**
+ * @brief Maximum Y velocity
+ */
 PARAM_ADD(PARAM_FLOAT, yBodyVelMax, &yBodyVelMax)
 
 PARAM_ADD(PARAM_INT8, singleLoop, &singleLoop)
 
 
 PARAM_GROUP_STOP(posCtlPid)
-
-PARAM_GROUP_START(posVelFilt)
-
-PARAM_ADD(PARAM_INT8, posFiltEn, &posFiltEnable)
-PARAM_ADD(PARAM_FLOAT, posFiltCut, &posFiltCutoff)
-PARAM_ADD(PARAM_INT8, velFiltEn, &velFiltEnable)
-PARAM_ADD(PARAM_FLOAT, velFiltCut, &velFiltCutoff)
-PARAM_ADD(PARAM_INT8, posZFiltEn, &posZFiltEnable)
-PARAM_ADD(PARAM_FLOAT, posZFiltCut, &posZFiltCutoff)
-PARAM_ADD(PARAM_INT8, velZFiltEn, &velZFiltEnable)
-PARAM_ADD(PARAM_FLOAT, velZFiltCut, &velZFiltCutoff)
-
-PARAM_GROUP_STOP(posVelFilt)

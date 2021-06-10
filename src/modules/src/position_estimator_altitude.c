@@ -58,18 +58,18 @@ static struct selfState_s state = {
   .estimatedVZ = 0.0f,
 };
 
-static void positionEstimateInternal(state_t* estimate, const sensorData_t* sensorData, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick, struct selfState_s* state);
+static void positionEstimateInternal(state_t* estimate, const baro_t* baro, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick, struct selfState_s* state);
 static void positionUpdateVelocityInternal(float accWZ, float dt, struct selfState_s* state);
 
-void positionEstimate(state_t* estimate, const sensorData_t* sensorData, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick) {
-  positionEstimateInternal(estimate, sensorData, tofMeasurement, dt, tick, &state);
+void positionEstimate(state_t* estimate, const baro_t* baro, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick) {
+  positionEstimateInternal(estimate, baro, tofMeasurement, dt, tick, &state);
 }
 
 void positionUpdateVelocity(float accWZ, float dt) {
   positionUpdateVelocityInternal(accWZ, dt, &state);
 }
 
-static void positionEstimateInternal(state_t* estimate, const sensorData_t* sensorData, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick, struct selfState_s* state) {
+static void positionEstimateInternal(state_t* estimate, const baro_t* baro, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick, struct selfState_s* state) {
   float filteredZ;
   static float prev_estimatedZ = 0;
   static bool surfaceFollowingMode = false;
@@ -94,11 +94,11 @@ static void positionEstimateInternal(state_t* estimate, const sensorData_t* sens
   } else {
     // FIXME: A bit of an hack to init IIR filter
     if (state->estimatedZ == 0.0f) {
-      filteredZ = sensorData->baro.asl;
+      filteredZ = baro->asl;
     } else {
       // IIR filter asl
       filteredZ = (state->estAlphaAsl       ) * state->estimatedZ +
-                  (1.0f - state->estAlphaAsl) * sensorData->baro.asl;
+                  (1.0f - state->estAlphaAsl) * baro->asl;
     }
     // Use asl as base and add velocity changes.
     state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
@@ -123,10 +123,28 @@ LOG_ADD(LOG_FLOAT, estVZ, &state.estimatedVZ)
 LOG_ADD(LOG_FLOAT, velocityZ, &state.velocityZ)
 LOG_GROUP_STOP(posEstAlt)
 
+/**
+ * Tuning setttings for the altititude estimator/filtering
+ */
 PARAM_GROUP_START(posEstAlt)
-PARAM_ADD(PARAM_FLOAT, estAlphaAsl, &state.estAlphaAsl)
-PARAM_ADD(PARAM_FLOAT, estAlphaZr, &state.estAlphaZrange)
+/**
+ * @brief parameter alpha IIR Filter above sea level/true altitude (baro)
+ */
+PARAM_ADD_CORE(PARAM_FLOAT, estAlphaAsl, &state.estAlphaAsl)
+/**
+ * @brief parameter alpha IIR Filter Height  (zranger)
+ */
+PARAM_ADD_CORE(PARAM_FLOAT, estAlphaZr, &state.estAlphaZrange)
+/**
+ * @brief Multiplying factor for adding velocity
+ */
 PARAM_ADD(PARAM_FLOAT, velFactor, &state.velocityFactor)
+/**
+ * @brief Blendning factor to avoid accumulate error
+ */
 PARAM_ADD(PARAM_FLOAT, velZAlpha, &state.velZAlpha)
-PARAM_ADD(PARAM_FLOAT, vAccDeadband, &state.vAccDeadband)
+/**
+ * @brief Vertical acceleration deadband
+ */
+PARAM_ADD_CORE(PARAM_FLOAT, vAccDeadband, &state.vAccDeadband)
 PARAM_GROUP_STOP(posEstAlt)

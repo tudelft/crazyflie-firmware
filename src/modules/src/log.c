@@ -95,6 +95,7 @@ struct log_block {
   int id;
   xTimerHandle timer;
   StaticTimer_t timerBuffer;
+  uint32_t droppedPackets;
   struct log_ops * ops;
 };
 
@@ -866,7 +867,14 @@ void logRunBlock(void * arg)
   else
   {
     // No need to block here, since logging is not guaranteed
-    crtpSendPacket(&pk);
+    if (!crtpSendPacket(&pk))
+    {
+      if (blk->droppedPackets++ % 100 == 0)
+      {
+        DEBUG_PRINT("WARNING: LOG packets drop detected (%lu packets lost)\n",
+                    blk->droppedPackets);
+      }
+    }
   }
 }
 
@@ -972,9 +980,10 @@ logVarId_t logGetVarId(char* group, char* name)
   for(i=0; i<logsLen; i++)
   {
     if (logs[i].type & LOG_GROUP) {
-      if (logs[i].type & LOG_START)
+      if (logs[i].type & LOG_START) {
         currgroup = logs[i].name;
-    } if ((!strcmp(group, currgroup)) && (!strcmp(name, logs[i].name))) {
+      }
+    } else if ((!strcmp(group, currgroup)) && (!strcmp(name, logs[i].name))) {
       varId = (logVarId_t)i;
       return varId;
     }

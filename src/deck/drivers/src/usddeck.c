@@ -87,8 +87,8 @@
 #define SPI_END_TRANSACTION     spiEndTransaction
 #endif
 
-#define MAX_USD_LOG_VARIABLES_PER_EVENT   (50)
-#define MAX_USD_LOG_EVENTS                (10)
+#define MAX_USD_LOG_VARIABLES_PER_EVENT   (20)
+#define MAX_USD_LOG_EVENTS                (20)
 #define FIXED_FREQUENCY_EVENT_ID          (0xFFFF)
 #define FIXED_FREQUENCY_EVENT_NAME        "fixedFrequency"
 
@@ -572,9 +572,11 @@ static void usdLogTask(void* prm)
       // loop over event triggers "on:<name>"
       usdLogConfig.numEventConfigs = 0;
       usdLogConfig.fixedFrequencyEventIdx = MAX_USD_LOG_EVENTS;
+      usdLogConfig.frequency = 10; // use non-zero default value for task loop below
+      usdLogEventConfig_t *cfg = &usdLogConfig.eventConfigs[0];
+      const char* eventName = 0;
       line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
-      while (line && usdLogConfig.numEventConfigs < MAX_USD_LOG_EVENTS) {
-        usdLogEventConfig_t* cfg = &usdLogConfig.eventConfigs[usdLogConfig.numEventConfigs];
+      while (line) {
         if (strncmp(line, "on:", 3) == 0) {
           // special mode for non-event-based logging
           if (strcmp(&line[3], FIXED_FREQUENCY_EVENT_NAME) == 0) {
@@ -587,12 +589,14 @@ static void usdLogTask(void* prm)
             if (!line) break;
             usdLogConfig.mode = strtol(line, &endptr, 10);
             cfg->eventId = FIXED_FREQUENCY_EVENT_ID;
+            eventName = FIXED_FREQUENCY_EVENT_NAME;
             usdLogConfig.fixedFrequencyEventIdx = usdLogConfig.numEventConfigs;
           } else {
             // handle event triggers
             const eventtrigger *et = eventtriggerGetByName(&line[3]);
             if (et) {
               cfg->eventId = eventtriggerGetId(et);
+              eventName = et->name;
             } else {
               DEBUG_PRINT("Unknown event %s\n", &line[3]);
               line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
@@ -603,7 +607,7 @@ static void usdLogTask(void* prm)
           // Add log variables
           cfg->numVars = 0;
           cfg->numBytes = 0;
-          while (cfg->numVars < MAX_USD_LOG_VARIABLES_PER_EVENT) {
+          while (true) {
             line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
             if (!line || strncmp(line, "on:", 3) == 0)
               break;
@@ -622,11 +626,24 @@ static void usdLogTask(void* prm)
               DEBUG_PRINT("Unknown log variable %s.%s\n", group, name);
               continue;
             }
-            cfg->varIds[cfg->numVars] = varid;
-            ++cfg->numVars;
-            cfg->numBytes += logVarSize(logGetType(varid));
+            if (cfg->numVars < MAX_USD_LOG_VARIABLES_PER_EVENT) {
+              cfg->varIds[cfg->numVars] = varid;
+              ++cfg->numVars;
+              cfg->numBytes += logVarSize(logGetType(varid));
+            } else {
+              DEBUG_PRINT("Skip log variable %s: %s.%s (out of storage)\n", eventName, group, name);
+              continue;
+            }
           }
-          ++usdLogConfig.numEventConfigs;
+          if (usdLogConfig.numEventConfigs < MAX_USD_LOG_EVENTS - 1) {
+            ++usdLogConfig.numEventConfigs;
+            cfg = &usdLogConfig.eventConfigs[usdLogConfig.numEventConfigs];
+          } else {
+            DEBUG_PRINT("Skip config after event %s (out of storage)\n", eventName);
+            break;
+          }
+        } else {
+          line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
         }
       }
       f_close(&logFile);
@@ -819,7 +836,7 @@ static void usdWriteTask(void* prm)
         // write header
         uint8_t magic = 0xBC;
         usdWriteData(&magic, sizeof(magic));
-        
+
         uint16_t version = 2;
         usdWriteData(&version, sizeof(version));
 
@@ -925,7 +942,7 @@ static void usdWriteTask(void* prm)
           uint16_t size;
           bool hasData = ringBuffer_pop_start(&logBuffer, &buf, &size);
           xSemaphoreGive(logBufferMutex);
-          
+
           // execute the actual write operation
           if (hasData) {
             usdWriteData(buf, size);
@@ -963,7 +980,7 @@ static void usdWriteTask(void* prm)
           lastFileSize = info.fsize;
         }
 
-        DEBUG_PRINT("Wrote %ld B to: %s (%ld of %ld events)\n", 
+        DEBUG_PRINT("Wrote %ld B to: %s (%ld of %ld events)\n",
           lastFileSize,
           usdLogConfig.filename,
           usdLogStats.eventsWritten,
@@ -1022,16 +1039,43 @@ static const DeckDriver usd_deck = {
 DECK_DRIVER(usd_deck);
 
 PARAM_GROUP_START(deck)
-PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, bcUSD, &isInit)
+
+/**
+ * @brief Nonzero if [SD-card deck](https://store.bitcraze.io/collections/decks/products/sd-card-deck) is attached
+*/
+PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcUSD, &isInit)
+
 PARAM_GROUP_STOP(deck)
 
+/**
+ * The micro SD card deck is used for on-board logging of data to a micro SD card.
+ */
 PARAM_GROUP_START(usd)
-PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, canLog, &initSuccess)
-PARAM_ADD(PARAM_UINT8, logging, &enableLogging) /* use to start/stop logging*/
+/**
+ * @brief Non zero if logging is possible, 0 indicates there might be a problem with the logging configuration.
+ */
+PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, canLog, &initSuccess)
+
+/**
+ * @brief Controls if logging to the SD-card is active. Set to 1 to start logging, set to 0 to stop logging (default).
+ */
+PARAM_ADD_CORE(PARAM_UINT8, logging, &enableLogging) /* use to start/stop logging*/
 PARAM_GROUP_STOP(usd)
 
+/**
+ * Micro-SD related log variables for debug purposes mainly.
+ */
 LOG_GROUP_START(usd)
+/**
+ * @brief SPI write rate (includes overhead) [bytes/s]
+ */
 STATS_CNT_RATE_LOG_ADD(spiWrBps, &spiWriteRate)
+/**
+ * @brief SPI read rate (includes overhead) [bytes/s]
+ */
 STATS_CNT_RATE_LOG_ADD(spiReBps, &spiReadRate)
+/**
+ * @brief Data write rate to the SD card [bytes/s]
+ */
 STATS_CNT_RATE_LOG_ADD(fatWrBps, &fatWriteRate)
 LOG_GROUP_STOP(usd)
