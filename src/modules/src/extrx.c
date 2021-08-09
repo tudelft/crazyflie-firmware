@@ -49,21 +49,21 @@
 
 #define EXTRX_NR_CHANNELS  8
 
-#ifdef EXTRX_BETA_FPV_RADIO
-  // BetaFPV Radio Lite 2
-  #define EXTRX_CH_THRUST     2
-  #define EXTRX_CH_ROLL      0
-  #define EXTRX_CH_PITCH     1
+#ifdef EXTRX_TAER
+  // Taranis X-Lite
+  #define EXTRX_CH_THRUST     0
+  #define EXTRX_CH_ROLL      1
+  #define EXTRX_CH_PITCH     2
   #define EXTRX_CH_YAW       3
 
   #define EXTRX_SIGN_ROLL    (1)
   #define EXTRX_SIGN_PITCH   (-1)
   #define EXTRX_SIGN_YAW     (-1)
-#else
-  // Taranis X-Lite
-  #define EXTRX_CH_THRUST     0
-  #define EXTRX_CH_ROLL      1
-  #define EXTRX_CH_PITCH     2
+#else // default is AETR, like in BetaFlight
+  // e.g. BetaFPV Radio Lite 2
+  #define EXTRX_CH_THRUST     2
+  #define EXTRX_CH_ROLL      0
+  #define EXTRX_CH_PITCH     1
   #define EXTRX_CH_YAW       3
 
   #define EXTRX_SIGN_ROLL    (1)
@@ -98,7 +98,12 @@ void extRxInit(void)
 
 #ifdef ENABLE_CPPM
   cppmInit();
-  DEBUG_PRINT("CPPM initialized\n");
+  #ifdef EXTRX_TAER
+    DEBUG_PRINT("CPPM initialized, expecting TAER channel mapping\n");
+  #else
+    DEBUG_PRINT("CPPM initialized, expecting AETR channel mapping\n");
+  #endif
+
 #endif
 
 #ifdef ENABLE_SPEKTRUM
