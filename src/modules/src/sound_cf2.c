@@ -364,39 +364,47 @@ void soundSetFreq(uint32_t freq) {
 }
 
 /**
- * The buzzer deck contains a low profile piezo buzzer.
+ * @brief The buzzer deck contains a low profile piezo buzzer.
+ *
+ * With the Buzzer deck  you’ll get audio feedback on system events, like low
+ * battery or charging completed. Or why not create your own melodies that will
+ * play while you’re buzzing around. If you’re tapped out on creativity there
+ * are already a few melodies pre-programmed that you can use.
+ *
+ * Changing the sounds requires modifications to the firmware. The code for the
+ * sounds is located in [sound_cf.c](%https://github.com/bitcraze/crazyflie-firmware/blob/master/src/modules/src/sound_cf2.c)
  */
 PARAM_GROUP_START(sound)
 
 /**
  * @brief Id of effect to use (default: 0)
  *
- * Id | Effect
- * -----------
- * 0  | Off
- * 1  | Factory test
- * 2  | USB connected
- * 3  | USB disconnected
- * 4  | Charging done
- * 5  | Low battery
- * 6  | Startup
- * 7  | Calibrated
- * 8  | Range slow
- * 9  | Range fast
- * 10 | Star Wars Imperial March
- * 11 | Bypass
- * 12 | Siren
- * 13 | Tilt quad to play sound
+ * | Id | Effect                    | \n
+ * | -  | -                         | \n
+ * | 0  | Off                       | \n
+ * | 1  | Factory test              | \n
+ * | 2  | USB connected             | \n
+ * | 3  | USB disconnected          | \n
+ * | 4  | Charging done             | \n
+ * | 5  | Low battery               | \n
+ * | 6  | Startup                   | \n
+ * | 7  | Calibrated                | \n
+ * | 8  | Range slow                | \n
+ * | 9  | Range fast                | \n
+ * | 10 | Star Wars Imperial March  | \n
+ * | 11 | Bypass                    | \n
+ * | 12 | Siren                     | \n
+ * | 13 | Tilt quad to play sound   | \n
  */
 PARAM_ADD_CORE(PARAM_UINT8, effect, &user_effect)
 
 /**
- * @brief Number of effects available
+ * @brief Number of effects available (default: 13)
  */
 PARAM_ADD_CORE(PARAM_UINT32 | PARAM_RONLY, neffect, &neffect)
 
 /**
- * @brief Frequency to use for Bypass effect
+ * @brief Frequency to use for Bypass effect (default: 4000)
  */
 PARAM_ADD_CORE(PARAM_UINT16, freq, &static_freq)
 

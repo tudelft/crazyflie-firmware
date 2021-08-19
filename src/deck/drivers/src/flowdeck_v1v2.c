@@ -7,7 +7,7 @@
  *
  * LPS node firmware.
  *
- * Copyright 2017, Bitcraze AB
+ * Copyright 2021, Bitcraze AB
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -184,6 +184,7 @@ static bool flowdeck1Test()
 {
   if (!isInit1) {
     DEBUG_PRINT("Error while initializing the PMW3901 sensor\n");
+    return false;
   }
 
   // Test the VL53L0 driver
@@ -196,8 +197,8 @@ static const DeckDriver flowdeck1_deck = {
   .vid = 0xBC,
   .pid = 0x0A,
   .name = "bcFlow",
-
-  .usedGpio = 0,  // FIXME: set the used pins
+  .usedGpio = DECK_USING_IO_3,
+  .usedPeriph = DECK_USING_I2C | DECK_USING_SPI,
   .requiredEstimator = kalmanEstimator,
 
   .init = flowdeck1Init,
@@ -229,6 +230,7 @@ static bool flowdeck2Test()
 {
   if (!isInit2) {
     DEBUG_PRINT("Error while initializing the PMW3901 sensor\n");
+    return false;
   }
 
   // Test the VL53L1 driver
@@ -242,7 +244,8 @@ static const DeckDriver flowdeck2_deck = {
   .pid = 0x0F,
   .name = "bcFlow2",
 
-  .usedGpio = 0,  // FIXME: set the used pins
+  .usedGpio = DECK_USING_IO_3,
+  .usedPeriph = DECK_USING_I2C | DECK_USING_SPI,
   .requiredEstimator = kalmanEstimator,
 
   .init = flowdeck2Init,
@@ -253,7 +256,7 @@ DECK_DRIVER(flowdeck2_deck);
 
 /**
  * Logging variables of the motion sensor of the flowdeck
- */ 
+ */
 LOG_GROUP_START(motion)
 /**
  * @brief True if motion occured since the last measurement
@@ -288,7 +291,7 @@ LOG_ADD(LOG_UINT8, Rawsum, &currentMotion.rawDataSum)
  */
 LOG_ADD(LOG_UINT8, outlierCount, &outlierCount)
 /**
- * @brief Count of surface feature 
+ * @brief Count of surface feature
  */
 LOG_ADD(LOG_UINT8, squal, &currentMotion.squal)
 /**
@@ -324,7 +327,7 @@ PARAM_GROUP_START(deck)
 PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcFlow, &isInit1)
 
 /**
- * @brief Nonzero if [Flow deck v2](https://store.bitcraze.io/collections/decks/products/flow-deck-v2) is attached
+ * @brief Nonzero if [Flow deck v2](%https://store.bitcraze.io/collections/decks/products/flow-deck-v2) is attached
  */
 PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcFlow2, &isInit2)
 

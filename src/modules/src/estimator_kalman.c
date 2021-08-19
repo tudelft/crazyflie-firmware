@@ -201,7 +201,7 @@ static void kalmanTask(void* parameters) {
   uint32_t nextPrediction = xTaskGetTickCount();
   uint32_t lastPNUpdate = xTaskGetTickCount();
 
-  rateSupervisorInit(&rateSupervisorContext, xTaskGetTickCount(), M2T(1000), 99, 101, 1);
+  rateSupervisorInit(&rateSupervisorContext, xTaskGetTickCount(), ONE_SECOND, PREDICT_RATE - 1, PREDICT_RATE + 1, 1);
 
   while (true) {
     xSemaphoreTake(runTaskSemaphore, portMAX_DELAY);
@@ -453,37 +453,43 @@ void estimatorKalmanGetEstimatedRot(float * rotationMatrix) {
 LOG_GROUP_START(kalman)
 /**
  * @brief Nonzero if the drone is in flight
- * 
+ *
  *  Note: This is the same as sys.flying. Perhaps remove this one?
  */
   LOG_ADD(LOG_UINT8, inFlight, &quadIsFlying)
   /**
  * @brief State position in the global frame x
+ * 
  *   Note: This is similar to stateEstimate.x.
  */
   LOG_ADD(LOG_FLOAT, stateX, &coreData.S[KC_STATE_X])
  /**
  * @brief State position in the global frame y
+ * 
  *  Note: This is similar to stateEstimate.y
  */
   LOG_ADD(LOG_FLOAT, stateY, &coreData.S[KC_STATE_Y])
  /**
  * @brief State position in the global frame z
+ * 
  *  Note: This is similar to stateEstimate.z
  */
   LOG_ADD(LOG_FLOAT, stateZ, &coreData.S[KC_STATE_Z])
   /**
  * @brief State position in the global frame PX
+ * 
  *  Note: This is similar to stateEstimate.x
  */
   LOG_ADD(LOG_FLOAT, statePX, &coreData.S[KC_STATE_PX])
   /**
   * @brief State velocity in its body frame y
+  * 
   *  Note: This should be part of stateEstimate
   */
   LOG_ADD(LOG_FLOAT, statePY, &coreData.S[KC_STATE_PY])
   /**
   * @brief State velocity in its body frame z
+  * 
   *  Note: This should be part of stateEstimate
   */
   LOG_ADD(LOG_FLOAT, statePZ, &coreData.S[KC_STATE_PZ])

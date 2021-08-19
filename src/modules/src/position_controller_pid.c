@@ -175,7 +175,6 @@ static struct this_s this = {
 
 void positionControllerInit()
 {
-  // Enabling filters to be tuned as config. parameters
   pidInit(&this.pidX.pid, this.pidX.setpoint, this.pidX.init.kp, this.pidX.init.ki, this.pidX.init.kd,
       this.pidX.pid.dt, POSITION_RATE, posFiltCutoff, posFiltEnable);
   pidInit(&this.pidY.pid, this.pidY.setpoint, this.pidY.init.kp, this.pidY.init.ki, this.pidY.init.kd,
@@ -196,42 +195,6 @@ static float runPid(float input, struct pidAxis_s *axis, float setpoint, float d
 
   pidSetDesired(&axis->pid, axis->setpoint);
   return pidUpdate(&axis->pid, input, true);
-}
-
-void positionControllerInBodySingleLoop(float* thrust, attitude_t *attitude, setpoint_t *setpoint,
-                                                             const state_t *state)
-{
-  float cosyaw = cosf(state->attitude.yaw * (float)M_PI / 180.0f);
-  float sinyaw = sinf(state->attitude.yaw * (float)M_PI / 180.0f);
-  
-  this.pidX.pid.outputLimit = pLimit * rpLimitOverhead;
-  this.pidY.pid.outputLimit = rLimit * rpLimitOverhead;
-  this.pidZ.pid.outputLimit = (UINT16_MAX / 2 / thrustScale);
-
-  float setp_body_x = setpoint->position.x * cosyaw + setpoint->position.y * sinyaw;
-  float setp_body_y = -setpoint->position.x * sinyaw + setpoint->position.y * cosyaw;
-
-  float state_body_x = state->position.x * cosyaw + state->position.y * sinyaw;
-  float state_body_y = -state->position.x * sinyaw + state->position.y * cosyaw;
-  
-  attitude->pitch = -runPid(state_body_x, &this.pidX, setp_body_x, DT);
-  attitude->roll = -runPid(state_body_y, &this.pidY, setp_body_y, DT);
-  float thrustRaw = runPid(state->position.z, &this.pidZ, setpoint->position.z, DT);
-
-  attitude->roll  = constrain(attitude->roll,  -rLimit, rLimit);
-  attitude->pitch = constrain(attitude->pitch, -pLimit, pLimit);
-
-  bank_roll = attitude->roll; // for logging & debugging only
-  bank_pitch = attitude->pitch;
-  
-  // Scale the thrust and add feed forward term
-  *thrust = thrustRaw*thrustScale + this.thrustBase;
-  // Check for minimum thrust
-  if (*thrust < this.thrustMin) {
-    *thrust = this.thrustMin;
-  }
-  // saturate
-  *thrust = constrain(*thrust, 0, UINT16_MAX);
 }
 
 void positionControllerInBody(float* thrust, attitude_t *attitude, setpoint_t *setpoint,
@@ -403,35 +366,46 @@ void positionControllerResetAllPID()
   pidReset(&this.pidVZ.pid);
 }
 
+/**
+ * Log variables of the PID position controller
+ * 
+ * Note: rename to posCtrlPID ?
+ */
 LOG_GROUP_START(posCtl)
 
 /**
  * @brief PID controller target desired velocity x [m/s]
+ * 
  * Note: Same as stabilizer log
  */
 LOG_ADD(LOG_FLOAT, targetVX, &setpointvx)
 /**
  * @brief PID controller target desired velocity y [m/s]
+ * 
  * Note: Same as stabilizer log
  */
 LOG_ADD(LOG_FLOAT, targetVY, &setpointvy)
 /**
  * @brief PID controller target desired velocity z [m/s]
+ * 
  * Note: Same as stabilizer log
  */
 LOG_ADD(LOG_FLOAT, targetVZ, &this.pidVZ.pid.desired)
 /**
  * @brief PID controller target desired position x [m]
+ * 
  * Note: Same as stabilizer log
  */
 LOG_ADD(LOG_FLOAT, targetX, &setpointx)
 /**
  * @brief PID controller target desired position y [m]
+ * 
  * Note: Same as stabilizer log
  */
 LOG_ADD(LOG_FLOAT, targetY, &setpointy)
 /**
  * @brief PID controller target desired position z [m]
+ * 
  * Note: Same as stabilizer log
  */
 LOG_ADD(LOG_FLOAT, targetZ, &this.pidZ.pid.desired)

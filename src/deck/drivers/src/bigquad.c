@@ -115,7 +115,8 @@ static const DeckDriver bigquad_deck = {
   .name = "bcBigQuad",
 
   .usedPeriph = DECK_USING_TIMER3 | DECK_USING_TIMER14,
-  .usedGpio = DECK_USING_PA2 | DECK_USING_PA3 | DECK_USING_PB4 | DECK_USING_PB5 | DECK_USING_PA7,
+  .usedGpio = DECK_USING_PA2 | DECK_USING_PA3 | DECK_USING_IO_3 |
+              DECK_USING_IO_2 | DECK_USING_PA7,
   .init = bigquadInit,
   .test = bigquadTest,
 };
@@ -125,7 +126,7 @@ DECK_DRIVER(bigquad_deck);
 PARAM_GROUP_START(deck)
 
 /**
- * @brief Nonzero if [BigQuad deck](https://www.bitcraze.io/products/bigquad-deck) is attached
+ * @brief Nonzero if [BigQuad deck](%https://www.bitcraze.io/products/bigquad-deck) is attached
  */
 PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcBigQuad, &isInit)
 
