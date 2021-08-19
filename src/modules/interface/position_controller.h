@@ -40,8 +40,6 @@ void positionControllerInGlobal(float* thrust, attitude_t *attitude, setpoint_t 
                                                              const state_t *state);
 void positionControllerInBody(float* thrust, attitude_t *attitude, setpoint_t *setpoint,
                                                              const state_t *state);
-void positionControllerInBodySingleLoop(float* thrust, attitude_t *attitude, setpoint_t *setpoint,
-                                                             const state_t *state);
 void velocityControllerInBody(float* thrust, attitude_t *attitude, setpoint_t *setpoint,
                                                              const state_t *state);
 

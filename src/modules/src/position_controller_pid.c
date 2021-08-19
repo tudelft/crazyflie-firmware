@@ -100,9 +100,7 @@ float setpointvy = 0.0f;
 #define ZVELOCITY_LPF_ENABLE true
 
 #define POSITION_CONTROL_IN_BODY true
-#define POSITION_CONTROL_SINGLE_LOOP false
 
-bool singleLoop = POSITION_CONTROL_SINGLE_LOOP;
 bool posFiltEnable = POSITION_LPF_ENABLE;
 bool velFiltEnable = VELOCITY_LPF_ENABLE;
 float posFiltCutoff = POSITION_LPF_CUTOFF_FREQ;
@@ -348,11 +346,7 @@ void positionController(float* thrust, attitude_t *attitude, setpoint_t *setpoin
   setpointx = setpoint->position.x;
   setpointy = setpoint->position.y;
   
-  if (POSITION_CONTROL_IN_BODY){
-    if (singleLoop) positionControllerInBodySingleLoop(thrust, attitude, setpoint, state);
-    else positionControllerInBody(thrust, attitude, setpoint, state);
-    
-  }
+  if (POSITION_CONTROL_IN_BODY) positionControllerInBody(thrust, attitude, setpoint, state);
   else positionControllerInGlobal(thrust, attitude, setpoint, state);
 }
 
@@ -616,8 +610,5 @@ PARAM_ADD(PARAM_FLOAT, xBodyVelMax, &xBodyVelMax)
  * @brief Maximum Y velocity
  */
 PARAM_ADD(PARAM_FLOAT, yBodyVelMax, &yBodyVelMax)
-
-PARAM_ADD(PARAM_INT8, singleLoop, &singleLoop)
-
 
 PARAM_GROUP_STOP(posCtlPid)
