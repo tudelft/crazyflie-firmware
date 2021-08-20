@@ -8,9 +8,9 @@ CFLAGS += -DIMU_ORIENTATION_mZmYmX
 CFLAGS += -DMOTOR_SETUP_NIMBLE
 CFLAGS += -DENABLE_PWM_EXTENDED
 
-# CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
+CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
 
-CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck
+# CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck
 # CFLAGS += -DEXTRX_TAER # TAER channel mapping (default is AETR - Aileron/Roll, Elevator/Pitch, Thrust, Rudder/Yaw)
 
 # CFLAGS += -DDECK_FORCE=bcLedRing
