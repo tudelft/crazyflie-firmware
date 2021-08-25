@@ -2497,7 +2497,7 @@ void TIM_ClearFlag(TIM_TypeDef* TIMx, uint16_t TIM_FLAG)
   * @param  TIM_IT: specifies the TIM interrupt source to check.
   *          This parameter can be one of the following values:
   *            @arg TIM_IT_Update: TIM update Interrupt source
-  *            @arg TIM_IT_CC1: TIM Capture Compare 1 Interrupt source
+  *            @arg 1: TIM Capture Compare 1 Interrupt source
   *            @arg TIM_IT_CC2: TIM Capture Compare 2 Interrupt source
   *            @arg TIM_IT_CC3: TIM Capture Compare 3 Interrupt source
   *            @arg TIM_IT_CC4: TIM Capture Compare 4 Interrupt source
