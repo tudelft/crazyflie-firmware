@@ -40,10 +40,7 @@
 #include "debug.h"
 #include "log.h"
 
-#define CPPM_USE_PB4
-
-
-#ifdef CPPM_USE_PB8 // For now, PB8 does not work...
+#ifdef CPPM_USE_PB8 // PB8 works
   #define CPPM_TIMER                   TIM10
   #define CPPM_TIMER_RCC               RCC_APB2Periph_TIM10
   #define CPPM_TIMER_CH_Init           TIM_OC1Init
@@ -56,7 +53,7 @@
   #define CPPM_GPIO_AF                 GPIO_AF_TIM10
 
   #define CPPM_TIM_PRESCALER           (168 - 1) // TIM10 clock running at sysclk (168 MHz). Prescaler of 168 will give 1MHz --> 1us tick.
-#elif defined(CPPM_USE_PB4)
+#elif defined(CPPM_USE_PB4) // PB4 works
   #define CPPM_TIMER                   TIM3
   #define CPPM_TIMER_RCC               RCC_APB1Periph_TIM3
   #define CPPM_TIMER_CH_Init           TIM_OC1Init
@@ -69,7 +66,7 @@
   #define CPPM_GPIO_AF                 GPIO_AF_TIM3
 
   #define CPPM_TIM_PRESCALER           (84 - 1) // TIM3 clock running at sysclk/2 (84 MHz). Prescaler of 84 will give 1MHz --> 1us tick.
-#elif defined(CPPM_USE_PB5)
+#elif defined(CPPM_USE_PB5) // PB5 does not work yet
   #define CPPM_TIMER                   TIM3
   #define CPPM_TIMER_RCC               RCC_APB1Periph_TIM3
   #define CPPM_TIMER_CH_Init           TIM_OC2Init
@@ -82,7 +79,7 @@
   #define CPPM_GPIO_AF                 GPIO_AF_TIM3
 
   #define CPPM_TIM_PRESCALER           (84 - 1) // TIM3 clock running at sysclk/2 (84 MHz). Prescaler of 84 will give 1MHz --> 1us tick.
-#else
+#else // PA7 works
   #define CPPM_TIMER                   TIM14
   #define CPPM_TIMER_RCC               RCC_APB1Periph_TIM14
   #define CPPM_TIMER_CH_Init           TIM_OC1Init
@@ -114,7 +111,11 @@ void cppmInit(void)
   NVIC_InitTypeDef NVIC_InitStructure;
 
   RCC_AHB1PeriphClockCmd(CPPM_GPIO_RCC, ENABLE);
-  RCC_APB1PeriphClockCmd(CPPM_TIMER_RCC, ENABLE);
+  #ifdef CPPM_USE_PB8
+    RCC_APB2PeriphClockCmd(CPPM_TIMER_RCC, ENABLE);
+  #elif
+    RCC_APB1PeriphClockCmd(CPPM_TIMER_RCC, ENABLE);
+  #endif
 
   // Configure the GPIO for the timer input
   GPIO_StructInit(&GPIO_InitStructure);

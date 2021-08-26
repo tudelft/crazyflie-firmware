@@ -112,6 +112,8 @@
 # If lighthouse will need to act as a ground truth (so not entered in the kalman filter)
 # CFLAGS += -DLIGHTHOUSE_AS_GROUNDTRUTH
 
-## External CPPM receiver on PA7
+## External CPPM receiver (by default on PA7)
 # CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck if not using BigQuad
+# CFLAGS += -DCPPM_USE_PB8 # use alternative pins for CPPM: PB4, PB5 (not yet working) or PB8
+# CFLAGS += -DEXTRX_ALT_HOLD # enable altitude hold with external Rx
 # CFLAGS += -DEXTRX_TAER # use TAER channel mapping instead of the default AETR - Aileron(Roll), Elevator(Pitch), Thrust, Rudder(Yaw)

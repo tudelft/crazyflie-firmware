@@ -63,8 +63,8 @@ static const DeckDriver cppm_deck = {
   .pid = 0,
   .name = "bcCPPM",
 
-  .usedPeriph = DECK_USING_TIMER10,
-  .usedGpio = DECK_USING_IO_1,
+  .usedPeriph = DECK_USING_TIMER14,
+  .usedGpio = DECK_USING_PA7,
   .init = cppmdeckInit,
   .test = cppmdeckTest,
 };
