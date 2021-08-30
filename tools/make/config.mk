@@ -9,6 +9,8 @@ CFLAGS += -DMOTOR_SETUP_NIMBLE
 CFLAGS += -DENABLE_PWM_EXTENDED
 
 CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
+CFLAGS += -DPID_FILTER_ALL
+# CFLAGS += -DIMPROVED_BARO_Z_HOLD
 
 # CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck
 # CFLAGS += -DEXTRX_TAER # TAER channel mapping (default is AETR - Aileron/Roll, Elevator/Pitch, Thrust, Rudder/Yaw)

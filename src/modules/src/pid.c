@@ -25,6 +25,12 @@
  * pid.c - implementation of the PID regulator
  */
 
+#ifdef IMPROVED_BARO_Z_HOLD
+#ifndef PID_FILTER_ALL
+#define PID_FILTER_ALL
+#endif
+#endif
+
 #include "pid.h"
 #include "num.h"
 #include <math.h>
@@ -67,15 +73,17 @@ float pidUpdate(PidObject* pid, const float measured, const bool updateError)
 
     float deriv = (pid->error - pid->prevError) / pid->dt;
     
-    // filter out too large changes, e.g. when yaw goes from -180deg to 180deg
+// filter out too large changes, e.g. when yaw goes from -180deg to 180deg
     if (fabs(pid->error - pid->prevError) > 180) deriv = 0;
-
-    // if (pid->enableDFilter)
-    // {
-    //   pid->deriv = lpf2pApply(&pid->dFilter, deriv);
-    // } else {
-    pid->deriv = deriv;
-    // }
+#ifdef PID_FILTER_ALL
+      pid->deriv = deriv;
+    #else
+      if (pid->enableDFilter){
+        pid->deriv = lpf2pApply(&pid->dFilter, deriv);
+      } else {
+        pid->deriv = deriv;
+      }
+    #endif
     if (isnan(pid->deriv)) {
       pid->deriv = 0;
     }
@@ -92,12 +100,22 @@ float pidUpdate(PidObject* pid, const float measured, const bool updateError)
 
     pid->outI = pid->ki * pid->integ;
     output += pid->outI;
-
-    // Filter the total PID output
-    if (pid->enableDFilter)
-    {
-      output = lpf2pApply(&pid->dFilter, output);
-    }
+    
+    #ifdef PID_FILTER_ALL
+      //filter complete output instead of only D component to compensate for increased noise from increased barometer influence
+      if (pid->enableDFilter)
+      {
+        output = lpf2pApply(&pid->dFilter, output);
+      }
+      else {
+        output = output;
+      }
+      if (isnan(output)) {
+        output = 0;
+      }
+     #endif
+      
+    
 
     // Constrain the total PID output (unless the outputLimit is zero)
     if(pid->outputLimit != 0)
@@ -167,4 +185,12 @@ void pidSetKd(PidObject* pid, const float kd)
 }
 void pidSetDt(PidObject* pid, const float dt) {
     pid->dt = dt;
+}
+
+void filterReset(PidObject* pid, const float samplingRate, const float cutoffFreq, bool enableDFilter) {
+  pid->enableDFilter = enableDFilter;
+  if (pid->enableDFilter)
+  {
+    lpf2pInit(&pid->dFilter, samplingRate, cutoffFreq);
+  }
 }

@@ -109,6 +109,7 @@ bool posZFiltEnable = ZPOSITION_LPF_ENABLE;
 bool velZFiltEnable = ZVELOCITY_LPF_ENABLE;
 float posZFiltCutoff = ZPOSITION_LPF_CUTOFF_FREQ;
 float velZFiltCutoff = ZVELOCITY_LPF_CUTOFF_FREQ;
+float velZFiltCutoff_baro = 0.7f;
 
 #ifndef UNIT_TEST
 static struct this_s this = {
@@ -129,16 +130,25 @@ static struct this_s this = {
     },
     .pid.dt = DT,
   },
-
-  .pidVZ = {
-    .init = {
-      .kp = 12.5f,
-      .ki = 0.5f,
-      .kd = 0.0f,
+  #ifdef IMPROVED_BARO_Z_HOLD
+    .pidVZ = {
+      .init = {
+        .kp = 4.0f,
+        .ki = 3.0f,
+        .kd = 1.0f,
+      },
+      .pid.dt = DT,
     },
-    .pid.dt = DT,
-  },
-
+  #else
+    .pidVZ = {
+      .init = {
+        .kp = 12.5f,
+        .ki = 0.5f,
+        .kd = 0,
+      },
+      .pid.dt = DT,
+    },
+  #endif
   .pidX = {
     .init = {
       .kp = 1.5f,
@@ -165,8 +175,11 @@ static struct this_s this = {
     },
     .pid.dt = DT,
   },
-
-  .thrustBase = 40000,
+  #ifdef IMPROVED_BARO_Z_HOLD
+    .thrustBase = 40000,
+  #else
+    .thrustBase = 40000,
+  #endif
   .thrustMin  = 20000,
 };
 #endif
@@ -178,14 +191,19 @@ void positionControllerInit()
   pidInit(&this.pidY.pid, this.pidY.setpoint, this.pidY.init.kp, this.pidY.init.ki, this.pidY.init.kd,
       this.pidY.pid.dt, POSITION_RATE, posFiltCutoff, posFiltEnable);
   pidInit(&this.pidZ.pid, this.pidZ.setpoint, this.pidZ.init.kp, this.pidZ.init.ki, this.pidZ.init.kd,
-      this.pidZ.pid.dt, POSITION_RATE, posFiltCutoff, posZFiltEnable);
+      this.pidZ.pid.dt, POSITION_RATE, posZFiltCutoff, posZFiltEnable);
 
   pidInit(&this.pidVX.pid, this.pidVX.setpoint, this.pidVX.init.kp, this.pidVX.init.ki, this.pidVX.init.kd,
       this.pidVX.pid.dt, POSITION_RATE, velFiltCutoff, velFiltEnable);
   pidInit(&this.pidVY.pid, this.pidVY.setpoint, this.pidVY.init.kp, this.pidVY.init.ki, this.pidVY.init.kd,
       this.pidVY.pid.dt, POSITION_RATE, velFiltCutoff, velFiltEnable);
-  pidInit(&this.pidVZ.pid, this.pidVZ.setpoint, this.pidVZ.init.kp, this.pidVZ.init.ki, this.pidVZ.init.kd,
-      this.pidVZ.pid.dt, POSITION_RATE, velFiltCutoff, velZFiltEnable);
+  #ifdef IMPROVED_BARO_Z_HOLD
+    pidInit(&this.pidVZ.pid, this.pidVZ.setpoint, this.pidVZ.init.kp, this.pidVZ.init.ki, this.pidVZ.init.kd,
+      this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff, velZFiltEnable);
+  #else
+    pidInit(&this.pidVZ.pid, this.pidVZ.setpoint, this.pidVZ.init.kp, this.pidVZ.init.ki, this.pidVZ.init.kd,
+      this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff_baro, velZFiltEnable);
+  #endif
 }
 
 static float runPid(float input, struct pidAxis_s *axis, float setpoint, float dt) {
@@ -285,8 +303,8 @@ void velocityController(float* thrust, attitude_t *attitude, setpoint_t *setpoin
   //this.pidVZ.pid.outputLimit = (this.thrustBase - this.thrustMin) / thrustScale;
 
   // Roll and Pitch
-  float rollRaw  = runPid(state->velocity.x, &this.pidVX, setpoint->velocity.x, DT) + kFFx*setpoint->velocity.x;
-  float pitchRaw = runPid(state->velocity.y, &this.pidVY, setpoint->velocity.y, DT) + kFFy*setpoint->velocity.y;
+  float rollRaw  = runPid(state->velocity.x, &this.pidVX, setpoint->velocity.x, DT);
+  float pitchRaw = runPid(state->velocity.y, &this.pidVY, setpoint->velocity.y, DT);
 
   float yawRad = state->attitude.yaw * (float)M_PI / 180;
   attitude->pitch = -(rollRaw  * cosf(yawRad)) - (pitchRaw * sinf(yawRad));
@@ -358,6 +376,15 @@ void positionControllerResetAllPID()
   pidReset(&this.pidVX.pid);
   pidReset(&this.pidVY.pid);
   pidReset(&this.pidVZ.pid);
+}
+
+void positionControllerResetAllfilters() {
+  filterReset(&this.pidX.pid, POSITION_RATE, POSITION_LPF_CUTOFF_FREQ, POSITION_LPF_ENABLE);
+  filterReset(&this.pidY.pid, POSITION_RATE, POSITION_LPF_CUTOFF_FREQ, POSITION_LPF_ENABLE);
+  filterReset(&this.pidZ.pid, POSITION_RATE, POSITION_LPF_CUTOFF_FREQ, POSITION_LPF_ENABLE);
+  filterReset(&this.pidVX.pid, POSITION_RATE, POSITION_LPF_CUTOFF_FREQ, POSITION_LPF_ENABLE);
+  filterReset(&this.pidVY.pid, POSITION_RATE, POSITION_LPF_CUTOFF_FREQ, POSITION_LPF_ENABLE);
+  filterReset(&this.pidVZ.pid, POSITION_RATE, ZVELOCITY_LPF_CUTOFF_FREQ, POSITION_LPF_ENABLE);
 }
 
 /**
