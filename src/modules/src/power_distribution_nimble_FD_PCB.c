@@ -59,7 +59,14 @@ static struct {
   int8_t rollBias;
 } flapperConfig;
 
+static float thrust;
+
 static uint16_t act_max = 65535;
+
+#ifndef NIMBLE_MAX_THRUST
+  #define NIMBLE_MAX_THRUST 60000.0f
+#endif
+
 
 #ifdef ENABLE_PWM_EXTENDED
   static uint16_t motor_zero = 9362; // for extended PWM (stroke = 1.4 ms): motor_min = (act_max - act_max/1.4)/2
@@ -105,10 +112,12 @@ void powerStop()
 
 void powerDistribution(const control_t *control)
 {
+  thrust = fmin(control->thrust, NIMBLE_MAX_THRUST);
+  
   motorPower.m2 = limitThrust(flapperConfig.pitchServoNeutral*act_max/100.0f + pitch_ampl*control->pitch); // pitch servo
   motorPower.m3 = limitThrust(flapperConfig.yawServoNeutral*act_max/100.0f - control->yaw); // yaw servo
-  motorPower.m1 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust( 0.5f * control->roll + control->thrust * (1.0f + flapperConfig.rollBias/100.0f) ); // left motor
-  motorPower.m4 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust(-0.5f * control->roll + control->thrust * (1.0f - flapperConfig.rollBias/100.0f) ); // right motor
+  motorPower.m1 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust( 0.5f * control->roll + thrust * (1.0f + flapperConfig.rollBias/100.0f) ); // left motor
+  motorPower.m4 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust(-0.5f * control->roll + thrust * (1.0f - flapperConfig.rollBias/100.0f) ); // right motor
 
   if (motorSetEnable)
   {
