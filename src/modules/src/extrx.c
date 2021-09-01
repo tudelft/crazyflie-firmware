@@ -50,7 +50,6 @@
 #define EXTRX_NR_CHANNELS  8
 
 #ifdef EXTRX_TAER
-  // Taranis X-Lite
   #define EXTRX_CH_THRUST     0
   #define EXTRX_CH_ROLL      1
   #define EXTRX_CH_PITCH     2
@@ -60,7 +59,6 @@
   #define EXTRX_SIGN_PITCH   (-1)
   #define EXTRX_SIGN_YAW     (-1)
 #else // default is AETR, like in BetaFlight
-  // e.g. BetaFPV Radio Lite 2
   #define EXTRX_CH_THRUST     2
   #define EXTRX_CH_ROLL      0
   #define EXTRX_CH_PITCH     1
@@ -71,14 +69,25 @@
   #define EXTRX_SIGN_YAW     (-1)
 #endif
 
-#define EXTRX_SCALE_ROLL   (45.0f)
-#define EXTRX_SCALE_PITCH  (60.0f)
+#define EXTRX_CH_ALTHOLD   4
+#define EXTRX_CH_KILL      5
+
+#define EXTRX_SIGN_ALTHOLD   (-1)
+#define EXTRX_SIGN_KILL      (1)
+
+#define EXTRX_SCALE_ROLL   (40.0f)
+#define EXTRX_SCALE_PITCH  (40.0f)
 #define EXTRX_SCALE_YAW    (200.0f)
-#define EXTRX_SCALE_THRUST   (65535.0f)
 
 #define EXTRX_DEADBAND_ROLL (0.05f)
 #define EXTRX_DEADBAND_PITCH (0.05f)
 #define EXTRX_DEADBAND_YAW (0.05f)
+
+#define EXTRX_SWITCH_CNT 5 // number of identical subsequent messages before a switch state is changed
+
+#ifndef EXTRX_ALT_HOLD
+  #define EXTRX_ALT_HOLD    false
+#endif
 
 static setpoint_t extrxSetpoint;
 static uint16_t ch[EXTRX_NR_CHANNELS];
@@ -86,6 +95,14 @@ static uint16_t ch[EXTRX_NR_CHANNELS];
 static void extRxTask(void *param);
 static void extRxDecodeCppm(void);
 static void extRxDecodeChannels(void);
+
+bool extRxKill = true;
+bool extRxKillPrev = true;
+bool extRxAltHold = false;
+bool extRxAltHoldPrev = false;
+
+int8_t kill_cnt = 0;
+int8_t altHold_cnt = 0;
 
 STATIC_MEM_TASK_ALLOC(extRxTask, EXTRX_TASK_STACKSIZE);
 
@@ -128,11 +145,71 @@ static void extRxTask(void *param)
 
 static void extRxDecodeChannels(void)
 {
-  extrxSetpoint.thrust = cppmConvert2uint16(ch[EXTRX_CH_THRUST]);
+  
+  if (EXTRX_SIGN_KILL * cppmConvert2Float(ch[EXTRX_CH_KILL], -1, 1, 0.0) > 0.5f) // channel needs to be 75% or more to work correctly with 2/3 way switches
+  {
+    if (kill_cnt < EXTRX_SWITCH_CNT) kill_cnt++;
+    else extRxKill = true;
+    
+    if (extRxKillPrev != extRxKill)
+    {
+      DEBUG_PRINT("Engines killed\n");
+    }
+  }
+  else
+  {
+    if (kill_cnt > 0) kill_cnt--;
+    else extRxKill = false;
+
+    if (extRxKillPrev != extRxKill)
+    {
+      DEBUG_PRINT("Engines un-killed\n");
+    }
+  }
+
+  if (EXTRX_ALT_HOLD && 
+      EXTRX_SIGN_ALTHOLD * cppmConvert2Float(ch[EXTRX_CH_ALTHOLD], -1, 1, 0.0) > 0.5f)
+  {
+    if (altHold_cnt < EXTRX_SWITCH_CNT) altHold_cnt++;
+    else extRxAltHold=true;
+
+    if (extRxAltHoldPrev != extRxAltHold) DEBUG_PRINT("Althold mode ON\n");
+  }
+  else
+  {
+    if (altHold_cnt > 0) altHold_cnt--;
+    else extRxAltHold=false;
+
+    if (extRxAltHoldPrev != extRxAltHold) DEBUG_PRINT("Althold mode OFF\n");
+  }
+  
+  // if Kill switch is on, set thrust to zero
+  if (extRxKill)
+  {
+    extrxSetpoint.mode.z = modeDisable;
+    extrxSetpoint.thrust = 0;
+  }
+  else if (extRxAltHold) 
+  {
+    extrxSetpoint.thrust = 0;
+    extrxSetpoint.mode.z = modeVelocity;
+
+    extrxSetpoint.velocity.z = cppmConvert2Float(ch[EXTRX_CH_THRUST], -1, 1, 0.25);
+  } 
+  else 
+  {
+    extrxSetpoint.mode.z = modeDisable;
+    extrxSetpoint.thrust = cppmConvert2uint16(ch[EXTRX_CH_THRUST]);
+  }
+
   extrxSetpoint.attitude.roll = EXTRX_SIGN_ROLL * EXTRX_SCALE_ROLL * cppmConvert2Float(ch[EXTRX_CH_ROLL], -1, 1, EXTRX_DEADBAND_ROLL);
   extrxSetpoint.attitude.pitch = EXTRX_SIGN_PITCH * EXTRX_SCALE_PITCH * cppmConvert2Float(ch[EXTRX_CH_PITCH], -1, 1, EXTRX_DEADBAND_PITCH);
   extrxSetpoint.attitudeRate.yaw = EXTRX_SIGN_YAW * EXTRX_SCALE_YAW *cppmConvert2Float(ch[EXTRX_CH_YAW], -1, 1, EXTRX_DEADBAND_YAW);
+
   commanderSetSetpoint(&extrxSetpoint, COMMANDER_PRIORITY_EXTRX);
+  
+  extRxKillPrev = extRxKill;
+  extRxAltHoldPrev = extRxAltHold;
 }
 
 static void extRxDecodeCppm(void)
@@ -239,5 +316,13 @@ LOG_ADD(LOG_FLOAT, pitch, &extrxSetpoint.attitude.pitch)
  * @brief External RX channel converted to yaw
  */
 LOG_ADD(LOG_FLOAT, yaw, &extrxSetpoint.attitude.yaw)
+/**
+ * @brief External RX channel converted to AltHold
+ */
+LOG_ADD(LOG_UINT16, AltHold, &extRxAltHold)
+/**
+ * @brief External RX channel converted to Kill
+ */
+LOG_ADD(LOG_UINT16, Kill, &extRxKill)
 LOG_GROUP_STOP(extrx)
 #endif

@@ -12,12 +12,16 @@ CFLAGS += -DIMU_PHI=0.0f
 CFLAGS += -DIMU_THETA=90.0f
 CFLAGS += -DIMU_PSI=180.0f
 
+# CFLAGS += -DDECK_FORCE=bcUSD:bcCPPM
+
 CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
 
 # CFLAGS += -DIMPROVED_BARO_Z_HOLD
 # CFLAGS += -DNIMBLE_MAX_THRUST 53000.0f
 
 # CFLAGS += -DDECK_FORCE=bcCPPM # force the CCPM deck
+# CFLAGS += -DCPPM_USE_PB8 # use alternative pins for CPPM: PB4, PB5 (not yet working) or PB8
+# CFLAGS += -DEXTRX_ALT_HOLD # enable altitude hold with external Rx
 # CFLAGS += -DEXTRX_TAER # TAER channel mapping (default is AETR - Aileron/Roll, Elevator/Pitch, Thrust, Rudder/Yaw)
 
 # CFLAGS += -DDECK_FORCE=bcLedRing
