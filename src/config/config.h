@@ -96,6 +96,7 @@
 #define UART2_TEST_TASK_PRI     1
 #define KALMAN_TASK_PRI         2
 #define LEDSEQCMD_TASK_PRI      1
+#define CURRENTDECK_TASK_PRI    2
 
 #define SYSLINK_TASK_PRI        3
 #define USBLINK_TASK_PRI        3
@@ -154,6 +155,8 @@
 #define UART2_TASK_NAME         "UART2"
 #define CRTP_SRV_TASK_NAME      "CRTP-SRV"
 #define PLATFORM_SRV_TASK_NAME  "PLATFORM-SRV"
+#define CURRENTDECK_TASK_NAME   "CURRENTDECK"
+
 
 //Task stack sizes
 #define SYSTEM_TASK_STACKSIZE         (2* configMINIMAL_STACK_SIZE)
@@ -188,6 +191,7 @@
 #define UART2_TASK_STACKSIZE          configMINIMAL_STACK_SIZE
 #define CRTP_SRV_TASK_STACKSIZE       configMINIMAL_STACK_SIZE
 #define PLATFORM_SRV_TASK_STACKSIZE   configMINIMAL_STACK_SIZE
+#define CURRENTDECK_TASK_STACKSIZE    (2 * configMINIMAL_STACK_SIZE)
 
 //The radio channel. From 0 to 125
 #define RADIO_CHANNEL 80
