@@ -113,7 +113,7 @@ void cppmInit(void)
   RCC_AHB1PeriphClockCmd(CPPM_GPIO_RCC, ENABLE);
   #ifdef CPPM_USE_PB8
     RCC_APB2PeriphClockCmd(CPPM_TIMER_RCC, ENABLE);
-  #elif
+  #else
     RCC_APB1PeriphClockCmd(CPPM_TIMER_RCC, ENABLE);
   #endif
 

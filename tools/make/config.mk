@@ -14,7 +14,8 @@ CFLAGS += -DIMU_PSI=180.0f
 
 # CFLAGS += -DDECK_FORCE=bcUSD:bcCPPM
 
-CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
+# CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
+CFLAGS += -DDECK_FORCE=bcCurrentDeck
 
 # CFLAGS += -DIMPROVED_BARO_Z_HOLD
 # CFLAGS += -DNIMBLE_MAX_THRUST 53000.0f
