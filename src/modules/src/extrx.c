@@ -70,10 +70,10 @@
 #endif
 
 #define EXTRX_CH_ALTHOLD   4
-#define EXTRX_CH_KILL      5
+#define EXTRX_CH_ARM       5
 
 #define EXTRX_SIGN_ALTHOLD   (-1)
-#define EXTRX_SIGN_KILL      (1)
+#define EXTRX_SIGN_ARM       (-1)
 
 #define EXTRX_SCALE_ROLL   (40.0f)
 #define EXTRX_SCALE_PITCH  (40.0f)
@@ -83,11 +83,26 @@
 #define EXTRX_DEADBAND_PITCH (0.05f)
 #define EXTRX_DEADBAND_YAW (0.05f)
 
-#define EXTRX_SWITCH_CNT 5 // number of identical subsequent messages before a switch state is changed
+#define EXTRX_SWITCH_MIN_CNT 5 // number of identical subsequent switch states before the switch variable is changed
+
+#ifndef EXTRX_ARMING
+  #define EXTRX_ARMING    false
+#endif
+#if EXTRX_ARMING
+  bool extRxArm = false;
+  bool extRxArmPrev = false;
+  int8_t arm_cnt = 0;
+#endif
 
 #ifndef EXTRX_ALT_HOLD
   #define EXTRX_ALT_HOLD    false
 #endif
+#if EXTRX_ALT_HOLD
+  bool extRxAltHoldPrev = false;
+  bool extRxAltHold = false;
+  int8_t altHold_cnt = 0;
+#endif
+
 
 static setpoint_t extrxSetpoint;
 static uint16_t ch[EXTRX_NR_CHANNELS];
@@ -96,13 +111,6 @@ static void extRxTask(void *param);
 static void extRxDecodeCppm(void);
 static void extRxDecodeChannels(void);
 
-bool extRxKill = true;
-bool extRxKillPrev = true;
-bool extRxAltHold = false;
-bool extRxAltHoldPrev = false;
-
-int8_t kill_cnt = 0;
-int8_t altHold_cnt = 0;
 
 STATIC_MEM_TASK_ALLOC(extRxTask, EXTRX_TASK_STACKSIZE);
 
@@ -143,34 +151,45 @@ static void extRxTask(void *param)
   }
 }
 
+float extRxGetNormalizedChannelValue(uint8_t channel)
+{
+  return cppmConvert2Float(ch[channel], -1, 1, 0.0);
+}
+
 static void extRxDecodeChannels(void)
 {
   
-  if (EXTRX_SIGN_KILL * cppmConvert2Float(ch[EXTRX_CH_KILL], -1, 1, 0.0) > 0.5f) // channel needs to be 75% or more to work correctly with 2/3 way switches
+  #if EXTRX_ARMING
+  if (EXTRX_SIGN_ARM * cppmConvert2Float(ch[EXTRX_CH_ARM], -1, 1, 0.0) > 0.5f) // channel needs to be 75% or more to work correctly with 2/3 way switches
   {
-    if (kill_cnt < EXTRX_SWITCH_CNT) kill_cnt++;
-    else extRxKill = true;
+    if (arm_cnt < EXTRX_SWITCH_MIN_CNT) arm_cnt++;
+    else extRxArm = true;
     
-    if (extRxKillPrev != extRxKill)
+    if (extRxArmPrev != extRxArm)
     {
-      DEBUG_PRINT("Engines killed\n");
+      DEBUG_PRINT("Engines armed\n");
+      systemSetArmed(extRxArm);
     }
   }
   else
   {
-    if (kill_cnt > 0) kill_cnt--;
-    else extRxKill = false;
+    if (arm_cnt > 0) arm_cnt--;
+    else extRxArm = false;
 
-    if (extRxKillPrev != extRxKill)
+    if (extRxArmPrev != extRxArm)
     {
-      DEBUG_PRINT("Engines un-killed\n");
+      DEBUG_PRINT("Engines unarmed\n");
+      systemSetArmed(extRxArm);
     }
   }
 
-  if (EXTRX_ALT_HOLD && 
-      EXTRX_SIGN_ALTHOLD * cppmConvert2Float(ch[EXTRX_CH_ALTHOLD], -1, 1, 0.0) > 0.5f)
+  extRxArmPrev = extRxArm;
+  #endif
+
+  #if EXTRX_ALT_HOLD
+  if (EXTRX_SIGN_ALTHOLD * cppmConvert2Float(ch[EXTRX_CH_ALTHOLD], -1, 1, 0.0) > 0.5f)
   {
-    if (altHold_cnt < EXTRX_SWITCH_CNT) altHold_cnt++;
+    if (altHold_cnt < EXTRX_SWITCH_MIN_CNT) altHold_cnt++;
     else extRxAltHold=true;
 
     if (extRxAltHoldPrev != extRxAltHold) DEBUG_PRINT("Althold mode ON\n");
@@ -182,14 +201,8 @@ static void extRxDecodeChannels(void)
 
     if (extRxAltHoldPrev != extRxAltHold) DEBUG_PRINT("Althold mode OFF\n");
   }
-  
-  // if Kill switch is on, set thrust to zero
-  if (extRxKill)
-  {
-    extrxSetpoint.mode.z = modeDisable;
-    extrxSetpoint.thrust = 0;
-  }
-  else if (extRxAltHold) 
+
+  if (extRxAltHold) 
   {
     extrxSetpoint.thrust = 0;
     extrxSetpoint.mode.z = modeVelocity;
@@ -201,15 +214,18 @@ static void extRxDecodeChannels(void)
     extrxSetpoint.mode.z = modeDisable;
     extrxSetpoint.thrust = cppmConvert2uint16(ch[EXTRX_CH_THRUST]);
   }
-
+  
+  extRxAltHoldPrev = extRxAltHold;
+  #else
+  extrxSetpoint.mode.z = modeDisable;
+  extrxSetpoint.thrust = cppmConvert2uint16(ch[EXTRX_CH_THRUST]);
+  #endif
+  
   extrxSetpoint.attitude.roll = EXTRX_SIGN_ROLL * EXTRX_SCALE_ROLL * cppmConvert2Float(ch[EXTRX_CH_ROLL], -1, 1, EXTRX_DEADBAND_ROLL);
   extrxSetpoint.attitude.pitch = EXTRX_SIGN_PITCH * EXTRX_SCALE_PITCH * cppmConvert2Float(ch[EXTRX_CH_PITCH], -1, 1, EXTRX_DEADBAND_PITCH);
   extrxSetpoint.attitudeRate.yaw = EXTRX_SIGN_YAW * EXTRX_SCALE_YAW *cppmConvert2Float(ch[EXTRX_CH_YAW], -1, 1, EXTRX_DEADBAND_YAW);
 
   commanderSetSetpoint(&extrxSetpoint, COMMANDER_PRIORITY_EXTRX);
-  
-  extRxKillPrev = extRxKill;
-  extRxAltHoldPrev = extRxAltHold;
 }
 
 static void extRxDecodeCppm(void)
@@ -281,9 +297,9 @@ static void extRxDecodeSpektrum(void)
 #ifdef ENABLE_EXTRX_LOG
 /**
  * External receiver (RX) log group. This contains received raw
- * channel data as well as RPTY data after it has been converted.
+ * channel data
  */
-LOG_GROUP_START(extrx)
+LOG_GROUP_START(extrx_raw)
 /**
  * @brief External RX received channel 0 value
  */
@@ -301,6 +317,29 @@ LOG_ADD(LOG_UINT16, ch2, &ch[2])
  */
 LOG_ADD(LOG_UINT16, ch3, &ch[3])
 /**
+ * @brief External RX received channel 4 value
+ */
+LOG_ADD(LOG_UINT16, ch4, &ch[4])
+/**
+ * @brief External RX received channel 5 value
+ */
+LOG_ADD(LOG_UINT16, ch5, &ch[5])
+/**
+ * @brief External RX received channel 6 value
+ */
+LOG_ADD(LOG_UINT16, ch6, &ch[6])
+/**
+ * @brief External RX received channel 7 value
+ */
+LOG_ADD(LOG_UINT16, ch7, &ch[7])
+LOG_GROUP_STOP(extrx_raw)
+
+/**
+ * External receiver (RX) log group. This contains RPTY data and switch 
+ * data after it has been converted.
+ */
+LOG_GROUP_START(extrx)
+/**
  * @brief External RX channel converted to thrust
  */
 LOG_ADD(LOG_UINT16, thrust, &extrxSetpoint.thrust)
@@ -316,13 +355,17 @@ LOG_ADD(LOG_FLOAT, pitch, &extrxSetpoint.attitude.pitch)
  * @brief External RX channel converted to yaw
  */
 LOG_ADD(LOG_FLOAT, yaw, &extrxSetpoint.attitude.yaw)
+#if EXTRX_ALT_HOLD
 /**
  * @brief External RX channel converted to AltHold
  */
 LOG_ADD(LOG_UINT16, AltHold, &extRxAltHold)
+#endif
+#if EXTRX_ARMING 
 /**
- * @brief External RX channel converted to Kill
+ * @brief External RX channel converted to Arm
  */
-LOG_ADD(LOG_UINT16, Kill, &extRxKill)
+LOG_ADD(LOG_UINT16, Arm, &extRxArm)
+#endif
 LOG_GROUP_STOP(extrx)
 #endif
