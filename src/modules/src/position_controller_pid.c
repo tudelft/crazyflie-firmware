@@ -199,10 +199,10 @@ void positionControllerInit()
       this.pidVY.pid.dt, POSITION_RATE, velFiltCutoff, velFiltEnable);
   #ifdef IMPROVED_BARO_Z_HOLD
     pidInit(&this.pidVZ.pid, this.pidVZ.setpoint, this.pidVZ.init.kp, this.pidVZ.init.ki, this.pidVZ.init.kd,
-      this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff, velZFiltEnable);
+      this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff_baro, velZFiltEnable);
   #else
     pidInit(&this.pidVZ.pid, this.pidVZ.setpoint, this.pidVZ.init.kp, this.pidVZ.init.ki, this.pidVZ.init.kd,
-      this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff_baro, velZFiltEnable);
+      this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff, velZFiltEnable);
   #endif
 }
 
