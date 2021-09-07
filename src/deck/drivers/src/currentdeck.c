@@ -78,7 +78,7 @@ void currentDeckTask(void* arg)
   while (1) {
     vTaskDelayUntil(&xLastWakeTime, M2T(1));
 
-    reading_last = analogReadVoltage(DECK_GPIO_SCK);
+    reading_last = analogReadVoltage(DECK_GPIO_TX2);
     current_last = 36.7f*reading_last/3.0f-18.3f;
 
     current = 0.975f*current + 0.025f*current_last;
@@ -89,7 +89,7 @@ static const DeckDriver current_deck = {
   .vid = 0xBC,
   .pid = 0x09,
   .name = "bcCurrentDeck",
-  // .usedGpio = DECK_USING_IO_1
+  .usedGpio = DECK_USING_PA2,
 
   .init = currentDeckInit,
   .test = currentDeckTest,
