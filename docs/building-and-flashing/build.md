@@ -73,6 +73,8 @@ This repository uses git submodules. Clone with the `--recursive` flag
 git clone --recursive https://github.com/bitcraze/crazyflie-firmware.git
 ```
 
+**Note** Make sure there are no spaces in the folder structure leading up to the repository (example: _/a/path/with/no/spaces/crazyflie-firmware/_ vs _a/path with spaces/crazyflie-firmware/_). Our build system can not handle file system paths with spaces in them, and compilation will fail.
+
 If you already have cloned the repo without the `--recursive` option, you need to
 get the submodules manually
 
@@ -112,6 +114,15 @@ or with the toolbelt
 tb make PLATFORM=tag
 ```
 
+### Platform specific options
+In `cf2.mk` or `tag.mk` in the `tools/make/` folder you can find additional compile options, for example which ESTIMATOR or CONTROLLER to use as default.
+
+```
+######### Stabilizer configuration ##########
+ESTIMATOR          ?= any
+CONTROLLER         ?= Any # one of Any, PID, Mellinger, INDI
+POWER_DISTRIBUTION ?= stock
+```
 
 ### config.mk
 To create custom build options create a file called `config.mk` in the `tools/make/`
