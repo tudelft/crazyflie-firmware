@@ -82,8 +82,13 @@ static uint16_t act_max = 65535;
 void powerDistributionInit(void)
 
 {
+  #ifdef NIMBLE_USE_CF2
+  motorsInit(motorMapDefaltConBrushless);
+  DEBUG_PRINT("Using Flapper Drone power distribution | CF2.1\n");
+  #else
   motorsInit(platformConfigGetMotorMapping());
-  DEBUG_PRINT("Using Flapper Drone power distribution\n");
+  DEBUG_PRINT("Using Flapper Drone power distribution | CF Bolt\n");
+  #endif
   
   // Reading out servo trims stored in EEPROM
   flapperConfig.pitchServoNeutral = configblockGetServoNeutralPitch();
