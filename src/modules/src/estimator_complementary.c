@@ -37,6 +37,11 @@
 #include "sensors.h"
 #include "stabilizer_types.h"
 #include "static_mem.h"
+#include "physicalConstants.h"
+#include "filter.h"
+
+#include "log.h"
+#include "param.h"
 
 static Axis3f gyro;
 static Axis3f acc;
@@ -49,10 +54,30 @@ static tofMeasurement_t tof;
 #define POS_UPDATE_RATE RATE_100_HZ
 #define POS_UPDATE_DT 1.0/POS_UPDATE_RATE
 
-    void
-    estimatorComplementaryInit(void)
+#define LOW_PASS_FILTER_CUTOFF_FREQ_HZ 5
+#define LOW_PASS_FILTER_TAU (1.0/(2*3.1415*LOW_PASS_FILTER_CUTOFF_FREQ_HZ))
+#define DEG2RAD (3.1415f/180)
+
+
+static Axis3f drag_coef;
+
+static Butterworth2LowPass vx_filter;
+static Butterworth2LowPass vy_filter;
+static Butterworth2LowPass vz_filter;
+
+void estimatorComplementaryInit(void)
 {
   sensfusion6Init();
+
+  // Initialize Lowpass filters for velocity model
+  init_butterworth_2_low_pass(&vx_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&vy_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&vz_filter, 10*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+
+  drag_coef.x = -3.596;
+  drag_coef.y = -2.065;
+  drag_coef.z = -1.258;
+  // thrust_coef = 0.0002264;
 }
 
 bool estimatorComplementaryTest(void)
@@ -114,5 +139,26 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
 
   if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
     positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);
+
+    float cphi = cos(state->attitude.roll*DEG2RAD);
+    float sphi = sin(state->attitude.roll*DEG2RAD);
+    //float ctheta = cos(-state.attitude.pitch*DEG2RAD);
+    float stheta = sin(-state->attitude.pitch*DEG2RAD);
+
+    // Linear velocity model with filter
+    float tmp = -cphi*stheta*GRAVITY_MAGNITUDE/drag_coef.x;
+    state->velocity.x = update_butterworth_2_low_pass(&vx_filter, tmp);
+    tmp = sphi*GRAVITY_MAGNITUDE/drag_coef.y;
+    state->velocity.y = update_butterworth_2_low_pass(&vy_filter, tmp);
+    tmp = state->velocity.z;
+    state->velocity.z = update_butterworth_2_low_pass(&vz_filter, tmp);
+
   }
 }
+
+PARAM_GROUP_START(flapperswarm)
+  PARAM_ADD(PARAM_FLOAT, dragX, &drag_coef.x)
+  PARAM_ADD(PARAM_FLOAT, dragY, &drag_coef.y)
+  PARAM_ADD(PARAM_FLOAT, dragZ, &drag_coef.z)
+  //PARAM_ADD(PARAM_FLOAT, cT, &thrust_coef)
+PARAM_GROUP_STOP(flapperswarm)
