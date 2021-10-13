@@ -17,7 +17,7 @@
 #warning DO_NOT_USE_LINK_ON_UART2_FOR_CURVACE
 #endif
 
-static bool isInit;
+static uint8_t isInit = 0;
 
 typedef struct __attribute__((packed)) curvaceData_s {
   uint8_t header;
@@ -26,6 +26,20 @@ typedef struct __attribute__((packed)) curvaceData_s {
   uint8_t v3;
 } curvaceData_t;
 
+
+typedef struct __attribute__((packed)) curvaceFlow_s {
+  float x1;
+  float y1;
+  float x2;
+  float y2;
+  float x3;
+  float y3;
+  float x4;
+  float y4;
+} curvaceFlow_t;
+
+
+curvaceFlow_t curvaceFlow;
 
 void curvaceTask(void *param)
 {
@@ -85,13 +99,23 @@ static void curvaceInit()
    */
   uart2Init(115200);
 
-  isInit = true;
+  isInit = 1;
+
+  curvaceFlow.x1 = 1.0f;
+  curvaceFlow.y1 = 2.0f;
+  curvaceFlow.x2 = 3.0f;
+  curvaceFlow.y2 = 4.0f;
+  curvaceFlow.x3 = 5.0f;
+  curvaceFlow.y3 = 6.0f;
+  curvaceFlow.x4 = 7.0f;
+  curvaceFlow.y4 = 8.0f;
+  
 }
 
 
 static bool curvaceTest()
 {
-  return isInit;
+  return isInit == 1;
 }
 
 
@@ -103,6 +127,28 @@ static const DeckDriver curvaceDriver = {
 
 
 DECK_DRIVER(curvaceDriver);
+
+
+
+
+/**
+ * Logging variables of the motion sensor of the flowdeck
+ */
+LOG_GROUP_START(curvace)
+/**
+ * @brief True if motion occured since the last measurement
+ */
+LOG_ADD(LOG_FLOAT, x1, &curvaceFlow.x1)
+LOG_ADD(LOG_FLOAT, y1, &curvaceFlow.y1)
+LOG_ADD(LOG_FLOAT, x2, &curvaceFlow.x2)
+LOG_ADD(LOG_FLOAT, y2, &curvaceFlow.y2)
+LOG_ADD(LOG_FLOAT, x3, &curvaceFlow.x3)
+LOG_ADD(LOG_FLOAT, y3, &curvaceFlow.y3)
+LOG_ADD(LOG_FLOAT, x4, &curvaceFlow.x4)
+LOG_ADD(LOG_FLOAT, y4, &curvaceFlow.y4)
+LOG_GROUP_STOP(curvace)
+
+
 
 
 
