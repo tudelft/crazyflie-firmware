@@ -28,18 +28,49 @@ typedef struct __attribute__((packed)) curvaceData_s {
 
 
 typedef struct __attribute__((packed)) curvaceFlow_s {
-  float x1;
-  float y1;
-  float x2;
-  float y2;
-  float x3;
-  float y3;
-  float x4;
-  float y4;
+  int16_t x1;
+  int16_t y1;
+  int16_t x2;
+  int16_t y2;
+  int16_t x3;
+  int16_t y3;
+  int16_t x4;
+  int16_t y4;
+  uint16_t error;
 } curvaceFlow_t;
 
 
 curvaceFlow_t curvaceFlow;
+
+uint8_t hex(char x) {
+  if (x < '0') {
+    return 16;
+  }
+  if (x > '9') {
+    return 10 + (x - 'A');
+  }
+  return x-'0';
+}
+
+int16_t get_hex(uint8_t* b) {
+  int16_t vv = 0;
+
+  vv += hex(*b);
+  b++;
+  vv = vv << 4;
+
+  vv += hex(*b);
+  b++;
+  vv = vv << 4;
+  
+  vv += hex(*b);
+  b++;
+  vv = vv << 4;
+
+  vv += hex(*b);
+
+  return vv;
+}
 
 void curvaceTask(void *param)
 {
@@ -48,8 +79,9 @@ void curvaceTask(void *param)
   //int velZid;
 
   char c = 'A';
+  uint8_t buf[33];
 
-  curvaceData_t packet;
+  //curvaceData_t packet;
 
   systemWaitStart();
 
@@ -63,26 +95,49 @@ void curvaceTask(void *param)
   while (1)
   {
     // Set the loop unlock time in ms
-    vTaskDelayUntil(&lastWakeTime, M2T(100));
+    vTaskDelayUntil(&lastWakeTime, M2T(5));
 
 
-    uart2Getchar(&c);
+    int cnt=0;
+
+    // Get a line
+    while (cnt < 33) {
+      uart2Getchar(&c);
+      buf[cnt] = c;
+      if (c == 10) {
+        break;
+      }
+      cnt++;
+    }
+
+    curvaceFlow.x4 = cnt;
+
+    if (cnt == 32) {
+      // Received a message!
+      curvaceFlow.x1 = get_hex(buf);
+      curvaceFlow.y1 = get_hex(buf+4);
+      curvaceFlow.x2 = get_hex(buf+8);
+      curvaceFlow.y2 = get_hex(buf+12);
+      curvaceFlow.x3 = get_hex(buf+16);
+      curvaceFlow.y3 = get_hex(buf+20);
+      curvaceFlow.x4 = get_hex(buf+24);
+      curvaceFlow.y4 = get_hex(buf+28);
+    } else {
+      curvaceFlow.error++;
+    }
 
     // Assemble the data
-    packet.header = SERIAL_HEADER;
-    packet.v1 = c;
-//    if (c > 'Z') {
-//      c = 'A';
-//    }
-    packet.v2 = 10;
-    packet.v3 = 13;
+    //packet.header = SERIAL_HEADER;
+    //packet.v1 = c;
+    //packet.v2 = 10;
+    //packet.v3 = 13;
     
     //packet.targetVX = logGetFloat(velXid);
     //packet.targetVY = logGetFloat(velYid);
     //packet.targetVZ = logGetFloat(velZid);
 
     // Send the three floats, byte by byte, to UART2
-    uart2SendDataDmaBlocking(sizeof(curvaceData_t), (uint8_t *)(&packet));
+    //uart2SendDataDmaBlocking(sizeof(curvaceData_t), (uint8_t *)(&packet));
   }
 }
 
@@ -101,15 +156,15 @@ static void curvaceInit()
 
   isInit = 1;
 
-  curvaceFlow.x1 = 1.0f;
-  curvaceFlow.y1 = 2.0f;
-  curvaceFlow.x2 = 3.0f;
-  curvaceFlow.y2 = 4.0f;
-  curvaceFlow.x3 = 5.0f;
-  curvaceFlow.y3 = 6.0f;
-  curvaceFlow.x4 = 7.0f;
-  curvaceFlow.y4 = 8.0f;
-  
+  curvaceFlow.x1 = 0;
+  curvaceFlow.y1 = 0;
+  curvaceFlow.x2 = 0;
+  curvaceFlow.y2 = 0;
+  curvaceFlow.x3 = 0;
+  curvaceFlow.y3 = 0;
+  curvaceFlow.x4 = 0;
+  curvaceFlow.y4 = 0;
+  curvaceFlow.error = 0;
 }
 
 
@@ -138,14 +193,15 @@ LOG_GROUP_START(curvace)
 /**
  * @brief True if motion occured since the last measurement
  */
-LOG_ADD(LOG_FLOAT, x1, &curvaceFlow.x1)
-LOG_ADD(LOG_FLOAT, y1, &curvaceFlow.y1)
-LOG_ADD(LOG_FLOAT, x2, &curvaceFlow.x2)
-LOG_ADD(LOG_FLOAT, y2, &curvaceFlow.y2)
-LOG_ADD(LOG_FLOAT, x3, &curvaceFlow.x3)
-LOG_ADD(LOG_FLOAT, y3, &curvaceFlow.y3)
-LOG_ADD(LOG_FLOAT, x4, &curvaceFlow.x4)
-LOG_ADD(LOG_FLOAT, y4, &curvaceFlow.y4)
+LOG_ADD(LOG_INT16, x1, &curvaceFlow.x1)
+LOG_ADD(LOG_INT16, y1, &curvaceFlow.y1)
+LOG_ADD(LOG_INT16, x2, &curvaceFlow.x2)
+LOG_ADD(LOG_INT16, y2, &curvaceFlow.y2)
+LOG_ADD(LOG_INT16, x3, &curvaceFlow.x3)
+LOG_ADD(LOG_INT16, y3, &curvaceFlow.y3)
+LOG_ADD(LOG_INT16, x4, &curvaceFlow.x4)
+LOG_ADD(LOG_INT16, y4, &curvaceFlow.y4)
+LOG_ADD(LOG_UINT16, err, &curvaceFlow.error)
 LOG_GROUP_STOP(curvace)
 
 

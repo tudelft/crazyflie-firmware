@@ -1,0 +1,29 @@
+1     # version
+512   # buffer size in bytes
+log   # file name
+0     # enable on startup (0/1)
+on:fixedFrequency
+200     # frequency
+1     # mode (0: disabled, 1: synchronous stabilizer, 2: asynchronous)
+acc.x
+acc.y
+acc.z
+gyro.x
+gyro.y
+gyro.z
+baro.asl
+baro.temp
+baro.pressure
+stabilizer.roll
+stabilizer.pitch
+stabilizer.yaw
+stabilizer.thrust
+curvace.x1
+curvace.y1
+curvace.x2
+curvace.y2
+curvace.x3
+curvace.y3
+curvace.x4
+curvace.y4
+
