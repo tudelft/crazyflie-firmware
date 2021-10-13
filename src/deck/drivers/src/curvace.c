@@ -1,14 +1,21 @@
+
 #include "deck.h"
+#include "debug.h"
+#include "system.h"
+#include "log.h"
+#include "param.h"
+
 #include "FreeRTOS.h"
 #include "task.h"
-#include "system.h"
 #include "uart2.h"
-#include "log.h"
-#include "debug.h"
 
 #define DEBUG_MODULE "CURVACE"
 
 #define SERIAL_HEADER 'C'
+
+#ifdef UART2_LINK_COMM
+#warning DO_NOT_USE_LINK_ON_UART2_FOR_CURVACE
+#endif
 
 static bool isInit;
 
@@ -42,14 +49,17 @@ void curvaceTask(void *param)
   while (1)
   {
     // Set the loop unlock time in ms
-    vTaskDelayUntil(&lastWakeTime, M2T(10));
+    vTaskDelayUntil(&lastWakeTime, M2T(100));
+
+
+    uart2Getchar(&c);
 
     // Assemble the data
     packet.header = SERIAL_HEADER;
-    packet.v1 = c++;
-    if (c > 'Z') {
-      c = 'A';
-    }
+    packet.v1 = c;
+//    if (c > 'Z') {
+//      c = 'A';
+//    }
     packet.v2 = 10;
     packet.v3 = 13;
     
@@ -93,3 +103,14 @@ static const DeckDriver curvaceDriver = {
 
 
 DECK_DRIVER(curvaceDriver);
+
+
+
+PARAM_GROUP_START(deck)
+
+/**
+ * @brief Nonzero if [Multi-ranger deck](%https://store.bitcraze.io/collections/decks/products/multi-ranger-deck) is attached
+ */
+PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcCurvACEInit, &isInit)
+
+PARAM_GROUP_STOP(deck)
