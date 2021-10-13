@@ -8,32 +8,34 @@
 
 #define DEBUG_MODULE "CURVACE"
 
-#define SERIAL_HEADER 0x00
+#define SERIAL_HEADER 'C'
 
 static bool isInit;
 
-typedef struct __attribute__((packed)) mavicData_s {
+typedef struct __attribute__((packed)) curvaceData_s {
   uint8_t header;
-  float targetVX;
-  float targetVY;
-  float targetVZ;
-} mavicData_t;
+  uint8_t v1;
+  uint8_t v2;
+  uint8_t v3;
+} curvaceData_t;
 
 
-void mavicTask(void *param)
+void curvaceTask(void *param)
 {
-  int velXid;
-  int velYid;
-  int velZid;
+  //int velXid;
+  //int velYid;
+  //int velZid;
 
-  mavicData_t packet;
+  char c = 'A';
+
+  curvaceData_t packet;
 
   systemWaitStart();
 
   // Setup data to transfer
-  velXid = logGetVarId("posCtl", "targetVX");
-  velYid = logGetVarId("posCtl", "targetVY");
-  velZid = logGetVarId("posCtl", "targetVZ");
+  //velXid = logGetVarId("posCtl", "targetVX");
+  //velYid = logGetVarId("posCtl", "targetVY");
+  //velZid = logGetVarId("posCtl", "targetVZ");
 
   TickType_t lastWakeTime = xTaskGetTickCount();
 
@@ -44,21 +46,28 @@ void mavicTask(void *param)
 
     // Assemble the data
     packet.header = SERIAL_HEADER;
-    packet.targetVX = logGetFloat(velXid);
-    packet.targetVY = logGetFloat(velYid);
-    packet.targetVZ = logGetFloat(velZid);
+    packet.v1 = c++;
+    if (c > 'Z') {
+      c = 'A';
+    }
+    packet.v2 = 10;
+    packet.v3 = 13;
+    
+    //packet.targetVX = logGetFloat(velXid);
+    //packet.targetVY = logGetFloat(velYid);
+    //packet.targetVZ = logGetFloat(velZid);
 
     // Send the three floats, byte by byte, to UART2
-    uart2SendDataDmaBlocking(sizeof(mavicData_t), (uint8_t *)(&packet));
+    uart2SendDataDmaBlocking(sizeof(curvaceData_t), (uint8_t *)(&packet));
   }
 }
 
 
-static void mavicInit()
+static void curvaceInit()
 {
-  DEBUG_PRINT("Starting Mavic task: writing velocity commands to UART2\n");
+  DEBUG_PRINT("Starting CurvACE task: reading flow from  UART2\n");
 
-  xTaskCreate(mavicTask, "MAVIC", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+  xTaskCreate(curvaceTask, "CURVACE", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 
   // Configure uart and set the baud rate
   /**
@@ -70,17 +79,17 @@ static void mavicInit()
 }
 
 
-static bool mavicTest()
+static bool curvaceTest()
 {
   return isInit;
 }
 
 
-static const DeckDriver mavicDriver = {
+static const DeckDriver curvaceDriver = {
   .name = "CurvACE",
-  .init = mavicInit,
-  .test = mavicTest,
+  .init = curvaceInit,
+  .test = curvaceTest,
 };
 
 
-DECK_DRIVER(mavicDriver);
+DECK_DRIVER(curvaceDriver);
