@@ -26,6 +26,7 @@ CFLAGS += -DIMU_PSI=180.0f
 # CFLAGS += -DDECK_FORCE=bcUSD # force the SD card deck
 # CFLAGS += -DDECK_FORCE=bcLedRing
 # CFLAGS += -DDECK_FORCE=bcCurrentDeck # analog current sensor on PA2/TX2 (not integrated)
+CFLAGS += -DDECK_FORCE=CurvACE
 
 ## To use multiple features at a time, separate their names with colons:
 # CFLAGS += -DDECK_FORCE=bcUSD:bcCPPM:bcLedRing:bcCurrentDeck
