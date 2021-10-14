@@ -98,6 +98,7 @@ bool estimatorComplementaryTest(void)
 void estimatorComplementary(state_t *state, const uint32_t tick)
 {
   if (resetEstimation){
+    baro_ground_set = false;
     estimatorComplementaryInit();
     resetEstimation = false;
   }
@@ -151,17 +152,20 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
   }
 
   if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
-    // callibrate baro on first iteration
-    if (!baro_ground_set){
-      baro_ground_level = baro.asl;
-      baro_ground_set = true;
-    }
+
 
     // average past baro asl measurements and put ground level to 0
     if (baro_count > 0){
-      baro.asl = (baro_accum/baro_count) - baro_ground_level;
+      baro.asl = (baro_accum/baro_count);
       baro_accum = 0;
       baro_count = 0;
+      
+      // callibrate baro on first iteration
+      if (!baro_ground_set){
+        baro_ground_level = baro.asl;
+        baro_ground_set = true;
+      }
+      baro.asl = baro.asl - baro_ground_level;
     }
 
     positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);

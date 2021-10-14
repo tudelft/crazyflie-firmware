@@ -44,7 +44,7 @@ CFLAGS += -DIMU_PSI=180.0f
 
 ## Better baro hold with no additional sensors ##
 #################################################
-# CFLAGS += -DIMPROVED_BARO_Z_HOLD
+CFLAGS += -DIMPROVED_BARO_Z_HOLD
 
 ## Limit maximal thrust (100% = 65535) ##
 #########################################
