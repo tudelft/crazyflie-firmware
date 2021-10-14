@@ -15,7 +15,7 @@
 #define OF_TWO_DIM 0
 // Only for changing alt
 #define OF_THRUST_BIAS 0
-// Whether to use gyros:
+// Whether to use gyros for the prediction:
 #define OF_USE_GYROS 1
 
 #if CONSTANT_ALT_FILTER == 1
@@ -24,14 +24,7 @@
     #define OF_ANGLE_IND 1
     #define OF_Z_IND 2
     // #define OF_ANGLE_DOT_IND 3
-
-    #if OF_USE_GYROS == 1
-      // ventral flow and gyros
-      #define N_MEAS_OF_KF 2
-    #else
-      // gyros not used at all
-      #define N_MEAS_OF_KF 1
-    #endif
+    #define N_MEAS_OF_KF 1
 
     #define OF_THETA_IND -1
     #define OF_VX_IND -1
@@ -39,10 +32,6 @@
     #if OF_THRUST_BIAS == 0
       #define N_STATES_OF_KF 3
       #define OF_THRUST_BIAS_IND -1
-    #else
-      // does this work with thrust bias?
-      #define N_STATES_OF_KF 5
-      #define OF_THRUST_BIAS_IND 4
     #endif
   #endif
 #endif

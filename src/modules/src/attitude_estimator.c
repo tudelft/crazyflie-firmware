@@ -74,9 +74,9 @@ float OF_Q[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
 float OF_P[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
 float OF_R[N_MEAS_OF_KF][N_MEAS_OF_KF] = {{0.}};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Xm = { N_STATES_OF_KF, 1, (float *)OF_X};
-static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Xm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_Q};
-static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Xm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_P};
-static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Xm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float *)OF_R};
+static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Qm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_Q};
+static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Pm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_P};
+static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Rm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float *)OF_R};
 
 void init_OF_att() {
 
@@ -146,8 +146,9 @@ void reset_OF_att() {
 
 void estimator_OF_att(state_t *state, const uint32_t tick)
 {
-  /*  
+   
   float mass = parameters[PAR_MASS]; // 0.400;
+  /*
   float moment = 0.0f; // for now assumed to be 0
   float Ix = parameters[PAR_IX]; // 0.0018244;
   float b = parameters[PAR_BASE];
@@ -175,71 +176,22 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   if(CONSTANT_ALT_FILTER) {
       OF_X[OF_V_IND] += dt * (g * tan(OF_X[OF_ANGLE_IND]));
       if(OF_DRAG) {
-	  // quadratic drag acceleration:
-	  drag = dt * kd * (OF_X[OF_V_IND]*OF_X[OF_V_IND]) / mass;
-	  // apply it in the right direction:
-	  if(OF_X[OF_V_IND] > 0) OF_X[OF_V_IND] -= drag;
-	  else OF_X[OF_V_IND] += drag;
+        // quadratic drag acceleration:
+        drag = dt * kd * (OF_X[OF_V_IND]*OF_X[OF_V_IND]) / mass;
+        // apply it in the right direction:
+        if(OF_X[OF_V_IND] > 0) OF_X[OF_V_IND] -= drag;
+        else OF_X[OF_V_IND] += drag;
       }
 
-      /* // if we use gyros here, the angle dot estimate is ignored:
-       * if(OF_USE_GYROS) {
-	  // OF_X[OF_ANGLE_IND] += dt * (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll) * (M_PI/180.0f) / 74.0f; // Code says scaled by 12, but... that does not fit...
-      } */
-
-      // temporary insertion of gyro estimate here, for quicker effect:
-      // OF_X[OF_ANGLE_IND] += dt * -2.0e-03 * (stabilization_cmd[COMMAND_ROLL]-ins_flow.lp_roll_command);
-
-      OF_X[OF_ANGLE_IND] += dt * OF_X[OF_ANGLE_DOT_IND];
-      OF_X[OF_ANGLE_DOT_IND] += dt * (moment / Ix);
-
-      if(OF_TWO_DIM) {
-	  // Second axis, decoupled formulation:
-	  OF_X[OF_VX_IND] += dt * (g * tan(OF_X[OF_THETA_IND]));
-	  if(OF_DRAG) {
-	    // quadratic drag acceleration:
-	    drag = dt * kd * (OF_X[OF_VX_IND]*OF_X[OF_VX_IND]) / mass;
-	    // apply it in the right direction:
-	    if(OF_X[OF_VX_IND] > 0) OF_X[OF_VX_IND] -= drag;
-	    else OF_X[OF_VX_IND] += drag;
-	  }
-	  // TODO: here also a moment estimate?
-	  OF_X[OF_THETA_IND] += dt * (ins_flow.lp_gyro_pitch - ins_flow.lp_gyro_bias_pitch) * (M_PI/180.0f) / 74.0f; // Code says scaled by 12, but... that does not fit...
+      if(OF_USE_GYROS) {
+	    OF_X[OF_ANGLE_IND] += dt * (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll); 
       }
-
-      DEBUG_PRINT("Rate p = %f, gyro p = %f\n", rates->p, (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll) * (M_PI/180.0f) / 74.0f);
-  }
-  else {
-    // make sure that the right hand state terms appear before they change:
-    OF_X[OF_V_IND] += dt * (thrust * sin(OF_X[OF_ANGLE_IND]) / mass);
-    OF_X[OF_Z_IND] += dt * OF_X[OF_Z_DOT_IND];
-    OF_X[OF_Z_DOT_IND] += dt * (thrust * cos(OF_X[OF_ANGLE_IND]) / mass - g);
-    OF_X[OF_ANGLE_IND] += dt * OF_X[OF_ANGLE_DOT_IND];
-    /*
-     * // TODO: We now only keep this here because it worked on the real drone. It also worked without it. So to be deleted if it works as is.
-    else {
-	OF_X[OF_ANGLE_IND] += dt * (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll) * (M_PI/180.0f) / 74.0f;
-    }*/
-    OF_X[OF_ANGLE_DOT_IND] += dt * (moment / Ix);
-
-    // thrust bias does not change over time according to our model
-
-    if(OF_DRAG) {
-      // quadratic drag acceleration:
-      drag = dt * kd * (OF_X[OF_V_IND]*OF_X[OF_V_IND]) / mass;
-      // apply it in the right direction:
-      if(OF_X[OF_V_IND] > 0) OF_X[OF_V_IND] -= drag;
-      else OF_X[OF_V_IND] += drag;
-    }
   }
 
   // ensure that z is not 0 (or lower)
   if(OF_X[OF_Z_IND] < 1e-2) {
       OF_X[OF_Z_IND] = 1e-2;
   }
-
-  DEBUG_PRINT("After prediction: ");
-  if(DEBUG_INS_FLOW) print_ins_flow_state();
 
   // prepare the update and correction step:
   // we have to recompute these all the time, as they depend on the state:
@@ -250,27 +202,10 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   }
   if(CONSTANT_ALT_FILTER) {
     F[OF_V_IND][OF_ANGLE_IND] = dt*(g/(cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])));
-    F[OF_ANGLE_IND][OF_ANGLE_DOT_IND] = dt*1.0f;
-    if(OF_TWO_DIM) {
-	F[OF_VX_IND][OF_THETA_IND] = dt*(g/(cos(OF_X[OF_THETA_IND])*cos(OF_X[OF_THETA_IND])));
-    }
-  }
-  else {
-    F[OF_V_IND][OF_ANGLE_IND] = dt*(thrust*cos(OF_X[OF_ANGLE_IND])/mass);
-    F[OF_ANGLE_IND][OF_ANGLE_DOT_IND] = dt*1.0f;
-    F[OF_Z_IND][OF_Z_DOT_IND] = dt*1.0f;
-    F[OF_Z_DOT_IND][OF_ANGLE_IND] = dt*(-thrust*sin(OF_X[OF_ANGLE_IND])/mass);
-    if(OF_THRUST_BIAS) {
-	F[OF_V_IND][OF_THRUST_BIAS_IND] =  -dt*sin(OF_X[OF_ANGLE_IND]) / mass;
-	F[OF_Z_DOT_IND][OF_THRUST_BIAS_IND] = -dt*cos(OF_X[OF_ANGLE_IND]) / mass;
-    }
   }
   if(OF_DRAG) {
       // In MATLAB: -sign(v)*2*kd*v/m (always minus, whether v is positive or negative):
       F[OF_V_IND][OF_V_IND] -=  dt * 2 * kd * abs(OF_X[OF_V_IND]) / mass;
-      if(OF_TWO_DIM) {
-	  F[OF_VX_IND][OF_VX_IND] -=  dt * 2 * kd * abs(OF_X[OF_VX_IND]) / mass;
-      }
   }
 
   // G matrix (whatever it may be):
@@ -289,81 +224,18 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
     H[OF_LAT_FLOW_IND][OF_V_IND] = -cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/ OF_X[OF_Z_IND];
     H[OF_LAT_FLOW_IND][OF_ANGLE_IND] = OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
     H[OF_LAT_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
-    H[OF_LAT_FLOW_IND][OF_ANGLE_DOT_IND] = 1.0f;
-    // divergence:
-    H[OF_DIV_FLOW_IND][OF_V_IND] = -sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]);
-    H[OF_DIV_FLOW_IND][OF_ANGLE_IND] = -OF_X[OF_V_IND]*cos(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
-    H[OF_DIV_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
-    H[OF_DIV_FLOW_IND][OF_ANGLE_DOT_IND] = 0.0f;
-
-    if(OF_TWO_DIM) {
-	// divergence measurement couples the two axes actually...:
-	H[OF_DIV_FLOW_IND][OF_VX_IND] = -sin(2*OF_X[OF_THETA_IND])/(2*OF_X[OF_Z_IND]);
-	H[OF_DIV_FLOW_IND][OF_THETA_IND] = -OF_X[OF_VX_IND]*cos(2*OF_X[OF_THETA_IND])/OF_X[OF_Z_IND];
-
-	// lateral flow in x direction:
-	H[OF_LAT_FLOW_X_IND][OF_VX_IND] = -cos(OF_X[OF_THETA_IND])*cos(OF_X[OF_THETA_IND])/ OF_X[OF_Z_IND];
-	H[OF_LAT_FLOW_X_IND][OF_THETA_IND] = OF_X[OF_VX_IND]*sin(2*OF_X[OF_THETA_IND])/OF_X[OF_Z_IND];
-	H[OF_LAT_FLOW_X_IND][OF_Z_IND] = OF_X[OF_VX_IND]*cos(OF_X[OF_THETA_IND])*cos(OF_X[OF_THETA_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
-    }
-  }
-  else {
-    // lateral flow:
-    H[OF_LAT_FLOW_IND][OF_V_IND] = -cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/ OF_X[OF_Z_IND];
-    H[OF_LAT_FLOW_IND][OF_ANGLE_IND] = OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]
-					  + OF_X[OF_Z_DOT_IND]*cos(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
-    H[OF_LAT_FLOW_IND][OF_ANGLE_DOT_IND] = 1.0f;
-    H[OF_LAT_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND])
-				    - OF_X[OF_Z_DOT_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
-    H[OF_LAT_FLOW_IND][OF_Z_DOT_IND] = sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]);
-    // divergence:
-    H[OF_DIV_FLOW_IND][OF_V_IND] = -sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]);
-    H[OF_DIV_FLOW_IND][OF_ANGLE_IND] = -OF_X[OF_V_IND]*cos(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]
-					  + OF_X[OF_Z_DOT_IND]*sin(2*OF_X[OF_ANGLE_IND]) / OF_X[OF_Z_IND];
-    H[OF_DIV_FLOW_IND][OF_ANGLE_DOT_IND] = 0.0f;
-    H[OF_DIV_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]*OF_X[OF_Z_IND])
-				    + OF_X[OF_Z_DOT_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
-    H[OF_DIV_FLOW_IND][OF_Z_DOT_IND] = -cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
   }
 
-  // rate measurement:
-  if(OF_USE_GYROS) {
-    H[OF_RATE_IND][OF_V_IND] = 0.0f;
-    H[OF_RATE_IND][OF_ANGLE_IND] = 0.0f;
-    H[OF_RATE_IND][OF_ANGLE_DOT_IND] = 1.0f;
-    H[OF_RATE_IND][OF_Z_IND] = 0.0f;
-    H[OF_RATE_IND][OF_Z_DOT_IND] = 0.0f;
-  }
-
-  // propagate uncertainty:
-  // TODO: make pointers that don't change to init:
-  MAKE_MATRIX_PTR(Phi, F, N_STATES_OF_KF);
-  MAKE_MATRIX_PTR(P, OF_P, N_STATES_OF_KF);
-  MAKE_MATRIX_PTR(Gamma, G, N_STATES_OF_KF);
-  MAKE_MATRIX_PTR(Q, OF_Q, N_STATES_OF_KF);
-  MAKE_MATRIX_PTR(R, OF_R, N_MEAS_OF_KF);
-  MAKE_MATRIX_PTR(Jac, H, N_MEAS_OF_KF);
-
-  DEBUG_PRINT("Phi:\n");
-  DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, Phi);
-
-  DEBUG_PRINT("P:\n");
-  DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, P);
-
-  DEBUG_PRINT("Gamma:\n");
-  DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, G);
-
-  DEBUG_PRINT("Q:\n");
-  DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, Q);
-
-  DEBUG_PRINT("R:\n");
-  DEBUG_MAT_PRINT(N_MEAS_OF_KF, N_MEAS_OF_KF, R);
-
-  DEBUG_PRINT("Jacobian:\n");
-  DEBUG_MAT_PRINT(N_MEAS_OF_KF, N_STATES_OF_KF, Jac);
+  arm_matrix_instance_f32 Phi = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) F};
+  arm_matrix_instance_f32 Gamma = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) G};
+  arm_matrix_instance_f32 Jac = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) H};
 
   // Corresponding MATLAB statement:    :O
   // P_k1_k = Phi_k1_k*P*Phi_k1_k' + Gamma_k1_k*Q*Gamma_k1_k';
+
+
+
+  
   float _PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
   MAKE_MATRIX_PTR(PhiT, _PhiT, N_STATES_OF_KF);
   float _P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
