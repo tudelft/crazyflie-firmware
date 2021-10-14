@@ -43,10 +43,16 @@
 #include "log.h"
 #include "param.h"
 
+static bool resetEstimation = false;
 static Axis3f gyro;
 static Axis3f acc;
 static baro_t baro;
+static float baro_accum = 0.0f;
+static uint8_t baro_count = 0;
 static tofMeasurement_t tof;
+
+static float baro_ground_level;
+static bool baro_ground_set = false;
 
 #define ATTITUDE_UPDATE_RATE RATE_250_HZ
 #define ATTITUDE_UPDATE_DT 1.0/ATTITUDE_UPDATE_RATE
@@ -91,6 +97,10 @@ bool estimatorComplementaryTest(void)
 
 void estimatorComplementary(state_t *state, const uint32_t tick)
 {
+  if (resetEstimation){
+    estimatorComplementaryInit();
+    resetEstimation = false;
+  }
   // Pull the latest sensors values of interest; discard the rest
   measurement_t m;
   while (estimatorDequeue(&m)) {
@@ -104,6 +114,8 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       break;
     case MeasurementTypeBarometer:
       baro = m.data.barometer.baro;
+      baro_accum += baro.asl;
+      baro_count += 1;
       break;
     case MeasurementTypeTOF:
       tof = m.data.tof;
@@ -112,6 +124,7 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       break;
     }
   }
+
 
   // Update filter
   if (RATE_DO_EXECUTE(ATTITUDE_UPDATE_RATE, tick)) {
@@ -138,6 +151,19 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
   }
 
   if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
+    // callibrate baro on first iteration
+    if (!baro_ground_set){
+      baro_ground_level = baro.asl;
+      baro_ground_set = true;
+    }
+
+    // average past baro asl measurements and put ground level to 0
+    if (baro_count > 0){
+      baro.asl = (baro_accum/baro_count) - baro_ground_level;
+      baro_accum = 0;
+      baro_count = 0;
+    }
+
     positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);
 
     float cphi = cos(state->attitude.roll*DEG2RAD);
@@ -156,9 +182,11 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
   }
 }
 
-PARAM_GROUP_START(flapperswarm)
+
+PARAM_GROUP_START(complementaryFilter)
+  PARAM_ADD(PARAM_UINT8, reset, &resetEstimation)
   PARAM_ADD(PARAM_FLOAT, dragX, &drag_coef.x)
   PARAM_ADD(PARAM_FLOAT, dragY, &drag_coef.y)
   PARAM_ADD(PARAM_FLOAT, dragZ, &drag_coef.z)
   //PARAM_ADD(PARAM_FLOAT, cT, &thrust_coef)
-PARAM_GROUP_STOP(flapperswarm)
+PARAM_GROUP_STOP(complementaryFilter)

@@ -65,6 +65,7 @@ static bool isInit;
 
 static bool isCalibrated = false;
 
+static void sensfusion6Reset(void);
 static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float ay, float az, float dt);
 static float sensfusion6GetAccZ(const float ax, const float ay, const float az);
 static void estimatedGravityDirection(float* gx, float* gy, float* gz);
@@ -74,9 +75,11 @@ static float invSqrt(float x);
 
 void sensfusion6Init()
 {
-  if(isInit)
+  if(isInit){
+    sensfusion6Reset();
     return;
-
+  }
+  
   isInit = true;
 }
 
@@ -171,6 +174,15 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
   qy *= recipNorm;
   qz *= recipNorm;
 }
+
+static void sensfusion6Reset(void){
+  qw = 1.0f;
+  qx = 0.0f;
+  qy = 0.0f;
+  qz = 0.0f;
+  isCalibrated = false;
+}
+
 #else // MAHONY_QUATERNION_IMU
 // Madgwick's implementation of Mayhony's AHRS algorithm.
 // See: http://www.x-io.co.uk/open-source-ahrs-with-x-imu
@@ -249,6 +261,17 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
   qx *= recipNorm;
   qy *= recipNorm;
   qz *= recipNorm;
+}
+
+static void sensfusion6Reset(void){
+  qw = 1.0f;
+  qx = 0.0f;
+  qy = 0.0f;
+  qz = 0.0f;
+  integralFBx = 0.0f;
+  integralFBy = 0.0f;
+  integralFBz = 0.0f;
+  isCalibrated = false;
 }
 #endif
 
