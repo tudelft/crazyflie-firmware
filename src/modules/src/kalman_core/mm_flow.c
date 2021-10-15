@@ -43,7 +43,7 @@ void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *f
   // focal_x = 448;
   // of1_x = flow_x.*fps/(subpixel_factor*focal_x); 
   float fps;
-  if(flow->dt > 1e-5) {
+  if(flow->dt > 1e-5f) {
     fps = 1.0f / flow->dt;
   }
   else {
