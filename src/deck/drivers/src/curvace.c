@@ -145,13 +145,13 @@ void curvaceTask(void *param)
         curvaceFlow.dt = 1.0f/100.0f;
       }
 
-      curvaceFlow.fps = 1.0f / curvaceFlow.dt;
+      curvaceFlow.fps = 202.0f; //1.0f / curvaceFlow.dt;
 
-#define FOCAL_LENGTH   26741.0f
-#define MANUAL_CORRECTION 3.3f
+#define FOCAL_LENGTH   56205  //26741.0f
+#define MANUAL_CORRECTION 1.0f //3.3f
 
-      curvaceFlow.fx = -((float)curvaceFlow.avgx) / FOCAL_LENGTH * curvaceFlow.fps / MANUAL_CORRECTION ;
-      curvaceFlow.fy = -((float)curvaceFlow.avgy) / FOCAL_LENGTH * curvaceFlow.fps / MANUAL_CORRECTION;
+      curvaceFlow.fx = -((float)curvaceFlow.avgx) / FOCAL_LENGTH * curvaceFlow.fps; // / MANUAL_CORRECTION ;
+      curvaceFlow.fy = -((float)curvaceFlow.avgy) / FOCAL_LENGTH * curvaceFlow.fps; // / MANUAL_CORRECTION;
 
 
       set_flow_measurement(curvaceFlow.fy);

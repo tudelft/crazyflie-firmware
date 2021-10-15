@@ -96,7 +96,7 @@ def decode(filename):
 
     return result
 
-log_name = "log01"
+log_name = "log02_onboard_est"
 result = decode(log_name)
 result = result['fixedFrequency']
 
