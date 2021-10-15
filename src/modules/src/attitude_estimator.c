@@ -2,6 +2,7 @@
 
 #include "attitude_estimator.h"
 #include "arm_math.h"
+#include "cf_math.h"
 
 // struct for state-keeping:
 struct InsFlow {
@@ -226,48 +227,36 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
     H[OF_LAT_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
   }
 
-  arm_matrix_instance_f32 Phi = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) F};
-  arm_matrix_instance_f32 Gamma = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) G};
-  arm_matrix_instance_f32 Jac = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) H};
+  __attribute__((aligned(4))) arm_matrix_instance_f32 Phim = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) F};
+  __attribute__((aligned(4))) arm_matrix_instance_f32 Gammam = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) G};
+  __attribute__((aligned(4))) arm_matrix_instance_f32 Jacm = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) H};
+
+
 
   // Corresponding MATLAB statement:    :O
   // P_k1_k = Phi_k1_k*P*Phi_k1_k' + Gamma_k1_k*Q*Gamma_k1_k';
+  float PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
+  float P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
+  float Phi_P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
+  __attribute__((aligned(4))) arm_matrix_instance_f32 PhiTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) PhiT};
+  __attribute__((aligned(4))) arm_matrix_instance_f32 P_PhiTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) P_PhiT};
+  __attribute__((aligned(4))) arm_matrix_instance_f32 Phi_P_PhiTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) Phi_P_PhiT};
+  mat_trans(&Phim, &PhiTm);
+  mat_mult(&OF_Pm, &PhiTm, &P_PhiTm);
+  mat_mult(&Phim, &P_PhiTm, &Phi_P_PhiTm);
 
+  float GT[N_STATES_OF_KF][N_STATES_OF_KF];
+  float Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
+  float G_Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
+  __attribute__((aligned(4))) arm_matrix_instance_f32 GTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) GT};
+  __attribute__((aligned(4))) arm_matrix_instance_f32 Q_GTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) Q_GT};
+  __attribute__((aligned(4))) arm_matrix_instance_f32 G_Q_GTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) G_Q_GT};
+  mat_trans(&Gammam, &GTm);
+  mat_mult(&OF_Qm, &GTm, &Q_GTm);
+  mat_mult(&Gammam, &Q_GTm, &G_Q_GTm);
 
-
+  arm_mat_add_f32(&Phi_P_PhiTm, &G_Q_GTm, &OF_Pm); // in original code, P is used. Is that OF_P?
   
-  float _PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
-  MAKE_MATRIX_PTR(PhiT, _PhiT, N_STATES_OF_KF);
-  float _P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
-  MAKE_MATRIX_PTR(PPhiT, _P_PhiT, N_STATES_OF_KF);
-  float _Phi_P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
-  MAKE_MATRIX_PTR(PhiPPhiT, _Phi_P_PhiT, N_STATES_OF_KF);
-
-  float_mat_transpose(PhiT, Phi, N_STATES_OF_KF, N_STATES_OF_KF);
-  float_mat_mul(PPhiT, P, PhiT, N_STATES_OF_KF, N_STATES_OF_KF, N_STATES_OF_KF);
-  float_mat_mul(PhiPPhiT, Phi, PPhiT, N_STATES_OF_KF, N_STATES_OF_KF, N_STATES_OF_KF);
-
-  DEBUG_PRINT("Phi*P*PhiT:\n");
-  DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, PhiPPhiT);
-
-  float _GT[N_STATES_OF_KF][N_STATES_OF_KF];
-  MAKE_MATRIX_PTR(GT, _GT, N_STATES_OF_KF);
-  float _Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
-  MAKE_MATRIX_PTR(QGT, _Q_GT, N_STATES_OF_KF);
-  float _G_Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
-  MAKE_MATRIX_PTR(GQGT, _G_Q_GT, N_STATES_OF_KF);
-
-  float_mat_transpose(GT, Gamma, N_STATES_OF_KF, N_STATES_OF_KF);
-  float_mat_mul(QGT, Q, GT, N_STATES_OF_KF, N_STATES_OF_KF, N_STATES_OF_KF);
-  float_mat_mul(GQGT, Gamma, QGT, N_STATES_OF_KF, N_STATES_OF_KF, N_STATES_OF_KF);
-
-  DEBUG_PRINT("Gamma*Q*GammaT:\n");
-  DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, GQGT);
-
-  float_mat_sum(P, PhiPPhiT, GQGT, N_STATES_OF_KF, N_STATES_OF_KF);
-  DEBUG_PRINT("P:\n");
-  DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, P);
-
   // correct state when there is a new vision measurement:
   if(ins_flow.new_flow_measurement) {
 
