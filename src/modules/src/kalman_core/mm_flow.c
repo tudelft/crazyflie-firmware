@@ -42,13 +42,14 @@ void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *f
   // subpixel_factor = 1;
   // focal_x = 448;
   // of1_x = flow_x.*fps/(subpixel_factor*focal_x); 
-  float fps;
+  float fps = 200.0f;
+  /*
   if(flow->dt > 1e-5f) {
     fps = 1.0f / flow->dt;
   }
   else {
     fps = 100;
-  }
+  }*/
   float flow_msm = flow->dpixely * fps / 448.0f;
   set_flow_measurement(flow_msm);
   set_gyro_measurement(gyro->x * DEG_TO_RAD);
