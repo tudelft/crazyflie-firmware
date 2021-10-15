@@ -288,6 +288,7 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
     float INVS[N_MEAS_OF_KF][N_MEAS_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 Km = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) K};
     __attribute__((aligned(4))) arm_matrix_instance_f32 INVSm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) INVS};
+    // TODO: in the foreseen filter, the matrix has size 1x1... So we can just do 1/s here. 
     mat_inv(&Sm, &INVSm);
     mat_mult(&P_JacTm, &INVSm, &Km);
 
@@ -351,7 +352,7 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
     float KRKT[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 KRKTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) KRKT};
     mat_mult(&Km, &R_KTm, &KRKTm);
-    // TODO: the first is a const, will this go well?
+    // TODO: the first is a const, but it should go well. Perhaps double check the result.
     arm_mat_add_f32(&OF_Pm, &KRKTm, &OF_Pm);
 
     float trace_P = 0.0f;
