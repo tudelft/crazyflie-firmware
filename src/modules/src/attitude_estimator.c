@@ -58,7 +58,7 @@ struct InsFlow ins_flow;
 #define PAR_P_TB 21
 
 // other parameters
-float lp_factor = 0.90;
+float lp_factor = 0.0;
 float lp_factor_strong = 1-1E-3;
 uint8_t reset_filter;
 uint8_t use_filter;
