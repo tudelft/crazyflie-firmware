@@ -122,7 +122,7 @@ void init_OF_att() {
   of_time = get_sys_time_float();
   of_prev_time = get_sys_time_float();
   */
-  DEBUG_PRINT("Attitude Estimator Flow Initialized\n");
+  DEBUG_PRINT("FLOWEST: Attitude Estimator Flow Initialized\n");
 }
 
 void reset_OF_att() {
@@ -147,6 +147,7 @@ void reset_OF_att() {
 
   // can be used for printing something once in a while
   counter_of = 0;
+  DEBUG_PRINT("FLOWEST: Attitude Estimator Flow Reset\n");
 }
 
 void estimator_OF_att(float dt)
@@ -164,9 +165,13 @@ void estimator_OF_att(float dt)
 
 
   if(reset_filter==1) {
-// TODO CDW
-//      ins_reset_filter();
+      reset_OF_att();
       reset_filter = 0;
+  }
+
+  if (run_filter==1) {
+    counter_of = dt*1000;
+    return;
   }
 
   // assuming that the typical case is no rotation, we can estimate the (initial) bias of the gyro:
