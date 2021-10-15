@@ -203,6 +203,7 @@ static void kalmanTask(void* parameters) {
   uint32_t lastPrediction = xTaskGetTickCount();
   uint32_t nextPrediction = xTaskGetTickCount();
   uint32_t lastPNUpdate = xTaskGetTickCount();
+  uint32_t lastFlowUpdate = xTaskGetTickCount();
 
   rateSupervisorInit(&rateSupervisorContext, xTaskGetTickCount(), ONE_SECOND, PREDICT_RATE - 1, PREDICT_RATE + 1, 1);
 
@@ -277,6 +278,19 @@ static void kalmanTask(void* parameters) {
         }
       }
     }
+
+
+    {
+      // Update
+      float dt = T2S(osTick - lastFlowUpdate);
+      if (dt > 0.0f) {
+        estimator_OF_att(dt);
+        lastFlowUpdate = osTick;
+      }
+      // Import results
+    }
+
+
 
     /**
      * Finally, the internal state is externalized.
