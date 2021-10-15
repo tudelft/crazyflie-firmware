@@ -78,7 +78,7 @@ float OF_X[N_STATES_OF_KF] = {0.};
 float OF_Q[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
 float OF_P[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
 float OF_R[N_MEAS_OF_KF][N_MEAS_OF_KF] = {{0.}};
-static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Xm = { N_STATES_OF_KF, 1, (float *)OF_X};
+//static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Xm = { N_STATES_OF_KF, 1, (float *)OF_X};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Qm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_Q};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Pm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_P};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Rm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float *)OF_R};
@@ -182,7 +182,7 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
 
   // propagate the state with Euler integration:
   if(CONSTANT_ALT_FILTER) {
-      OF_X[OF_V_IND] += dt * (g * tan(OF_X[OF_ANGLE_IND]));
+      OF_X[OF_V_IND] += dt * (g * tanf(OF_X[OF_ANGLE_IND]));
       if(OF_DRAG) {
         // quadratic drag acceleration:
         drag = dt * kd * (OF_X[OF_V_IND]*OF_X[OF_V_IND]) / mass;
@@ -197,8 +197,8 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   }
 
   // ensure that z is not 0 (or lower)
-  if(OF_X[OF_Z_IND] < 1e-2) {
-      OF_X[OF_Z_IND] = 1e-2;
+  if(OF_X[OF_Z_IND] < 1e-2f) {
+      OF_X[OF_Z_IND] = 1e-2f;
   }
 
   // prepare the update and correction step:
@@ -209,11 +209,11 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
       F[i][i] = 1.0f;
   }
   if(CONSTANT_ALT_FILTER) {
-    F[OF_V_IND][OF_ANGLE_IND] = dt*(g/(cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])));
+    F[OF_V_IND][OF_ANGLE_IND] = dt*(g/(cosf(OF_X[OF_ANGLE_IND])*cosf(OF_X[OF_ANGLE_IND])));
   }
   if(OF_DRAG) {
       // In MATLAB: -sign(v)*2*kd*v/m (always minus, whether v is positive or negative):
-      F[OF_V_IND][OF_V_IND] -=  dt * 2 * kd * abs(OF_X[OF_V_IND]) / mass;
+      F[OF_V_IND][OF_V_IND] -=  dt * 2 * kd * fabsf(OF_X[OF_V_IND]) / mass;
   }
 
   // G matrix (whatever it may be):
@@ -227,11 +227,11 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   float H[N_MEAS_OF_KF][N_STATES_OF_KF] = {{0.}};
 
   if(CONSTANT_ALT_FILTER) {
-      // Hx = [-cos(theta)^2/z, (v*sin(theta))/ z, (v* cos(theta)^2)/z^2];
+      // Hx = [-cosf(theta)^2/z, (v*sinf(theta))/ z, (v* cosf(theta)^2)/z^2];
     // lateral flow:
-    H[OF_LAT_FLOW_IND][OF_V_IND] = -cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/ OF_X[OF_Z_IND];
-    H[OF_LAT_FLOW_IND][OF_ANGLE_IND] = OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
-    H[OF_LAT_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
+    H[OF_LAT_FLOW_IND][OF_V_IND] = -cosf(OF_X[OF_ANGLE_IND])*cosf(OF_X[OF_ANGLE_IND])/ OF_X[OF_Z_IND];
+    H[OF_LAT_FLOW_IND][OF_ANGLE_IND] = OF_X[OF_V_IND]*sinf(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
+    H[OF_LAT_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*cosf(OF_X[OF_ANGLE_IND])*cosf(OF_X[OF_ANGLE_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
   }
   __attribute__((aligned(4))) arm_matrix_instance_f32 Phim = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) F};
   __attribute__((aligned(4))) arm_matrix_instance_f32 Gammam = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) G};
@@ -293,12 +293,12 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
 
     // Correct the state:
     // MATLAB:
-    // Z_expected = [-v*cos(theta)*cos(theta)/z + zd*sin(2*theta)/(2*z) + thetad;
-    //			(-v*sin(2*theta)/(2*z)) - zd*cos(theta)*cos(theta)/z];
+    // Z_expected = [-v*cosf(theta)*cosf(theta)/z + zd*sinf(2*theta)/(2*z) + thetad;
+    //			(-v*sinf(2*theta)/(2*z)) - zd*cosf(theta)*cosf(theta)/z];
     float Z_expected[N_MEAS_OF_KF];
 
     if(CONSTANT_ALT_FILTER) {
-      Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]+gyro_msm;
+      Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cosf(OF_X[OF_ANGLE_IND])*cosf(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]+gyro_msm;
     }
 
     //  i_k1 = Z - Z_expected;
