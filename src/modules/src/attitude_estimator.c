@@ -80,6 +80,7 @@ uint32_t counter_of;
 float thrust_factor;
 
 float roll_deg;
+uint8_t estflow_mode;
 
 // matrices for state, actuation noise, state uncertainty, and measurement noise:
 
@@ -156,6 +157,7 @@ void reset_OF_att() {
 
   // can be used for printing something once in a while
   counter_of = 0;
+  estflow_mode = 0;
   DEBUG_PRINT("FLOWEST: Attitude Estimator Flow Reset\n");
 }
 
@@ -180,6 +182,8 @@ void estimator_OF_att(float dt)
       reset_OF_att();
       reset_filter = 0;
   }
+
+  estflow_mode = run_filter  + use_filter * 2;
 
   if (run_filter==0) {
     return;
@@ -456,6 +460,7 @@ LOG_ADD(LOG_FLOAT, Z, &OF_X[2])
 LOG_ADD(LOG_FLOAT, FLOW_X, &ins_flow.optical_flow_x)
 LOG_ADD(LOG_FLOAT, GYRO_X, &ins_flow.lp_gyro_roll)
 LOG_ADD(LOG_FLOAT, ROLL_DEG, &roll_deg)
+LOG_ADD(LOG_UINT8, mode, &estflow_mode)
 LOG_GROUP_STOP(flowest)
 
 /**
