@@ -49,9 +49,9 @@ void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *f
   else {
     fps = 100;
   }
-  float flow_msm = -flow->dpixelx * fps / 448.0f;
+  float flow_msm = -flow->dpixely * fps / 448.0f;
   set_flow_measurement(flow_msm);
-  set_gyro_measurement(gyro->x);
+  set_gyro_measurement(gyro->x * DEG_TO_RAD);
 
 
   // ~~~ Camera constants ~~~
