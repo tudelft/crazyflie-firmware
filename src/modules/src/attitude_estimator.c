@@ -149,7 +149,7 @@ void reset_OF_att() {
   counter_of = 0;
 }
 
-void estimator_OF_att(state_t *state, const uint32_t tick)
+void estimator_OF_att(float dt)
 {
    
   float mass = parameters[PAR_MASS]; // 0.400;
@@ -173,9 +173,7 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   ins_flow.lp_gyro_bias_roll = lp_factor_strong * ins_flow.lp_gyro_bias_roll + (1-lp_factor_strong) * ins_flow.lp_gyro_roll;
   float gyro_msm = (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll);
 
-  // TODO: get the new time: Using tick?
-  //of_time = get_sys_time_float();
-  float dt = 0.01; //of_time - of_prev_time;
+  // TODO: is this check still useful?
   if(dt > 1.0f) {
       dt = 0.01f;
   }
@@ -368,7 +366,9 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   // of_prev_time = of_time;
 }
 
-
+float get_roll_angle() {
+  return OF_X[OF_ANGLE_IND];
+}
 
 /**
  * Logging variables of the flowest

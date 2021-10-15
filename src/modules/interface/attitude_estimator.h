@@ -52,5 +52,6 @@
 
 
 void init_OF_att(void);
-void estimator_OF_att(state_t *state, const uint32_t tick);
+void estimator_OF_att(float dt);
 void reset_OF_att(void);
+float get_roll_angle(void);
