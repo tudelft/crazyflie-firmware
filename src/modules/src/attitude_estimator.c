@@ -58,7 +58,7 @@ struct InsFlow ins_flow;
 #define PAR_P_TB 21
 
 // other parameters
-float lp_factor = 0.95;
+float lp_factor = 0.90;
 float lp_factor_strong = 1-1E-3;
 uint8_t reset_filter;
 uint8_t use_filter;
@@ -76,6 +76,7 @@ NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float OF_R[N_MEAS_O
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Qm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_Q};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Pm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_P};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Rm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float *)OF_R};
+float roll_degrees;
 
 void init_OF_att() {
 
@@ -352,6 +353,7 @@ void estimator_OF_att(float dt)
 	    OF_X[i] += KI[i][0];
       //if(debug) DEBUG_PRINT("KI[%d] vs KIm[%d] = %f vs %f\n", i, i, KI[i][0], KIm.pData[i]);
     }
+    roll_degrees = OF_X[OF_ANGLE_IND] * RAD_TO_DEG;
     //if(debug) DEBUG_PRINT("OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
     NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
@@ -464,6 +466,7 @@ LOG_ADD(LOG_FLOAT, ROLL, &OF_X[1])
 LOG_ADD(LOG_FLOAT, Z, &OF_X[2])
 LOG_ADD(LOG_FLOAT, FLOW_X, &ins_flow.optical_flow_x)
 LOG_ADD(LOG_FLOAT, GYRO_X, &ins_flow.lp_gyro_roll)
+LOG_ADD(LOG_FLOAT, ROLL_DEG, &roll_degrees)
 LOG_GROUP_STOP(flowest)
 
 /**
