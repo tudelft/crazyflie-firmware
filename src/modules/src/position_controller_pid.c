@@ -133,8 +133,8 @@ static struct this_s this = {
   #ifdef IMPROVED_BARO_Z_HOLD
     .pidVZ = {
       .init = {
-        .kp = 4.0f,
-        .ki = 3.0f,
+        .kp = 1.5f,
+        .ki = 0.5f,
         .kd = 1.0f,
       },
       .pid.dt = DT,
