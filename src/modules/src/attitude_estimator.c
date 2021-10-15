@@ -372,11 +372,16 @@ void estimator_OF_att(float dt)
   // update the time:
   // of_prev_time = of_time;
 }
-
+/*
 void get_quaternion(float *q) {
   float phi = 5.0f / 57.0f; //OF_X[OF_ANGLE_IND];
-  float theta = 10.0f / 57.0f;
-  float psi = 3.141592654f - 20.0f / 57.0f ;
+  //float theta = 10.0f / 57.0f;
+  //float psi = 3.141592654f - 20.0f / 57.0f ;
+
+  float psi = atan2f(2*(q[1]*q[2]+q[0]*q[3]) , q[0]*q[0] + q[1]*q[1] - q[2]*q[2] - q[3]*q[3]);
+  float theta = asinf(-2*(q[1]*q[3] - q[0]*q[2]));
+  //float phi = atan2f(2*(q[2]*q[3]+q[0]*q[1]) , q[0]*q[0] - q[1]*q[1] - q[2]*q[2] + q[3]*q[3]);
+
 
   struct vec rpy;
   rpy.x = psi;
@@ -388,6 +393,11 @@ void get_quaternion(float *q) {
   q[1] = tempq.y;
   q[2] = tempq.z;
   q[3] = tempq.w;      
+}
+*/
+float get_float_angle(void) {
+  return 10.0f / 57.0f;
+  //return OF_X[OF_ANGLE_IND];
 }
 
 void set_flow_measurement(float flow_msmx) {
