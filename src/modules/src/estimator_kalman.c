@@ -259,6 +259,9 @@ static void kalmanTask(void* parameters) {
       }
     }
 
+
+
+
     /**
      * If an update has been made, the state is finalized:
      * - the attitude error is moved into the body attitude quaternion,
@@ -291,6 +294,11 @@ static void kalmanTask(void* parameters) {
       lastFlowUpdate = osTick;
       // Import results
     }
+    if (use_filter == 1) {
+      get_quaternion(coreData.q);
+    }
+
+
 
 
 
