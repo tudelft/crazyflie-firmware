@@ -43,6 +43,9 @@
 #include "log.h"
 #include "param.h"
 
+#define DEBUG_MODULE "ESTCOMP"
+#include "debug.h"
+
 static bool resetEstimation = false;
 static Axis3f gyro;
 static Axis3f acc;
@@ -51,14 +54,17 @@ static float baro_accum = 0.0f;
 static uint8_t baro_count = 0;
 static tofMeasurement_t tof;
 
+static Axis3f positionPrediction;
+static bool isFlying = false;
+static int thrustID;
 static float baro_ground_level;
 static bool baro_ground_set = false;
 
 #define ATTITUDE_UPDATE_RATE RATE_250_HZ
-#define ATTITUDE_UPDATE_DT 1.0/ATTITUDE_UPDATE_RATE
+#define ATTITUDE_UPDATE_DT 1.0f/ATTITUDE_UPDATE_RATE
 
 #define POS_UPDATE_RATE RATE_100_HZ
-#define POS_UPDATE_DT 1.0/POS_UPDATE_RATE
+#define POS_UPDATE_DT 1.0f/POS_UPDATE_RATE
 
 #define LOW_PASS_FILTER_CUTOFF_FREQ_HZ 5
 #define LOW_PASS_FILTER_TAU (1.0/(2*3.1415*LOW_PASS_FILTER_CUTOFF_FREQ_HZ))
@@ -77,13 +83,18 @@ void estimatorComplementaryInit(void)
 
   // Initialize Lowpass filters for velocity model
   init_butterworth_2_low_pass(&vx_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
-  init_butterworth_2_low_pass(&vy_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
-  init_butterworth_2_low_pass(&vz_filter, 10*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&vy_filter, 2*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&vz_filter, 5*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
 
   drag_coef.x = -3.596;
   drag_coef.y = -2.065;
   drag_coef.z = -1.258;
   // thrust_coef = 0.0002264;
+  positionPrediction.x = 0.0;
+  positionPrediction.y = 0.0;
+  positionPrediction.z = 0.0;
+  isFlying = false;
+  thrustID = logGetVarId("stabilizer", "thrust");
 }
 
 bool estimatorComplementaryTest(void)
@@ -152,7 +163,9 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
   }
 
   if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
-
+    if (!isFlying && logGetFloat(thrustID) > 1){
+      isFlying = true;
+    }
 
     // average past baro asl measurements and put ground level to 0
     if (baro_count > 0){
@@ -162,6 +175,7 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       
       // callibrate baro on first iteration
       if (!baro_ground_set){
+        DEBUG_PRINT("Reset Baro ground level");
         baro_ground_level = baro.asl;
         baro_ground_set = true;
       }
@@ -182,10 +196,20 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     state->velocity.y = update_butterworth_2_low_pass(&vy_filter, tmp);
     tmp = state->velocity.z;
     state->velocity.z = update_butterworth_2_low_pass(&vz_filter, tmp);
-
+    
+    if (isFlying){
+      positionPrediction.x = positionPrediction.x + POS_UPDATE_DT*state->velocity.x;
+      positionPrediction.y = positionPrediction.y + POS_UPDATE_DT*state->velocity.y;
+      positionPrediction.z = state->position.z;
+    }
   }
 }
 
+LOG_GROUP_START(flapperModel)
+  LOG_ADD(LOG_FLOAT, posX, &positionPrediction.x)
+  LOG_ADD(LOG_FLOAT, posY, &positionPrediction.y)
+  LOG_ADD(LOG_FLOAT, posZ, &positionPrediction.z)
+LOG_GROUP_STOP(flapperModel)
 
 PARAM_GROUP_START(complementaryFilter)
   PARAM_ADD(PARAM_UINT8, reset, &resetEstimation)
