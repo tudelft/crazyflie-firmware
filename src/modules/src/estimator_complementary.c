@@ -37,6 +37,7 @@
 #include "sensors.h"
 #include "stabilizer_types.h"
 #include "static_mem.h"
+#include "cf_math.h"
 
 #include "attitude_estimator.h"
 
@@ -116,6 +117,7 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
 
     // Guido Filter
   if (RATE_DO_EXECUTE(RATE_50_HZ, tick)) {
+    set_gyro_measurement(gyro.x * DEG_TO_RAD);
     estimator_OF_att(1.0f / 50.0f);
   }
 

@@ -10,6 +10,7 @@
 #include "uart2.h"
 
 #include "mpu_wrappers.h"
+#include "attitude_estimator.h"
 
 #define DEBUG_MODULE "CURVACE"
 
@@ -146,10 +147,15 @@ void curvaceTask(void *param)
 
       curvaceFlow.fps = 1.0f / curvaceFlow.dt;
 
-#define FOCAL_LENGTH   2.6741e+04f
+#define FOCAL_LENGTH   26741.0f
+#define MANUAL_CORRECTION 3.3f
 
-      curvaceFlow.fx = -((float)curvaceFlow.avgx)/FOCAL_LENGTH * curvaceFlow.fps;
-      curvaceFlow.fy = -((float)curvaceFlow.avgy)/FOCAL_LENGTH * curvaceFlow.fps;
+      curvaceFlow.fx = -((float)curvaceFlow.avgx) / FOCAL_LENGTH * curvaceFlow.fps / MANUAL_CORRECTION ;
+      curvaceFlow.fy = -((float)curvaceFlow.avgy) / FOCAL_LENGTH * curvaceFlow.fps / MANUAL_CORRECTION;
+
+
+      set_flow_measurement(curvaceFlow.fy);
+
 
 
     } else {
