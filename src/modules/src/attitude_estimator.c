@@ -4,6 +4,10 @@
 #include "arm_math.h"
 #include "cf_math.h"
 
+#include "log.h"
+#include "param.h"
+#include "debug.h"
+
 // struct for state-keeping:
 struct InsFlow {
 
@@ -62,10 +66,10 @@ struct InsFlow ins_flow;
 // other parameters
 float lp_factor = 0.95;
 float lp_factor_strong = 1-1E-3;
-bool reset_filter;
-int use_filter;
-bool run_filter;
-uint32_t counter;
+uint8_t reset_filter;
+uint8_t use_filter;
+uint8_t run_filter;
+uint32_t counter_of;
 float thrust_factor;
 
 // matrices for state, actuation noise, state uncertainty, and measurement noise:
@@ -110,15 +114,15 @@ void init_OF_att() {
   RPM_FACTORS[3] = parameters[PAR_K3]*1E-7;
   */
   
-  reset_filter = false;
+  reset_filter = 0;
   use_filter = 0;
-  run_filter = false;
+  run_filter = 0;
 
   /* TODO:  how to get time? 
   of_time = get_sys_time_float();
   of_prev_time = get_sys_time_float();
   */
-
+  DEBUG_PRINT("Attitude Estimator Flow Initialized\n");
 }
 
 void reset_OF_att() {
@@ -142,7 +146,7 @@ void reset_OF_att() {
   }
 
   // can be used for printing something once in a while
-  counter = 0;
+  counter_of = 0;
 }
 
 void estimator_OF_att(state_t *state, const uint32_t tick)
@@ -158,9 +162,11 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   float kd = parameters[PAR_KD]; // 0.5
   float drag = 0.0f;
 
-  if(reset_filter) {
-      ins_reset_filter();
-      reset_filter = false;
+
+  if(reset_filter==1) {
+// TODO CDW
+//      ins_reset_filter();
+      reset_filter = 0;
   }
 
   // assuming that the typical case is no rotation, we can estimate the (initial) bias of the gyro:
@@ -360,3 +366,39 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   // update the time:
   // of_prev_time = of_time;
 }
+
+
+
+/**
+ * Logging variables of the flowest
+ */
+LOG_GROUP_START(flowest)
+/**
+ * @brief Test
+ */
+LOG_ADD(LOG_UINT32, counter_of, &counter_of)
+LOG_GROUP_STOP(flowest)
+
+/**
+ * Settings and parameters for handling of the flowdecks
+ * measurments
+ */
+PARAM_GROUP_START(flowest)
+/**
+ * @brief Reset Filter with a 1
+ */
+PARAM_ADD(PARAM_UINT8, reset_filter, &reset_filter)
+/**
+ * @brief Reset Filter with a 1
+ */
+PARAM_ADD(PARAM_UINT8, use_filter, &use_filter)
+/**
+ * @brief Reset Filter with a 1
+ */
+PARAM_ADD(PARAM_UINT8, run_filter, &run_filter)
+/**
+ * @brief Set standard devivation flow measurement (default: 2.0f)
+ */
+//PARAM_ADD_CORE(PARAM_FLOAT, flowStdFixed, &flowStdFixed)
+PARAM_GROUP_STOP(flowest)
+

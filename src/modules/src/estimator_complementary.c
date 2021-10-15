@@ -38,6 +38,8 @@
 #include "stabilizer_types.h"
 #include "static_mem.h"
 
+#include "attitude_estimator.h"
+
 static Axis3f gyro;
 static Axis3f acc;
 static baro_t baro;
@@ -53,6 +55,7 @@ static tofMeasurement_t tof;
     estimatorComplementaryInit(void)
 {
   sensfusion6Init();
+  init_OF_att();
 }
 
 bool estimatorComplementaryTest(void)

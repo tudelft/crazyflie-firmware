@@ -95,6 +95,9 @@
 #include "debug.h"
 
 
+#include "attitude_estimator.h"
+
+
 // #define KALMAN_USE_BARO_UPDATE
 
 
@@ -430,6 +433,8 @@ void estimatorKalmanInit(void)
   outlierFilterReset(&sweepOutlierFilterState, 0);
 
   kalmanCoreInit(&coreData);
+
+  init_OF_att();
 }
 
 bool estimatorKalmanTest(void)
