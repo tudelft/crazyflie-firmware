@@ -1,14 +1,6 @@
 // Guido de Croon, TU Delft
 
 #include "attitude_estimator.h"
-#include "arm_math.h"
-#include "cf_math.h"
-#include "math3d.h"
-
-#include "log.h"
-#include "param.h"
-#include "debug.h"
-#include "static_mem.h"
 
 // struct for state-keeping:
 struct InsFlow {
@@ -176,12 +168,12 @@ void estimator_OF_att(float dt)
   }
 
   counter_of++;
-  bool debug = false; // (counter_of % 50 == 0);
+  bool debug = (counter_of % 100 == 0);
 
   // assuming that the typical case is no rotation, we can estimate the (initial) bias of the gyro:
   ins_flow.lp_gyro_bias_roll = lp_factor_strong * ins_flow.lp_gyro_bias_roll + (1-lp_factor_strong) * ins_flow.lp_gyro_roll;
   float gyro_msm = (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll);
-  if(debug) DEBUG_PRINT("gyro_msm=%f\n", gyro_msm);
+  // if(debug) DEBUG_PRINT("gyro_msm=%f\n", gyro_msm);
   // TODO: is this check still useful?
   //if(dt > 1.0f) {
   //    dt = 0.01f;
@@ -201,13 +193,13 @@ void estimator_OF_att(float dt)
 
       if(OF_USE_GYROS) {
         float ang = 0.0f;
-        if(debug) DEBUG_PRINT("Pre Pred: OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
+        //if(debug) DEBUG_PRINT("Pre Pred: OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
         ang += dt *gyro_msm;
 	      OF_X[OF_ANGLE_IND] += dt * gyro_msm;
         float x = OF_X[OF_ANGLE_IND];
-        if(debug) DEBUG_PRINT("Why 0?: dt*gyro=%f\n", dt * gyro_msm);
-        if(debug) DEBUG_PRINT("Post Pred: OF_X[OF_ANGLE_IND]=%f\n", x);
-        if(debug) DEBUG_PRINT("ang=%f\n", ang);
+        //if(debug) DEBUG_PRINT("Why 0?: dt*gyro=%f\n", dt * gyro_msm);
+        //if(debug) DEBUG_PRINT("Post Pred: OF_X[OF_ANGLE_IND]=%f\n", x);
+        //if(debug) DEBUG_PRINT("ang=%f\n", ang);
       }
   }
   
@@ -237,7 +229,7 @@ void estimator_OF_att(float dt)
   for(int i = 0; i < N_STATES_OF_KF; i++) {
 	  G[i][i] = dt;
   }
-  if(debug) DEBUG_PRINT("dt=%f\n", dt);
+  //if(debug) DEBUG_PRINT("dt=%f\n", dt);
 
   // Jacobian observation matrix H:
   NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float H[N_MEAS_OF_KF][N_STATES_OF_KF];
@@ -298,7 +290,17 @@ void estimator_OF_att(float dt)
     NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float S[N_MEAS_OF_KF][N_MEAS_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 Sm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) S};
     arm_mat_add_f32(&Jac_P_JacTm, &OF_Rm, &Sm);
-    
+    /*if(debug) {
+      DEBUG_PRINT("arm_mat_add_f32:\n");
+      DEBUG_PRINT("Jac_P_JacTm:\n");
+      print_matrix(Jac_P_JacTm);
+      DEBUG_PRINT("+OF_Rm:\n");
+      print_matrix(OF_Rm);
+      DEBUG_PRINT("=Sm:\n");
+      print_matrix(Sm);
+    } */
+
+
     // MATLAB statement:
     // K_k1 = P_k1_k*Hx' * inv(S_k);
     NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float K[N_STATES_OF_KF][N_MEAS_OF_KF];
@@ -306,8 +308,20 @@ void estimator_OF_att(float dt)
     __attribute__((aligned(4))) arm_matrix_instance_f32 Km = { N_STATES_OF_KF, N_MEAS_OF_KF, (float*) K};
     __attribute__((aligned(4))) arm_matrix_instance_f32 INVSm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) INVS};
     // TODO: in the foreseen filter, the matrix has size 1x1... So we can just do 1/s here. 
+    //if(debug) DEBUG_PRINT("before inversion\n");
     mat_inv(&Sm, &INVSm);
-    if(debug) DEBUG_PRINT("S * inv S=%f\n", S[0][0] * INVS[0][0]);
+    /*
+    if(debug) DEBUG_PRINT("after inversion: S = %f, inv S=%f\n", S[0][0], INVS[0][0]);
+    if(debug) DEBUG_PRINT("after inversion: S * inv S=%f\n", S[0][0] * INVS[0][0]);
+    if(debug) {
+      DEBUG_PRINT("S:\n");
+      print_matrix(Sm);
+    } 
+    if(debug) {
+      DEBUG_PRINT("INVS:\n");
+      print_matrix(INVSm);
+    } */
+    
 
     //DEBUG_PRINT("Inverted.\n");
     mat_mult(&P_JacTm, &INVSm, &Km);
@@ -321,15 +335,13 @@ void estimator_OF_att(float dt)
     if(CONSTANT_ALT_FILTER) {
       Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cosf(OF_X[OF_ANGLE_IND])*cosf(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]+gyro_msm;
     }
-    if(debug) DEBUG_PRINT("Z expected: %f\n", Z_expected[OF_LAT_FLOW_IND]);
-    if(debug) DEBUG_PRINT("gyro in Z expected: %f\n", gyro_msm);
 
     //  i_k1 = Z - Z_expected;
     NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float innovation[N_MEAS_OF_KF][1];
     innovation[OF_LAT_FLOW_IND][0] = ins_flow.optical_flow_x - Z_expected[OF_LAT_FLOW_IND];
-    if(debug) DEBUG_PRINT("flow_x: %f\n", ins_flow.optical_flow_x);
+    //if(debug) DEBUG_PRINT("flow_x: %f\n", ins_flow.optical_flow_x);
     
-    if(debug) DEBUG_PRINT("innovation = %f\n", innovation[OF_LAT_FLOW_IND][0]);
+    //if(debug) DEBUG_PRINT("innovation = %f\n", innovation[OF_LAT_FLOW_IND][0]);
     __attribute__((aligned(4))) arm_matrix_instance_f32 innovationm = { N_MEAS_OF_KF, 1, (float*) innovation};
 
     // X_k1_k1 = X_k1_k + K_k1*(i_k1);
@@ -338,8 +350,9 @@ void estimator_OF_att(float dt)
     mat_mult(&Km, &innovationm, &KIm);
     for(int i = 0; i < N_STATES_OF_KF; i++) {
 	    OF_X[i] += KI[i][0];
+      //if(debug) DEBUG_PRINT("KI[%d] vs KIm[%d] = %f vs %f\n", i, i, KI[i][0], KIm.pData[i]);
     }
-    if(debug) DEBUG_PRINT("OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
+    //if(debug) DEBUG_PRINT("OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
     NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) K_Jac};
@@ -383,6 +396,7 @@ void estimator_OF_att(float dt)
     float trace_P = 0.0f;
     for(int i = 0; i < N_STATES_OF_KF; i++) {
     	trace_P += OF_P[i][i];
+      // if(debug) DEBUG_PRINT("OF_P[%d][%d] vs OF_Pm[%d][%d] = %f vs %f\n", i,i,i,i, OF_P[i][i], OF_Pm.pData[i*OF_Pm.numCols+i]);
     }
 
     // indicate that the measurement has been used:
@@ -427,6 +441,14 @@ void set_flow_measurement(float flow_msmx) {
 
 void set_gyro_measurement(float gyro_x) {
   ins_flow.lp_gyro_roll = lp_factor * ins_flow.lp_gyro_roll + (1-lp_factor) * gyro_x;
+}
+
+void print_matrix(arm_matrix_instance_f32 M) {
+  for(int r = 0; r < M.numRows; r++) {
+    for(int c = 0; c < M.numCols; c++) {
+      DEBUG_PRINT("M[%d][%d] = %f\n", r, c, M.pData[r*M.numCols+c]);
+    }
+  }
 }
 
 /**

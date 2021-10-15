@@ -3,6 +3,13 @@
 
 
 #include "stabilizer_types.h"
+#include "arm_math.h"
+#include "cf_math.h"
+#include "math3d.h"
+#include "log.h"
+#include "param.h"
+#include "debug.h"
+#include "static_mem.h"
 
 #define CRAZY_FLIE 0
 #define FLAPPER 1
@@ -60,3 +67,4 @@ void get_quaternion(float* q);
 void set_flow_measurement(float flow_msm_x);
 void set_gyro_measurement(float gyro_x);
 float get_roll_angle(void);
+void print_matrix(arm_matrix_instance_f32 M);
