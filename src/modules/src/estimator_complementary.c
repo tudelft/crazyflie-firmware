@@ -124,7 +124,7 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);
   }
   if (use_filter == 1) {
-    state->attitude.roll = get_roll_angle();
+    state->attitude.roll = get_roll_angle() * 57.29577f;
   }
 
 }

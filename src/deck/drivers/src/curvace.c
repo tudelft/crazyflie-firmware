@@ -9,6 +9,8 @@
 #include "task.h"
 #include "uart2.h"
 
+#include "mpu_wrappers.h"
+
 #define DEBUG_MODULE "CURVACE"
 
 #define SERIAL_HEADER 'C'
@@ -37,6 +39,13 @@ typedef struct __attribute__((packed)) curvaceFlow_s {
   int16_t x4;
   int16_t y4;
   uint16_t error;
+  int16_t avgx;
+  int16_t avgy; 
+  float dt;
+  float fps;
+  float fx;
+  float fy;
+  uint32_t lastData;
 } curvaceFlow_t;
 
 
@@ -110,8 +119,6 @@ void curvaceTask(void *param)
       cnt++;
     }
 
-    curvaceFlow.x4 = cnt;
-
     if (cnt == 32) {
       // Received a message!
       curvaceFlow.x1 = get_hex(buf);
@@ -122,9 +129,34 @@ void curvaceTask(void *param)
       curvaceFlow.y3 = get_hex(buf+20);
       curvaceFlow.x4 = get_hex(buf+24);
       curvaceFlow.y4 = get_hex(buf+28);
+
+
+      uint32_t osTick = xTaskGetTickCount(); // would be nice if this had a precision higher than 1ms...
+
+      curvaceFlow.dt = T2S(osTick - curvaceFlow.lastData);
+      curvaceFlow.lastData = osTick;
+
+      curvaceFlow.avgx = curvaceFlow.x1/4+curvaceFlow.x2/4+curvaceFlow.x3/4+curvaceFlow.x4/4;
+      curvaceFlow.avgy = curvaceFlow.y1/4+curvaceFlow.y2/4+curvaceFlow.y3/4+curvaceFlow.y4/4;
+
+      if (curvaceFlow.dt <=0.0f)
+      {
+        curvaceFlow.dt = 1.0f/100.0f;
+      }
+
+      curvaceFlow.fps = 1.0f / curvaceFlow.dt;
+
+#define FOCAL_LENGTH   2.6741e+04f
+
+      curvaceFlow.fx = -((float)curvaceFlow.avgx)/FOCAL_LENGTH * curvaceFlow.fps;
+      curvaceFlow.fy = -((float)curvaceFlow.avgy)/FOCAL_LENGTH * curvaceFlow.fps;
+
+
     } else {
       curvaceFlow.error++;
     }
+
+
 
     // Assemble the data
     //packet.header = SERIAL_HEADER;
@@ -164,7 +196,14 @@ static void curvaceInit()
   curvaceFlow.y3 = 0;
   curvaceFlow.x4 = 0;
   curvaceFlow.y4 = 0;
+  curvaceFlow.avgx = 0;
+  curvaceFlow.avgy = 0;
   curvaceFlow.error = 0;
+  curvaceFlow.fx = 0.0f;
+  curvaceFlow.fy = 0.0f;
+  curvaceFlow.fps = 0.0f;
+  curvaceFlow.dt = 0.01f;
+  curvaceFlow.lastData = xTaskGetTickCount();
 }
 
 
@@ -201,7 +240,12 @@ LOG_ADD(LOG_INT16, x3, &curvaceFlow.x3)
 LOG_ADD(LOG_INT16, y3, &curvaceFlow.y3)
 LOG_ADD(LOG_INT16, x4, &curvaceFlow.x4)
 LOG_ADD(LOG_INT16, y4, &curvaceFlow.y4)
+LOG_ADD(LOG_INT16, avgx, &curvaceFlow.avgx)
+LOG_ADD(LOG_INT16, avgy, &curvaceFlow.avgy)
 LOG_ADD(LOG_UINT16, err, &curvaceFlow.error)
+LOG_ADD(LOG_FLOAT, fps, &curvaceFlow.fps)
+LOG_ADD(LOG_FLOAT, fx, &curvaceFlow.fx)
+LOG_ADD(LOG_FLOAT, fy, &curvaceFlow.fy)
 LOG_GROUP_STOP(curvace)
 
 
