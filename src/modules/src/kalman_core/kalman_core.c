@@ -715,7 +715,7 @@ void kalmanCoreFinalize(kalmanCoreData_t* this, uint32_t tick)
   assertStateNotNaN(this);
 }
 
-void kalmanCoreExternalizeState(const kalmanCoreData_t* this, state_t *state, const Axis3f *acc, uint32_t tick)
+void kalmanCoreExternalizeState(const kalmanCoreData_t* this, state_t *state, const Axis3f *acc, uint32_t tick, uint8_t use_filter, float phi)
 {
   // position state is already in world frame
   state->position = (point_t){
@@ -747,6 +747,10 @@ void kalmanCoreExternalizeState(const kalmanCoreData_t* this, state_t *state, co
   float yaw = atan2f(2*(this->q[1]*this->q[2]+this->q[0]*this->q[3]) , this->q[0]*this->q[0] + this->q[1]*this->q[1] - this->q[2]*this->q[2] - this->q[3]*this->q[3]);
   float pitch = asinf(-2*(this->q[1]*this->q[3] - this->q[0]*this->q[2]));
   float roll = atan2f(2*(this->q[2]*this->q[3]+this->q[0]*this->q[1]) , this->q[0]*this->q[0] - this->q[1]*this->q[1] - this->q[2]*this->q[2] + this->q[3]*this->q[3]);
+
+  if (use_filter == 1) {
+    roll = phi;
+  }
 
   // Save attitude, adjusted for the legacy CF2 body coordinate system
   state->attitude = (attitude_t){

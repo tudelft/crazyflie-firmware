@@ -59,3 +59,4 @@ extern uint8_t use_filter;
 void get_quaternion(float* q);
 void set_flow_measurement(float flow_msm_x);
 void set_gyro_measurement(float gyro_x);
+float get_float_angle(void);

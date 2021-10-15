@@ -116,7 +116,7 @@ void kalmanCoreAddProcessNoise(kalmanCoreData_t* this, float dt);
 void kalmanCoreFinalize(kalmanCoreData_t* this, uint32_t tick);
 
 /*  - Externalization to move the filter's internal state into the external state expected by other modules */
-void kalmanCoreExternalizeState(const kalmanCoreData_t* this, state_t *state, const Axis3f *acc, uint32_t tick);
+void kalmanCoreExternalizeState(const kalmanCoreData_t* this, state_t *state, const Axis3f *acc, uint32_t tick, uint8_t use_filter, float phi);
 
 void kalmanCoreDecoupleXY(kalmanCoreData_t* this);
 

@@ -294,10 +294,12 @@ static void kalmanTask(void* parameters) {
       lastFlowUpdate = osTick;
       // Import results
     }
+    /*
     if (use_filter == 1) {
       get_quaternion(coreData.q);
+      float get_float_angle(void)
     }
-
+    */
 
 
 
@@ -307,7 +309,7 @@ static void kalmanTask(void* parameters) {
      * This is done every round, since the external state includes some sensor data
      */
     xSemaphoreTake(dataMutex, portMAX_DELAY);
-    kalmanCoreExternalizeState(&coreData, &taskEstimatorState, &accLatest, osTick);
+    kalmanCoreExternalizeState(&coreData, &taskEstimatorState, &accLatest, osTick, use_filter, get_float_angle());
     xSemaphoreGive(dataMutex);
 
     STATS_CNT_RATE_EVENT(&updateCounter);
