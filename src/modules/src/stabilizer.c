@@ -67,6 +67,11 @@ static sensorData_t sensorData;
 static state_t state;
 static control_t control;
 
+float getThrust(void) {
+  return setpoint.thrust;
+}
+
+
 static StateEstimatorType estimatorType;
 static ControllerType controllerType;
 

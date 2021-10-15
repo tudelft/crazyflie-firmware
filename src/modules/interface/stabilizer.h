@@ -65,4 +65,6 @@ void stabilizerResetEmergencyStop();
 void stabilizerSetEmergencyStopTimeout(int timeout);
 
 
+float getThrust(void);
+
 #endif /* STABILIZER_H_ */

@@ -10,6 +10,8 @@
 #include "debug.h"
 #include "static_mem.h"
 
+#include "stabilizer.h"
+
 // struct for state-keeping:
 struct InsFlow {
 
@@ -76,6 +78,8 @@ uint8_t use_filter;
 uint8_t run_filter;
 uint32_t counter_of;
 float thrust_factor;
+
+float roll_deg;
 
 // matrices for state, actuation noise, state uncertainty, and measurement noise:
 
@@ -168,6 +172,9 @@ void estimator_OF_att(float dt)
   float kd = parameters[PAR_KD]; // 0.5
   float drag = 0.0f;
 
+  if (getThrust() > 45000.0f) {
+    use_filter = 0;
+  }
 
   if(reset_filter==1) {
       reset_OF_att();
@@ -179,12 +186,12 @@ void estimator_OF_att(float dt)
   }
 
   counter_of++;
-  bool debug = false; // (counter_of % 50 == 0);
+  //bool debug = false; // (counter_of % 50 == 0);
 
   // assuming that the typical case is no rotation, we can estimate the (initial) bias of the gyro:
   ins_flow.lp_gyro_bias_roll = lp_factor_strong * ins_flow.lp_gyro_bias_roll + (1-lp_factor_strong) * ins_flow.lp_gyro_roll;
   float gyro_msm = (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll);
-  if(debug) DEBUG_PRINT("gyro_msm=%f\n", gyro_msm);
+  //if(debug) DEBUG_PRINT("gyro_msm=%f\n", gyro_msm);
   // TODO: is this check still useful?
   //if(dt > 1.0f) {
   //    dt = 0.01f;
@@ -204,13 +211,13 @@ void estimator_OF_att(float dt)
 
       if(OF_USE_GYROS) {
         float ang = 0.0f;
-        if(debug) DEBUG_PRINT("Pre Pred: OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
+        //if(debug) DEBUG_PRINT("Pre Pred: OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
         ang += dt *gyro_msm;
 	      OF_X[OF_ANGLE_IND] += dt * gyro_msm;
-        float x = OF_X[OF_ANGLE_IND];
-        if(debug) DEBUG_PRINT("Why 0?: dt*gyro=%f\n", dt * gyro_msm);
-        if(debug) DEBUG_PRINT("Post Pred: OF_X[OF_ANGLE_IND]=%f\n", x);
-        if(debug) DEBUG_PRINT("ang=%f\n", ang);
+        //float x = OF_X[OF_ANGLE_IND];
+        //if(debug) DEBUG_PRINT("Why 0?: dt*gyro=%f\n", dt * gyro_msm);
+        //if(debug) DEBUG_PRINT("Post Pred: OF_X[OF_ANGLE_IND]=%f\n", x);
+        //if(debug) DEBUG_PRINT("ang=%f\n", ang);
       }
   }
   
@@ -240,7 +247,7 @@ void estimator_OF_att(float dt)
   for(int i = 0; i < N_STATES_OF_KF; i++) {
 	  G[i][i] = dt;
   }
-  if(debug) DEBUG_PRINT("dt=%f\n", dt);
+  //if(debug) DEBUG_PRINT("dt=%f\n", dt);
 
   // Jacobian observation matrix H:
   NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float H[N_MEAS_OF_KF][N_STATES_OF_KF];
@@ -310,7 +317,7 @@ void estimator_OF_att(float dt)
     __attribute__((aligned(4))) arm_matrix_instance_f32 INVSm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) INVS};
     // TODO: in the foreseen filter, the matrix has size 1x1... So we can just do 1/s here. 
     mat_inv(&Sm, &INVSm);
-    if(debug) DEBUG_PRINT("S * inv S=%f\n", S[0][0] * INVS[0][0]);
+    //if(debug) DEBUG_PRINT("S * inv S=%f\n", S[0][0] * INVS[0][0]);
 
     //DEBUG_PRINT("Inverted.\n");
     mat_mult(&P_JacTm, &INVSm, &Km);
@@ -324,15 +331,15 @@ void estimator_OF_att(float dt)
     if(CONSTANT_ALT_FILTER) {
       Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cosf(OF_X[OF_ANGLE_IND])*cosf(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]+gyro_msm;
     }
-    if(debug) DEBUG_PRINT("Z expected: %f\n", Z_expected[OF_LAT_FLOW_IND]);
-    if(debug) DEBUG_PRINT("gyro in Z expected: %f\n", gyro_msm);
+    //if(debug) DEBUG_PRINT("Z expected: %f\n", Z_expected[OF_LAT_FLOW_IND]);
+    //if(debug) DEBUG_PRINT("gyro in Z expected: %f\n", gyro_msm);
 
     //  i_k1 = Z - Z_expected;
     NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float innovation[N_MEAS_OF_KF][1];
     innovation[OF_LAT_FLOW_IND][0] = ins_flow.optical_flow_x - Z_expected[OF_LAT_FLOW_IND];
-    if(debug) DEBUG_PRINT("flow_x: %f\n", ins_flow.optical_flow_x);
+    //if(debug) DEBUG_PRINT("flow_x: %f\n", ins_flow.optical_flow_x);
     
-    if(debug) DEBUG_PRINT("innovation = %f\n", innovation[OF_LAT_FLOW_IND][0]);
+    //if(debug) DEBUG_PRINT("innovation = %f\n", innovation[OF_LAT_FLOW_IND][0]);
     __attribute__((aligned(4))) arm_matrix_instance_f32 innovationm = { N_MEAS_OF_KF, 1, (float*) innovation};
 
     // X_k1_k1 = X_k1_k + K_k1*(i_k1);
@@ -342,7 +349,7 @@ void estimator_OF_att(float dt)
     for(int i = 0; i < N_STATES_OF_KF; i++) {
 	    OF_X[i] += KI[i][0];
     }
-    if(debug) DEBUG_PRINT("OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
+    //if(debug) DEBUG_PRINT("OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
     NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) K_Jac};
@@ -394,6 +401,9 @@ void estimator_OF_att(float dt)
 
   // update the time:
   // of_prev_time = of_time;
+
+  roll_deg = OF_X[1] * RAD_TO_DEG;
+
 }
 /*
 void get_quaternion(float *q) {
@@ -419,8 +429,8 @@ void get_quaternion(float *q) {
 }
 */
 float get_roll_angle(void) {
-  return 10.0f / 57.0f;
-  //return OF_X[OF_ANGLE_IND];
+  //return 10.0f / 57.0f;
+  return OF_X[OF_ANGLE_IND];
 }
 
 void set_flow_measurement(float flow_msmx) {
@@ -445,6 +455,7 @@ LOG_ADD(LOG_FLOAT, ROLL, &OF_X[1])
 LOG_ADD(LOG_FLOAT, Z, &OF_X[2])
 LOG_ADD(LOG_FLOAT, FLOW_X, &ins_flow.optical_flow_x)
 LOG_ADD(LOG_FLOAT, GYRO_X, &ins_flow.lp_gyro_roll)
+LOG_ADD(LOG_FLOAT, ROLL_DEG, &roll_deg)
 LOG_GROUP_STOP(flowest)
 
 /**
