@@ -165,6 +165,7 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
 
   // assuming that the typical case is no rotation, we can estimate the (initial) bias of the gyro:
   ins_flow.lp_gyro_bias_roll = lp_factor_strong * ins_flow.lp_gyro_bias_roll + (1-lp_factor_strong) * ins_flow.lp_gyro_roll;
+  float gyro_msm = (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll);
 
   // TODO: get the new time: Using tick?
   //of_time = get_sys_time_float();
@@ -185,7 +186,7 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
       }
 
       if(OF_USE_GYROS) {
-	    OF_X[OF_ANGLE_IND] += dt * (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll); 
+	    OF_X[OF_ANGLE_IND] += dt * gyro_msm; 
       }
   }
 
@@ -226,12 +227,9 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
     H[OF_LAT_FLOW_IND][OF_ANGLE_IND] = OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
     H[OF_LAT_FLOW_IND][OF_Z_IND] = OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/(OF_X[OF_Z_IND]*OF_X[OF_Z_IND]);
   }
-
   __attribute__((aligned(4))) arm_matrix_instance_f32 Phim = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) F};
   __attribute__((aligned(4))) arm_matrix_instance_f32 Gammam = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) G};
   __attribute__((aligned(4))) arm_matrix_instance_f32 Jacm = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) H};
-
-
 
   // Corresponding MATLAB statement:    :O
   // P_k1_k = Phi_k1_k*P*Phi_k1_k' + Gamma_k1_k*Q*Gamma_k1_k';
@@ -260,56 +258,32 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
   // correct state when there is a new vision measurement:
   if(ins_flow.new_flow_measurement) {
 
-    DEBUG_PRINT("*********************\n");
-    DEBUG_PRINT("   NEW MEASUREMENT   \n");
-    DEBUG_PRINT("*********************\n");
-
     // determine Kalman gain:
     // MATLAB statement:
     // S_k = Hx*P_k1_k*Hx' + R;
-    float _JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
-    MAKE_MATRIX_PTR(JacT, _JacT, N_STATES_OF_KF);
-    float _P_JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
-    MAKE_MATRIX_PTR(PJacT, _P_JacT, N_STATES_OF_KF);
-    float _Jac_P_JacT[N_MEAS_OF_KF][N_MEAS_OF_KF];
-    MAKE_MATRIX_PTR(JacPJacT, _Jac_P_JacT, N_MEAS_OF_KF);
+    float JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
+    float P_JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
+    float Jac_P_JacT[N_MEAS_OF_KF][N_MEAS_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 JacTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) JacT};
+    __attribute__((aligned(4))) arm_matrix_instance_f32 P_JacTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) P_JacT};
+    __attribute__((aligned(4))) arm_matrix_instance_f32 Jac_P_JacTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) Jac_P_JacT};
+    mat_trans(&Jacm, &JacTm);
+    mat_mult(&OF_Pm, &JacTm, &P_JacTm); // TODO: is it intentional that P changes above before this formula is used?
+    mat_mult(&Jacm, &P_JacTm, &Jac_P_JacTm);
 
-    float_mat_transpose(JacT, Jac, N_MEAS_OF_KF, N_STATES_OF_KF);
-    float_mat_mul(PJacT, P, JacT, N_STATES_OF_KF, N_STATES_OF_KF, N_MEAS_OF_KF);
-    DEBUG_PRINT("P*JacT:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_MEAS_OF_KF, PJacT);
 
-    float_mat_mul(JacPJacT, Jac, PJacT, N_MEAS_OF_KF, N_STATES_OF_KF, N_MEAS_OF_KF);
-
-    DEBUG_PRINT("Jac*P*JacT:\n");
-    DEBUG_MAT_PRINT(N_MEAS_OF_KF, N_MEAS_OF_KF, JacPJacT);
-
-    float _S[N_MEAS_OF_KF][N_MEAS_OF_KF];
-    MAKE_MATRIX_PTR(S, _S, N_MEAS_OF_KF);
-    float_mat_sum(S, JacPJacT, R, N_MEAS_OF_KF, N_MEAS_OF_KF);
-
-    DEBUG_PRINT("S:\n");
-    DEBUG_MAT_PRINT(N_MEAS_OF_KF, N_MEAS_OF_KF, S);
-
+    float S[N_MEAS_OF_KF][N_MEAS_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 Sm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) S};
+    arm_mat_add_f32(&Jac_P_JacTm, &OF_Rm, &Sm);
+    
     // MATLAB statement:
     // K_k1 = P_k1_k*Hx' * inv(S_k);
-    float _K[N_STATES_OF_KF][N_MEAS_OF_KF];
-    MAKE_MATRIX_PTR(K, _K, N_STATES_OF_KF);
-    float _INVS[N_MEAS_OF_KF][N_MEAS_OF_KF];
-    MAKE_MATRIX_PTR(INVS, _INVS, N_MEAS_OF_KF);
-    float_mat_invert(INVS, S, N_MEAS_OF_KF);
-    if(DEBUG_INS_FLOW) {
-	// This should be the identity matrix:
-	float _SINVS[N_MEAS_OF_KF][N_MEAS_OF_KF];
-	MAKE_MATRIX_PTR(SINVS, _SINVS, N_MEAS_OF_KF);
-	float_mat_mul(SINVS, S, INVS, N_MEAS_OF_KF, N_MEAS_OF_KF, N_MEAS_OF_KF);
-	DEBUG_PRINT("S*Inv(S):\n");
-	DEBUG_MAT_PRINT(N_MEAS_OF_KF, N_MEAS_OF_KF, SINVS);
-    }
-
-    float_mat_mul(K, PJacT, INVS, N_STATES_OF_KF, N_MEAS_OF_KF, N_MEAS_OF_KF);
-    DEBUG_PRINT("K:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_MEAS_OF_KF, K);
+    float K[N_STATES_OF_KF][N_MEAS_OF_KF];
+    float INVS[N_MEAS_OF_KF][N_MEAS_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 Km = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) K};
+    __attribute__((aligned(4))) arm_matrix_instance_f32 INVSm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) INVS};
+    mat_inv(&Sm, &INVSm);
+    mat_mult(&P_JacTm, &INVSm, &Km);
 
     // Correct the state:
     // MATLAB:
@@ -317,122 +291,31 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
     //			(-v*sin(2*theta)/(2*z)) - zd*cos(theta)*cos(theta)/z];
     float Z_expected[N_MEAS_OF_KF];
 
-    // TODO: take this var out? It was meant for debugging...
-    float Z_expect_GT_angle;
-
     if(CONSTANT_ALT_FILTER) {
-      Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]
-				+OF_X[OF_ANGLE_DOT_IND]; // TODO: Currently, no p works better than using p here. Analyze!
-
-      /* TODO: remove later, just for debugging:
-      float Z_exp_no_rate = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
-      float Z_exp_with_rate = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]+OF_X[OF_ANGLE_DOT_IND];
-      printf("Z_exp_no_rate = %f, Z_exp_with_rate = %f, measured = %f, angle dot = %f, p = %f: ", Z_exp_no_rate, Z_exp_with_rate,
-	     ins_flow.optical_flow_x, OF_X[OF_ANGLE_DOT_IND], dt * (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll) * (M_PI/180.0f) / 74.0f);
-      if(fabs(ins_flow.optical_flow_x - Z_exp_no_rate) < fabs(ins_flow.optical_flow_x - Z_exp_with_rate)) {
-	  printf("NO RATE WINS!");
-      }
-      printf("\n");*/
-
-      Z_expected[OF_DIV_FLOW_IND] = -OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]);
-
-      if(OF_TWO_DIM) {
-	  Z_expected[OF_LAT_FLOW_X_IND] = -OF_X[OF_VX_IND]*cos(OF_X[OF_THETA_IND])*cos(OF_X[OF_THETA_IND])/OF_X[OF_Z_IND]; // TODO: no q?
-      }
-
-      Z_expect_GT_angle = -OF_X[OF_V_IND]*cos(eulers->phi)*cos(eulers->phi)/OF_X[OF_Z_IND];
-
-      if(OF_USE_GYROS) {
-	  Z_expected[OF_RATE_IND] = OF_X[OF_ANGLE_DOT_IND]; // TODO: is this even in the right direction?
-      }
-    }
-    else {
-      Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]
-				     + OF_X[OF_Z_DOT_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND])
-				     + OF_X[OF_ANGLE_DOT_IND]; // TODO: We first had this rate term but not for the constant alt filter.
-							       // Simulation and data analysis from real flights shows that including it is better. CHECK IN REALITY!
-
-      Z_expected[OF_DIV_FLOW_IND] = -OF_X[OF_V_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND])
-				    -OF_X[OF_Z_DOT_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND];
-
-      Z_expect_GT_angle = -OF_X[OF_V_IND]*cos(eulers->phi)*cos(eulers->phi)/OF_X[OF_Z_IND]
-					     + OF_X[OF_Z_DOT_IND]*sin(2*eulers->phi)/(2*OF_X[OF_Z_IND]);
-					     //+ OF_X[OF_ANGLE_DOT_IND];
-      if(N_MEAS_OF_KF == 3) {
-      	Z_expected[OF_RATE_IND] = OF_X[OF_ANGLE_DOT_IND]; // TODO: is this even in the right direction?
-      }
-
-
-      float Z_exp_no_rate = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]
-			    + OF_X[OF_Z_DOT_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND]);
-      float Z_exp_with_rate = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]
-			      + OF_X[OF_Z_DOT_IND]*sin(2*OF_X[OF_ANGLE_IND])/(2*OF_X[OF_Z_IND])
-			      + OF_X[OF_ANGLE_DOT_IND];
-
-      /*
-      printf("Z_exp_no_rate = %f, Z_exp_with_rate = %f, measured = %f, angle dot = %f, p = %f: ", Z_exp_no_rate, Z_exp_with_rate,
-       ins_flow.optical_flow_x, OF_X[OF_ANGLE_DOT_IND], dt * (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll) * (M_PI/180.0f) / 74.0f);
-      if(fabs(ins_flow.optical_flow_x - Z_exp_no_rate) < fabs(ins_flow.optical_flow_x - Z_exp_with_rate)) {
-	  printf("NO RATE WINS!");
-      }
-      printf("\n");*/
+      Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cos(OF_X[OF_ANGLE_IND])*cos(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]+gyro_msm;
     }
 
     //  i_k1 = Z - Z_expected;
     float innovation[N_MEAS_OF_KF][1];
-    //print_ins_flow_state();
     innovation[OF_LAT_FLOW_IND][0] = ins_flow.optical_flow_x - Z_expected[OF_LAT_FLOW_IND];
-    DEBUG_PRINT("Expected flow filter: %f, Expected flow ground truth = %f, Real flow x: %f, Real flow y: %f.\n", Z_expected[OF_LAT_FLOW_IND], Z_expect_GT_angle, ins_flow.optical_flow_x, ins_flow.optical_flow_y);
-    innovation[OF_DIV_FLOW_IND][0] = ins_flow.divergence - Z_expected[OF_DIV_FLOW_IND];
-    DEBUG_PRINT("Expected div: %f, Real div: %f.\n", Z_expected[OF_DIV_FLOW_IND], ins_flow.divergence);
-    if(CONSTANT_ALT_FILTER && OF_TWO_DIM) {
-	innovation[OF_LAT_FLOW_X_IND][0] = ins_flow.optical_flow_y - Z_expected[OF_LAT_FLOW_X_IND];
-	DEBUG_PRINT("Expected flow in body X direction filter: %f, Real flow in corresponding y direction: %f, gyro = %f, expected velocity = %f, real velocity = %f, expected theta = %f, real theta = %f.\n",
-	       Z_expected[OF_LAT_FLOW_X_IND], ins_flow.optical_flow_y, ins_flow.lp_gyro_pitch - ins_flow.lp_gyro_bias_pitch, OF_X[OF_VX_IND], velocities->x, OF_X[OF_THETA_IND], eulers->theta);
-    }
-    if(OF_USE_GYROS) {
-	float gyro_meas_roll;
-	gyro_meas_roll = (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll) * (M_PI/180.0f) / 74.0f;
-
-	// TODO: You can fake gyros here by estimating them as follows:
-	// rate_p_filt_est = -1.8457e-04 * cmd_roll;
-	// gyro_meas_roll = -1.8457e-04 * (stabilization_cmd[COMMAND_ROLL]-ins_flow.lp_roll_command);
-	// gyro_meas_roll = -2.0e-03 * (stabilization_cmd[COMMAND_ROLL]-ins_flow.lp_roll_command);
-
-	innovation[OF_RATE_IND][0] = gyro_meas_roll - Z_expected[OF_RATE_IND];
-	//innovation[OF_RATE_IND][0] = rates->p - Z_expected[OF_RATE_IND];
-	DEBUG_PRINT("Expected rate: %f, Real rate: %f.\n", Z_expected[OF_RATE_IND], ins_flow.lp_gyro_roll);
-    }
-
-    MAKE_MATRIX_PTR(I, innovation, N_MEAS_OF_KF);
-    DEBUG_PRINT("Innovation:");
-    DEBUG_MAT_PRINT(N_MEAS_OF_KF, 1, I);
+    __attribute__((aligned(4))) arm_matrix_instance_f32 innovationm = { N_MEAS_OF_KF, 1, (float*) innovation};
 
     // X_k1_k1 = X_k1_k + K_k1*(i_k1);
-    float _KI[N_STATES_OF_KF][1];
-    MAKE_MATRIX_PTR(KI, _KI, N_STATES_OF_KF);
-    float_mat_mul(KI, K, I, N_STATES_OF_KF, N_MEAS_OF_KF, 1);
-
-    DEBUG_PRINT("K*innovation:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, 1, KI);
-
-    DEBUG_PRINT("PRE: v = %f, angle = %f\n", OF_X[OF_V_IND], OF_X[OF_ANGLE_IND]);
+    float KI[N_STATES_OF_KF][1];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 KIm = { N_STATES_OF_KF, 1, (float*) KI};
+    mat_mult(&Km, &innovationm, &KIm);
     for(int i = 0; i < N_STATES_OF_KF; i++) {
-	OF_X[i] += KI[i][0];
+	    OF_X[i] += KI[i][0];
     }
-    DEBUG_PRINT("POST v: %f, angle = %f\n", OF_X[OF_V_IND], OF_X[OF_ANGLE_IND]);
-
-    DEBUG_PRINT("Angles (deg): ahrs = %f, ekf = %f.\n", (180.0f/M_PI)*eulers->phi, (180.0f/M_PI)*OF_X[OF_ANGLE_IND]);
-
-    DEBUG_PRINT("P before correction:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, P);
-
+    
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
-    float _KJac[N_STATES_OF_KF][N_STATES_OF_KF];
-    MAKE_MATRIX_PTR(KJac, _KJac, N_STATES_OF_KF);
-    float_mat_mul(KJac, K, Jac, N_STATES_OF_KF, N_MEAS_OF_KF, N_STATES_OF_KF);
+    float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, 1, (float*) K_Jac};
+    mat_mult(&Km, &Jacm, &K_Jacm);
 
     float _eye[N_STATES_OF_KF][N_STATES_OF_KF];
+    
+    
     MAKE_MATRIX_PTR(eye, _eye, N_STATES_OF_KF);
     float_mat_diagonal_scal(eye, 1.0, N_STATES_OF_KF);
     DEBUG_PRINT("eye:\n");
