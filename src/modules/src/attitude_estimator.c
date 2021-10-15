@@ -322,7 +322,7 @@ void estimator_OF_att(float dt)
     for(int i = 0; i < N_STATES_OF_KF; i++) {
 	    OF_X[i] += KI[i][0];
     }
-    // DEBUG_PRINT("Update uncertainty!\n");
+    DEBUG_PRINT("OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
     float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) K_Jac};
@@ -420,9 +420,9 @@ LOG_GROUP_START(flowest)
  * @brief Test
  */
 LOG_ADD(LOG_UINT32, counter_of, &counter_of)
-LOG_ADD(LOG_FLOAT, X0, &OF_X[0])
-LOG_ADD(LOG_FLOAT, X1, &OF_X[1])
-LOG_ADD(LOG_FLOAT, X2, &OF_X[2])
+LOG_ADD(LOG_FLOAT, VY, &OF_X[0])
+LOG_ADD(LOG_FLOAT, ROLL, &OF_X[1])
+LOG_ADD(LOG_FLOAT, Z, &OF_X[2])
 LOG_ADD(LOG_FLOAT, FLOW_X, &ins_flow.optical_flow_x)
 LOG_ADD(LOG_FLOAT, GYRO_X, &ins_flow.lp_gyro_roll)
 LOG_GROUP_STOP(flowest)
