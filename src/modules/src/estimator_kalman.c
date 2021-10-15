@@ -203,6 +203,7 @@ static void kalmanTask(void* parameters) {
   uint32_t lastPrediction = xTaskGetTickCount();
   uint32_t nextPrediction = xTaskGetTickCount();
   uint32_t lastPNUpdate = xTaskGetTickCount();
+  uint32_t nextFlowUpdate = xTaskGetTickCount();
   uint32_t lastFlowUpdate = xTaskGetTickCount();
 
   rateSupervisorInit(&rateSupervisorContext, xTaskGetTickCount(), ONE_SECOND, PREDICT_RATE - 1, PREDICT_RATE + 1, 1);
@@ -280,13 +281,14 @@ static void kalmanTask(void* parameters) {
     }
 
 
-    {
+    if (osTick >= nextFlowUpdate) {
       // Update
-      float dt = T2S(osTick - lastFlowUpdate);
-      if (dt > 0.0f) {
+      float dt = T2S((float)(osTick - lastFlowUpdate));
+      //if (dt > 0.0f) {
         estimator_OF_att(dt);
-        lastFlowUpdate = osTick;
-      }
+      //}
+      nextFlowUpdate = osTick + S2T(1.0f / 50.0f);
+      lastFlowUpdate = osTick;
       // Import results
     }
 

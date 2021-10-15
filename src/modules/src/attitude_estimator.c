@@ -170,7 +170,7 @@ void estimator_OF_att(float dt)
   }
 
   if (run_filter==1) {
-    counter_of = dt*1000;
+    counter_of++;// = (uint32_t) (dt*10000.0f);
     return;
   }
 
@@ -179,9 +179,9 @@ void estimator_OF_att(float dt)
   float gyro_msm = (ins_flow.lp_gyro_roll - ins_flow.lp_gyro_bias_roll);
 
   // TODO: is this check still useful?
-  if(dt > 1.0f) {
-      dt = 0.01f;
-  }
+  //if(dt > 1.0f) {
+  //    dt = 0.01f;
+  //}
 
   // propagate the state with Euler integration:
   if(CONSTANT_ALT_FILTER) {
