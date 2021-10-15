@@ -5,9 +5,6 @@ log   # file name
 on:fixedFrequency
 180     # frequency
 1     # mode (0: disabled, 1: synchronous stabilizer, 2: asynchronous)
-acc.x
-acc.y
-acc.z
 gyro.x
 gyro.y
 gyro.z
@@ -25,3 +22,5 @@ curvace.x3
 curvace.y3
 curvace.x4
 curvace.y4
+flowest.mode
+flowest.ROLL
