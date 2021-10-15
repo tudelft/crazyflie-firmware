@@ -9,6 +9,8 @@
 #include "param.h"
 #include "debug.h"
 
+#include "console.h"
+
 // struct for state-keeping:
 struct InsFlow {
 
@@ -185,6 +187,8 @@ void estimator_OF_att(float dt)
   //    dt = 0.01f;
   //}
 
+  
+  consolePrintf("Propagate!\n");
   // propagate the state with Euler integration:
   if(CONSTANT_ALT_FILTER) {
       OF_X[OF_V_IND] += dt * (g * tanf(OF_X[OF_ANGLE_IND]));
@@ -268,7 +272,7 @@ void estimator_OF_att(float dt)
   
   // correct state when there is a new vision measurement:
   if(ins_flow.new_flow_measurement) {
-
+    consolePrintf("Correct!\n");
     // determine Kalman gain:
     // MATLAB statement:
     // S_k = Hx*P_k1_k*Hx' + R;
@@ -295,6 +299,7 @@ void estimator_OF_att(float dt)
     __attribute__((aligned(4))) arm_matrix_instance_f32 INVSm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) INVS};
     // TODO: in the foreseen filter, the matrix has size 1x1... So we can just do 1/s here. 
     mat_inv(&Sm, &INVSm);
+    consolePrintf("Inverted.\n");
     mat_mult(&P_JacTm, &INVSm, &Km);
 
     // Correct the state:
@@ -319,7 +324,7 @@ void estimator_OF_att(float dt)
     for(int i = 0; i < N_STATES_OF_KF; i++) {
 	    OF_X[i] += KI[i][0];
     }
-    
+    consolePrintf("Update uncertainty!\n");
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
     float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) K_Jac};
