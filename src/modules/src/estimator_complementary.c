@@ -51,8 +51,7 @@ static tofMeasurement_t tof;
 #define POS_UPDATE_RATE RATE_100_HZ
 #define POS_UPDATE_DT 1.0/POS_UPDATE_RATE
 
-    void
-    estimatorComplementaryInit(void)
+void estimatorComplementaryInit(void)
 {
   sensfusion6Init();
   init_OF_att();
@@ -115,7 +114,17 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
   }
 
+    // Guido Filter
+  if (RATE_DO_EXECUTE(RATE_50_HZ, tick)) {
+    estimator_OF_att(1.0f / 50.0f);
+  }
+
+
   if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
     positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);
   }
+  if (use_filter == 1) {
+    state->attitude.roll = get_roll_angle();
+  }
+
 }

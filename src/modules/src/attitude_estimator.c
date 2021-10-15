@@ -398,7 +398,7 @@ void get_quaternion(float *q) {
   q[3] = tempq.w;      
 }
 */
-float get_float_angle(void) {
+float get_roll_angle(void) {
   return 10.0f / 57.0f;
   //return OF_X[OF_ANGLE_IND];
 }
