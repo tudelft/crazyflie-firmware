@@ -25,6 +25,7 @@
 
 #include "mm_flow.h"
 #include "log.h"
+#include "attitude_estimator.h"
 
 // TODO remove the temporary test variables (used for logging)
 static float predictedNX;
@@ -35,6 +36,23 @@ static float measuredNY;
 void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *flow, const Axis3f *gyro)
 {
   // Inclusion of flow measurements in the EKF done by two scalar updates
+
+  // Addition for our filter, piggybacking on the normal KF:
+  // flow_x = -log.motion_deltaX; 
+  // subpixel_factor = 1;
+  // focal_x = 448;
+  // of1_x = flow_x.*fps/(subpixel_factor*focal_x); 
+  float fps;
+  if(flow->dt > 1e-5) {
+    fps = 1.0f / flow->dt;
+  }
+  else {
+    fps = 100;
+  }
+  float flow_msm = -flow->dpixelx * fps / 448.0f;
+  set_flow_measurement(flow_msm);
+  set_gyro_measurement(gyro->x);
+
 
   // ~~~ Camera constants ~~~
   // The angle of aperture is guessed from the raw data register and thankfully look to be symmetric
