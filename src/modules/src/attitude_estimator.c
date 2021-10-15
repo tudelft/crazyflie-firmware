@@ -8,6 +8,7 @@
 #include "log.h"
 #include "param.h"
 #include "debug.h"
+#include "static_mem.h"
 
 // struct for state-keeping:
 struct InsFlow {
@@ -75,10 +76,10 @@ float thrust_factor;
 
 // matrices for state, actuation noise, state uncertainty, and measurement noise:
 
-float OF_X[N_STATES_OF_KF] = {0.};
-float OF_Q[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
-float OF_P[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
-float OF_R[N_MEAS_OF_KF][N_MEAS_OF_KF] = {{0.}};
+NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float OF_X[N_STATES_OF_KF];
+NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float OF_Q[N_STATES_OF_KF][N_STATES_OF_KF];
+NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float OF_P[N_STATES_OF_KF][N_STATES_OF_KF];
+NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float OF_R[N_MEAS_OF_KF][N_MEAS_OF_KF];
 //static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Xm = { N_STATES_OF_KF, 1, (float *)OF_X};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Qm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_Q};
 static __attribute__((aligned(4))) arm_matrix_instance_f32 OF_Pm = { N_STATES_OF_KF, N_STATES_OF_KF, (float *)OF_P};
@@ -175,8 +176,7 @@ void estimator_OF_att(float dt)
   }
 
   counter_of++;
-  bool debug = counter_of % 100 == 0;
-  debug = false;
+  bool debug = false; // (counter_of % 50 == 0);
 
   // assuming that the typical case is no rotation, we can estimate the (initial) bias of the gyro:
   ins_flow.lp_gyro_bias_roll = lp_factor_strong * ins_flow.lp_gyro_bias_roll + (1-lp_factor_strong) * ins_flow.lp_gyro_roll;
@@ -203,9 +203,10 @@ void estimator_OF_att(float dt)
         float ang = 0.0f;
         if(debug) DEBUG_PRINT("Pre Pred: OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
         ang += dt *gyro_msm;
-	      OF_X[OF_ANGLE_IND] += dt * gyro_msm; 
+	      OF_X[OF_ANGLE_IND] += dt * gyro_msm;
+        float x = OF_X[OF_ANGLE_IND];
         if(debug) DEBUG_PRINT("Why 0?: dt*gyro=%f\n", dt * gyro_msm);
-        if(debug) DEBUG_PRINT("Post Pred: OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
+        if(debug) DEBUG_PRINT("Post Pred: OF_X[OF_ANGLE_IND]=%f\n", x);
         if(debug) DEBUG_PRINT("ang=%f\n", ang);
       }
   }
@@ -218,7 +219,7 @@ void estimator_OF_att(float dt)
   // prepare the update and correction step:
   // we have to recompute these all the time, as they depend on the state:
   // discrete version of state transition matrix F: (ignoring t^2)
-  float F[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float F[N_STATES_OF_KF][N_STATES_OF_KF];
   for(int i = 0; i < N_STATES_OF_KF; i++) {
       F[i][i] = 1.0f;
   }
@@ -231,7 +232,7 @@ void estimator_OF_att(float dt)
   }
 
   // G matrix (whatever it may be):
-  float G[N_STATES_OF_KF][N_STATES_OF_KF] = {{0.}};
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float G[N_STATES_OF_KF][N_STATES_OF_KF];
   // TODO: we miss an off-diagonal element here (compare with MATLAB)
   for(int i = 0; i < N_STATES_OF_KF; i++) {
 	  G[i][i] = dt;
@@ -239,7 +240,7 @@ void estimator_OF_att(float dt)
   if(debug) DEBUG_PRINT("dt=%f\n", dt);
 
   // Jacobian observation matrix H:
-  float H[N_MEAS_OF_KF][N_STATES_OF_KF] = {{0.}};
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float H[N_MEAS_OF_KF][N_STATES_OF_KF];
 
   if(CONSTANT_ALT_FILTER) {
       // Hx = [-cosf(theta)^2/z, (v*sinf(theta))/ z, (v* cosf(theta)^2)/z^2];
@@ -255,9 +256,9 @@ void estimator_OF_att(float dt)
 
   // Corresponding MATLAB statement:    :O
   // P_k1_k = Phi_k1_k*P*Phi_k1_k' + Gamma_k1_k*Q*Gamma_k1_k';
-  float PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
-  float P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
-  float Phi_P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float Phi_P_PhiT[N_STATES_OF_KF][N_STATES_OF_KF];
   __attribute__((aligned(4))) arm_matrix_instance_f32 PhiTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) PhiT};
   __attribute__((aligned(4))) arm_matrix_instance_f32 P_PhiTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) P_PhiT};
   __attribute__((aligned(4))) arm_matrix_instance_f32 Phi_P_PhiTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) Phi_P_PhiT};
@@ -265,9 +266,9 @@ void estimator_OF_att(float dt)
   mat_mult(&OF_Pm, &PhiTm, &P_PhiTm);
   mat_mult(&Phim, &P_PhiTm, &Phi_P_PhiTm);
 
-  float GT[N_STATES_OF_KF][N_STATES_OF_KF];
-  float Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
-  float G_Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float GT[N_STATES_OF_KF][N_STATES_OF_KF];
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
+  NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float G_Q_GT[N_STATES_OF_KF][N_STATES_OF_KF];
   __attribute__((aligned(4))) arm_matrix_instance_f32 GTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) GT};
   __attribute__((aligned(4))) arm_matrix_instance_f32 Q_GTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) Q_GT};
   __attribute__((aligned(4))) arm_matrix_instance_f32 G_Q_GTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) G_Q_GT};
@@ -283,9 +284,9 @@ void estimator_OF_att(float dt)
     // determine Kalman gain:
     // MATLAB statement:
     // S_k = Hx*P_k1_k*Hx' + R;
-    float JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
-    float P_JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
-    float Jac_P_JacT[N_MEAS_OF_KF][N_MEAS_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float P_JacT[N_STATES_OF_KF][N_MEAS_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float Jac_P_JacT[N_MEAS_OF_KF][N_MEAS_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 JacTm = { N_STATES_OF_KF, N_MEAS_OF_KF, (float*) JacT};
     __attribute__((aligned(4))) arm_matrix_instance_f32 P_JacTm = { N_STATES_OF_KF, N_MEAS_OF_KF, (float*) P_JacT};
     __attribute__((aligned(4))) arm_matrix_instance_f32 Jac_P_JacTm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) Jac_P_JacT};
@@ -294,14 +295,14 @@ void estimator_OF_att(float dt)
     mat_mult(&Jacm, &P_JacTm, &Jac_P_JacTm);
 
 
-    float S[N_MEAS_OF_KF][N_MEAS_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float S[N_MEAS_OF_KF][N_MEAS_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 Sm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) S};
     arm_mat_add_f32(&Jac_P_JacTm, &OF_Rm, &Sm);
     
     // MATLAB statement:
     // K_k1 = P_k1_k*Hx' * inv(S_k);
-    float K[N_STATES_OF_KF][N_MEAS_OF_KF];
-    float INVS[N_MEAS_OF_KF][N_MEAS_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float K[N_STATES_OF_KF][N_MEAS_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float INVS[N_MEAS_OF_KF][N_MEAS_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 Km = { N_STATES_OF_KF, N_MEAS_OF_KF, (float*) K};
     __attribute__((aligned(4))) arm_matrix_instance_f32 INVSm = { N_MEAS_OF_KF, N_MEAS_OF_KF, (float*) INVS};
     // TODO: in the foreseen filter, the matrix has size 1x1... So we can just do 1/s here. 
@@ -315,7 +316,7 @@ void estimator_OF_att(float dt)
     // MATLAB:
     // Z_expected = [-v*cosf(theta)*cosf(theta)/z + zd*sinf(2*theta)/(2*z) + thetad;
     //			(-v*sinf(2*theta)/(2*z)) - zd*cosf(theta)*cosf(theta)/z];
-    float Z_expected[N_MEAS_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float Z_expected[N_MEAS_OF_KF];
 
     if(CONSTANT_ALT_FILTER) {
       Z_expected[OF_LAT_FLOW_IND] = -OF_X[OF_V_IND]*cosf(OF_X[OF_ANGLE_IND])*cosf(OF_X[OF_ANGLE_IND])/OF_X[OF_Z_IND]+gyro_msm;
@@ -324,7 +325,7 @@ void estimator_OF_att(float dt)
     if(debug) DEBUG_PRINT("gyro in Z expected: %f\n", gyro_msm);
 
     //  i_k1 = Z - Z_expected;
-    float innovation[N_MEAS_OF_KF][1];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float innovation[N_MEAS_OF_KF][1];
     innovation[OF_LAT_FLOW_IND][0] = ins_flow.optical_flow_x - Z_expected[OF_LAT_FLOW_IND];
     if(debug) DEBUG_PRINT("flow_x: %f\n", ins_flow.optical_flow_x);
     
@@ -332,7 +333,7 @@ void estimator_OF_att(float dt)
     __attribute__((aligned(4))) arm_matrix_instance_f32 innovationm = { N_MEAS_OF_KF, 1, (float*) innovation};
 
     // X_k1_k1 = X_k1_k + K_k1*(i_k1);
-    float KI[N_STATES_OF_KF][1];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float KI[N_STATES_OF_KF][1];
     __attribute__((aligned(4))) arm_matrix_instance_f32 KIm = { N_STATES_OF_KF, 1, (float*) KI};
     mat_mult(&Km, &innovationm, &KIm);
     for(int i = 0; i < N_STATES_OF_KF; i++) {
@@ -340,40 +341,40 @@ void estimator_OF_att(float dt)
     }
     if(debug) DEBUG_PRINT("OF_X[OF_ANGLE_IND]=%f\n", OF_X[OF_ANGLE_IND]);
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
-    float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) K_Jac};
     mat_mult(&Km, &Jacm, &K_Jacm);
 
-    float eye[N_STATES_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float eye[N_STATES_OF_KF][N_STATES_OF_KF];
     for(int i = 0; i < N_STATES_OF_KF; i++) {
       eye[i][i] = 1.0f;
     }
-    float e_K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float e_K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 eyem = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) eye};
     __attribute__((aligned(4))) arm_matrix_instance_f32 e_K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) e_K_Jac};
     arm_mat_sub_f32(&eyem, &K_Jacm, &e_K_Jacm);
 
-    float e_K_JacT[N_STATES_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float e_K_JacT[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 e_K_JacTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) e_K_JacT};
     mat_trans(&e_K_Jacm, &e_K_JacTm);
     
     // (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)'
-    float P_pre[N_STATES_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float P_pre[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 P_prem = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) P_pre};
     mat_mult(&OF_Pm, &e_K_JacTm, &P_prem);
     mat_mult(&e_K_Jacm, &P_prem, &OF_Pm);
     
     // K_k1*R*K_k1'
     // TODO: check all MAKE_MATRIX that they mention the number of ROWS!
-    float KT[N_MEAS_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float KT[N_MEAS_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 KTm = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) KT};
     mat_trans(&Km, &KTm);
 
-    float RKT[N_MEAS_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float RKT[N_MEAS_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 R_KTm = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) RKT};
     mat_mult(&OF_Rm, &KTm, &R_KTm);
     
-    float KRKT[N_STATES_OF_KF][N_STATES_OF_KF];
+    NO_DMA_CCM_SAFE_ZERO_INIT __attribute__((aligned(4))) static float KRKT[N_STATES_OF_KF][N_STATES_OF_KF];
     __attribute__((aligned(4))) arm_matrix_instance_f32 KRKTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) KRKT};
     mat_mult(&Km, &R_KTm, &KRKTm);
     // TODO: the first is a const, but it should go well. Perhaps double check the result.
