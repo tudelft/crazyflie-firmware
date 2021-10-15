@@ -290,7 +290,7 @@ static void kalmanTask(void* parameters) {
       //if (dt > 0.0f) {
         estimator_OF_att(dt);
       //}
-      nextFlowUpdate = osTick + S2T(1.0f / 50.0f);
+      nextFlowUpdate = osTick + S2T(1.0f / 150.0f);
       lastFlowUpdate = osTick;
     }
 

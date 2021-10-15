@@ -116,9 +116,9 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
   }
 
     // Guido Filter
-  if (RATE_DO_EXECUTE(RATE_50_HZ, tick)) {
+  if (RATE_DO_EXECUTE(150, tick)) {
     set_gyro_measurement(gyro.x * DEG_TO_RAD);
-    estimator_OF_att(1.0f / 50.0f);
+    estimator_OF_att(1.0f / 150.0f);
   }
 
 
