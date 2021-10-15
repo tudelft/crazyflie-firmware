@@ -390,6 +390,15 @@ void get_quaternion(float *q) {
   q[3] = tempq.w;      
 }
 
+void set_flow_measurement(float flow_msmx) {
+  ins_flow.new_flow_measurement = true;
+  ins_flow.optical_flow_x = flow_msmx;
+}
+
+void set_gyro_measurement(float gyro_x) {
+  ins_flow.lp_gyro_roll = lp_factor * ins_flow.lp_gyro_roll + (1-lp_factor) * gyro_x;
+}
+
 /**
  * Logging variables of the flowest
  */

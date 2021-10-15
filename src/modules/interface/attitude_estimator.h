@@ -57,3 +57,5 @@ void reset_OF_att(void);
 
 extern uint8_t use_filter;
 void get_quaternion(float* q);
+void set_flow_measurement(float flow_msm_x);
+void set_gyro_measurement(float gyro_x);
