@@ -3,6 +3,7 @@
 #include "attitude_estimator.h"
 #include "arm_math.h"
 #include "cf_math.h"
+#include "math3d.h"
 
 #include "log.h"
 #include "param.h"
@@ -169,10 +170,11 @@ void estimator_OF_att(float dt)
       reset_filter = 0;
   }
 
-  if (run_filter==1) {
-    counter_of++;// = (uint32_t) (dt*10000.0f);
+  if (run_filter==0) {
     return;
   }
+
+  counter_of++;
 
   // assuming that the typical case is no rotation, we can estimate the (initial) bias of the gyro:
   ins_flow.lp_gyro_bias_roll = lp_factor_strong * ins_flow.lp_gyro_bias_roll + (1-lp_factor_strong) * ins_flow.lp_gyro_roll;
@@ -371,8 +373,21 @@ void estimator_OF_att(float dt)
   // of_prev_time = of_time;
 }
 
-float get_roll_angle() {
-  return OF_X[OF_ANGLE_IND];
+void get_quaternion(float *q) {
+  float phi = 5.0f / 57.0f; //OF_X[OF_ANGLE_IND];
+  float theta = 10.0f / 57.0f;
+  float psi = 3.141592654f - 20.0f / 57.0f ;
+
+  struct vec rpy;
+  rpy.x = psi;
+  rpy.y = theta;  // pitch up positive
+  rpy.z = phi;    // roll right positive
+  struct quat tempq = rpy2quat(rpy);
+
+  q[0] = tempq.x;
+  q[1] = tempq.y;
+  q[2] = tempq.z;
+  q[3] = tempq.w;      
 }
 
 /**
@@ -383,6 +398,9 @@ LOG_GROUP_START(flowest)
  * @brief Test
  */
 LOG_ADD(LOG_UINT32, counter_of, &counter_of)
+LOG_ADD(LOG_FLOAT, X0, &OF_X[0])
+LOG_ADD(LOG_FLOAT, X1, &OF_X[1])
+LOG_ADD(LOG_FLOAT, X2, &OF_X[2])
 LOG_GROUP_STOP(flowest)
 
 /**

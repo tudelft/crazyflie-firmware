@@ -54,4 +54,6 @@
 void init_OF_att(void);
 void estimator_OF_att(float dt);
 void reset_OF_att(void);
-float get_roll_angle(void);
+
+extern uint8_t use_filter;
+void get_quaternion(float* q);
