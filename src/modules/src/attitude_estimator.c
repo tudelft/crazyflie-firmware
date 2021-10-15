@@ -310,63 +310,53 @@ void estimator_OF_att(state_t *state, const uint32_t tick)
     
     // P_k1_k1 = (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)' + K_k1*R*K_k1'; % Joseph form of the covariance update equation
     float K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
-    __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, 1, (float*) K_Jac};
+    __attribute__((aligned(4))) arm_matrix_instance_f32 K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) K_Jac};
     mat_mult(&Km, &Jacm, &K_Jacm);
 
-    float _eye[N_STATES_OF_KF][N_STATES_OF_KF];
-    
-    
-    MAKE_MATRIX_PTR(eye, _eye, N_STATES_OF_KF);
-    float_mat_diagonal_scal(eye, 1.0, N_STATES_OF_KF);
-    DEBUG_PRINT("eye:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, eye);
+    float eye[N_STATES_OF_KF][N_STATES_OF_KF];
+    for(int i = 0; i < N_STATES_OF_KF; i++) {
+      eye[i][i] = 1.0f;
+    }
+    float e_K_Jac[N_STATES_OF_KF][N_STATES_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 eyem = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) eye};
+    __attribute__((aligned(4))) arm_matrix_instance_f32 e_K_Jacm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) e_K_Jac};
+    arm_mat_sub_f32(&eyem, &K_Jacm, &e_K_Jacm);
 
-    float _eKJac[N_STATES_OF_KF][N_STATES_OF_KF];
-    MAKE_MATRIX_PTR(eKJac, _eKJac, N_STATES_OF_KF);
-    float_mat_diff(eKJac, eye, KJac, N_STATES_OF_KF, N_STATES_OF_KF);
-    DEBUG_PRINT("eKJac:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, eKJac);
-
-    float _eKJacT[N_STATES_OF_KF][N_STATES_OF_KF];
-    MAKE_MATRIX_PTR(eKJacT, _eKJacT, N_STATES_OF_KF);
-    float_mat_transpose(eKJacT, eKJac, N_STATES_OF_KF, N_STATES_OF_KF);
+    float e_K_JacT[N_STATES_OF_KF][N_STATES_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 e_K_JacTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) e_K_JacT};
+    mat_trans(&e_K_Jacm, &e_K_JacTm);
+    
     // (eye(Nx) - K_k1*Hx)*P_k1_k*(eye(Nx) - K_k1*Hx)'
-    float _P_pre[N_STATES_OF_KF][N_STATES_OF_KF];
-    MAKE_MATRIX_PTR(P_pre, _P_pre, N_STATES_OF_KF);
-    float_mat_mul(P_pre, P, eKJacT, N_STATES_OF_KF, N_STATES_OF_KF, N_STATES_OF_KF);
-    float_mat_mul(P, eKJac, P_pre, N_STATES_OF_KF, N_STATES_OF_KF, N_STATES_OF_KF);
-    DEBUG_PRINT("eKJac * P *eKJacT:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, P);
-
+    float P_pre[N_STATES_OF_KF][N_STATES_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 P_prem = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) P_pre};
+    mat_mult(&OF_Pm, &e_K_JacTm, &P_prem);
+    mat_mult(&e_K_Jacm, &P_prem, &OF_Pm);
+    
     // K_k1*R*K_k1'
     // TODO: check all MAKE_MATRIX that they mention the number of ROWS!
-    float _KT[N_MEAS_OF_KF][N_STATES_OF_KF];
-    MAKE_MATRIX_PTR(KT, _KT, N_MEAS_OF_KF);
-    float_mat_transpose(KT, K, N_STATES_OF_KF, N_MEAS_OF_KF);
-    float _RKT[N_MEAS_OF_KF][N_STATES_OF_KF];
-    MAKE_MATRIX_PTR(RKT, _RKT, N_MEAS_OF_KF);
-    float_mat_mul(RKT, R, KT, N_MEAS_OF_KF, N_MEAS_OF_KF, N_STATES_OF_KF);
-    float _KRKT[N_STATES_OF_KF][N_STATES_OF_KF];
-    MAKE_MATRIX_PTR(KRKT, _KRKT, N_STATES_OF_KF);
-    float_mat_mul(KRKT, K, RKT, N_STATES_OF_KF, N_MEAS_OF_KF, N_STATES_OF_KF);
-    DEBUG_PRINT("KRKT:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, KRKT);
+    float KT[N_MEAS_OF_KF][N_STATES_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 KTm = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) KT};
+    mat_trans(&Km, &KTm);
 
-    // summing the two parts:
-    float_mat_sum(P, P, KRKT, N_STATES_OF_KF, N_STATES_OF_KF);
+    float RKT[N_MEAS_OF_KF][N_STATES_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 R_KTm = { N_MEAS_OF_KF, N_STATES_OF_KF, (float*) RKT};
+    mat_mult(&OF_Rm, &KTm, &R_KTm);
+    
+    float KRKT[N_STATES_OF_KF][N_STATES_OF_KF];
+    __attribute__((aligned(4))) arm_matrix_instance_f32 KRKTm = { N_STATES_OF_KF, N_STATES_OF_KF, (float*) KRKT};
+    mat_mult(&Km, &R_KTm, &KRKTm);
+    // TODO: the first is a const, will this go well?
+    arm_mat_add_f32(&OF_Pm, &KRKTm, &OF_Pm);
 
-    DEBUG_PRINT("P corrected:\n");
-    DEBUG_MAT_PRINT(N_STATES_OF_KF, N_STATES_OF_KF, P);
     float trace_P = 0.0f;
     for(int i = 0; i < N_STATES_OF_KF; i++) {
-	trace_P += P[i][i];
+    	trace_P += OF_P[i][i];
     }
-    DEBUG_PRINT("trace P = %f\n", trace_P);
 
     // indicate that the measurement has been used:
     ins_flow.new_flow_measurement = false;
   }
 
   // update the time:
-  of_prev_time = of_time;
+  // of_prev_time = of_time;
 }
