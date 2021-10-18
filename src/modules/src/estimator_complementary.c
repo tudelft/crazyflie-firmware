@@ -263,11 +263,11 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     //   positionPrediction.z = state->position.z;
     // }
 
-    // // set variables for swarming state
-    // horizontalVelocity.x = state->velocity.x;
-    // horizontalVelocity.y = state->velocity.y;
-    // horizontalVelocity.z = state->velocity.z;
-    // positionZ = state->position.z;
+    // set variables for swarming state
+    horizontalVelocity.x = state->velocity.x;
+    horizontalVelocity.y = state->velocity.y;
+    horizontalVelocity.z = state->velocity.z;
+    positionZ = state->position.z;
 
   }
 }
