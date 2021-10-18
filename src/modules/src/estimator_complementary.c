@@ -53,6 +53,7 @@ static baro_t baro;
 static float baro_accum = 0.0f;
 static uint8_t baro_count = 0;
 static tofMeasurement_t tof;
+static uint32_t last_ext_pos = 0;
 
 static Axis3f positionPrediction;
 static bool isFlying = false;
@@ -73,6 +74,14 @@ static bool baro_ground_set = false;
 
 static Axis3f drag_coef;
 
+float tmpX, tmpY, tmpZ;
+positionMeasurement_t ext_pos;
+bool use_ext_pos = false;
+
+static Butterworth2LowPass ext_x_filter;
+static Butterworth2LowPass ext_y_filter;
+static Butterworth2LowPass ext_z_filter;
+
 static Butterworth2LowPass vx_filter;
 static Butterworth2LowPass vy_filter;
 static Butterworth2LowPass vz_filter;
@@ -81,10 +90,18 @@ void estimatorComplementaryInit(void)
 {
   sensfusion6Init();
 
+  // filters for external position and velocity
+  init_butterworth_2_low_pass(&ext_x_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&ext_y_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&ext_z_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+
   // Initialize Lowpass filters for velocity model
+  // init_butterworth_2_low_pass(&vx_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  // init_butterworth_2_low_pass(&vy_filter, 2*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  // init_butterworth_2_low_pass(&vz_filter, 5*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
   init_butterworth_2_low_pass(&vx_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
-  init_butterworth_2_low_pass(&vy_filter, 2*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
-  init_butterworth_2_low_pass(&vz_filter, 5*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&vy_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
+  init_butterworth_2_low_pass(&vz_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
 
   drag_coef.x = -3.596;
   drag_coef.y = -2.065;
@@ -113,6 +130,9 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     estimatorComplementaryInit();
     resetEstimation = false;
   }
+
+  use_ext_pos = false;
+  
   // Pull the latest sensors values of interest; discard the rest
   measurement_t m;
   while (estimatorDequeue(&m)) {
@@ -132,11 +152,21 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     case MeasurementTypeTOF:
       tof = m.data.tof;
       break;
+    case MeasurementTypePosition:
+      ext_pos = m.data.position;
+      use_ext_pos = true;
+      break;
+    case MeasurementTypePose:
+      ext_pos.x = m.data.pose.x;
+      ext_pos.y = m.data.pose.y;
+      ext_pos.z = m.data.pose.z;
+      use_ext_pos = true;
+      // don't update attitude as optitrack attitude is super noisy for flapper
+      break;
     default:
       break;
     }
   }
-
 
   // Update filter
   if (RATE_DO_EXECUTE(ATTITUDE_UPDATE_RATE, tick)) {
@@ -162,7 +192,26 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
   }
 
-  if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
+  if (use_ext_pos){
+    if (last_ext_pos != 0){
+      float dt = T2S(tick-last_ext_pos);
+      state->velocity.x = update_butterworth_2_low_pass(&vx_filter, (ext_pos.x - tmpX)/dt);
+      state->velocity.y = update_butterworth_2_low_pass(&vy_filter, (ext_pos.y - tmpY)/dt);
+      state->velocity.z = update_butterworth_2_low_pass(&vz_filter, (ext_pos.z - tmpZ)/dt);
+    }
+    tmpX = ext_pos.x;
+    tmpY = ext_pos.y;
+    tmpZ = ext_pos.z;
+
+    state->position.x = update_butterworth_2_low_pass(&ext_x_filter, ext_pos.x);
+    state->position.y = update_butterworth_2_low_pass(&ext_y_filter, ext_pos.y);
+    state->position.z = update_butterworth_2_low_pass(&ext_z_filter, ext_pos.z); 
+    
+
+    last_ext_pos = tick;
+  }
+
+  if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {    
     if (!isFlying && logGetFloat(thrustID) > 1){
       isFlying = true;
     }
@@ -182,26 +231,30 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       baro.asl = baro.asl - baro_ground_level;
     }
 
-    positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);
+    // positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);
 
-    float cphi = cos(state->attitude.roll*DEG2RAD);
-    float sphi = sin(state->attitude.roll*DEG2RAD);
-    //float ctheta = cos(-state.attitude.pitch*DEG2RAD);
-    float stheta = sin(-state->attitude.pitch*DEG2RAD);
+    // float cphi = cos(state->attitude.roll*DEG2RAD);
+    // float sphi = sin(state->attitude.roll*DEG2RAD);
+    // //float ctheta = cos(-state.attitude.pitch*DEG2RAD);
+    // float stheta = sin(-state->attitude.pitch*DEG2RAD);
 
-    // Linear velocity model with filter
-    float tmp = -cphi*stheta*GRAVITY_MAGNITUDE/drag_coef.x;
-    state->velocity.x = update_butterworth_2_low_pass(&vx_filter, tmp);
-    tmp = sphi*GRAVITY_MAGNITUDE/drag_coef.y;
-    state->velocity.y = update_butterworth_2_low_pass(&vy_filter, tmp);
-    tmp = state->velocity.z;
-    state->velocity.z = update_butterworth_2_low_pass(&vz_filter, tmp);
+    // // Linear velocity model with filter
+    // float tmp = -cphi*stheta*GRAVITY_MAGNITUDE/drag_coef.x;
+    // state->velocity.x = update_butterworth_2_low_pass(&vx_filter, tmp);
+    // tmp = sphi*GRAVITY_MAGNITUDE/drag_coef.y;
+    // state->velocity.y = update_butterworth_2_low_pass(&vy_filter, tmp);
+    // tmp = state->velocity.z;
+    // state->velocity.z = update_butterworth_2_low_pass(&vz_filter, tmp);
     
-    if (isFlying){
-      positionPrediction.x = positionPrediction.x + POS_UPDATE_DT*state->velocity.x;
-      positionPrediction.y = positionPrediction.y + POS_UPDATE_DT*state->velocity.y;
-      positionPrediction.z = state->position.z;
-    }
+    // if (isFlying){
+    //   positionPrediction.x = positionPrediction.x + POS_UPDATE_DT*state->velocity.x;
+    //   positionPrediction.y = positionPrediction.y + POS_UPDATE_DT*state->velocity.y;
+    //   positionPrediction.z = state->position.z;
+    // }
+
+
+
+
   }
 }
 
