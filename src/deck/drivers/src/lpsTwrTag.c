@@ -6,6 +6,7 @@
 #include "task.h"
 #include "configblock.h"
 #include "estimator_kalman.h"
+#include "estimator_complementary.h"
 
 #define ANTENNA_OFFSET 154.6   // In meter
 #define basicAddr 0xbccf851300000000
@@ -185,7 +186,7 @@ static void rxcallback(dwDevice_t *dev) {
         txPacket.payload[LPS_TWR_TYPE] = LPS_TWR_REPORT+1;
         txPacket.payload[LPS_TWR_SEQ] = rxPacket.payload[LPS_TWR_SEQ];
         report2->reciprocalDistance = calcDist;
-        // estimatorKalmanGetSwarmInfo(&report2->selfVx, &report2->selfVy, &report2->selfVz, &report2->selfGz, &report2->selfh);
+        complementaryGetSwarmInfo(&report2->selfVx, &report2->selfVy, &report2->selfVz, &report2->selfGz, &report2->selfh);
         report2->keep_flying = state.keep_flying;
         dwNewTransmit(dev);
         dwSetData(dev, (uint8_t*)&txPacket, MAC802154_HEADER_LENGTH+2+sizeof(lpsTwrTagReportPayload_t));
@@ -220,7 +221,7 @@ static void rxcallback(dwDevice_t *dev) {
         memcpy(&report->pollRx, &poll_rx, 5);
         memcpy(&report->answerTx, &answer_tx, 5);
         memcpy(&report->finalRx, &final_rx, 5);
-        // estimatorKalmanGetSwarmInfo(&report->selfVx, &report->selfVy, &report->selfVz, &report->selfGz, &report->selfh);
+        complementaryGetSwarmInfo(&report->selfVx, &report->selfVy, &report->selfVz, &report->selfGz, &report->selfh);
         report->keep_flying = state.keep_flying;
         dwNewTransmit(dev);
         dwSetData(dev, (uint8_t*)&txPacket, MAC802154_HEADER_LENGTH+2+sizeof(lpsTwrTagReportPayload_t));

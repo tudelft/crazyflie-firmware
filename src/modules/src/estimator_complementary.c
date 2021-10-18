@@ -57,9 +57,13 @@ static uint32_t last_ext_pos = 0;
 
 static Axis3f positionPrediction;
 static bool isFlying = false;
+static uint8_t flightCounter = 0;
 static int thrustID;
 static float baro_ground_level;
 static bool baro_ground_set = false;
+
+static Axis3f horizontalVelocity;
+static float positionZ;
 
 #define ATTITUDE_UPDATE_RATE RATE_250_HZ
 #define ATTITUDE_UPDATE_DT 1.0f/ATTITUDE_UPDATE_RATE
@@ -216,6 +220,13 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       isFlying = true;
     }
 
+    if (isFlying && logGetFloat(thrustID) <= 0) {
+      flightCounter ++;
+      if (flightCounter > 20){
+        isFlying = false;
+      }
+    }
+
     // average past baro asl measurements and put ground level to 0
     if (baro_count > 0){
       baro.asl = (baro_accum/baro_count);
@@ -252,15 +263,27 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     //   positionPrediction.z = state->position.z;
     // }
 
-
-
+    // // set variables for swarming state
+    // horizontalVelocity.x = state->velocity.x;
+    // horizontalVelocity.y = state->velocity.y;
+    // horizontalVelocity.z = state->velocity.z;
+    // positionZ = state->position.z;
 
   }
+}
+
+void complementaryGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, float* posZ){
+  *vx = horizontalVelocity.x;
+  *vy= horizontalVelocity.y;
+  *vz = horizontalVelocity.z;
+  *gyroZ = gyro.z;
+  *posZ = positionZ;
 }
 
 LOG_GROUP_START(flapperModel)
   LOG_ADD(LOG_FLOAT, posX, &positionPrediction.x)
   LOG_ADD(LOG_FLOAT, posY, &positionPrediction.y)
+  LOG_ADD(LOG_UINT8, inFlight, &isFlying)
   LOG_ADD(LOG_FLOAT, posZ, &positionPrediction.z)
 LOG_GROUP_STOP(flapperModel)
 

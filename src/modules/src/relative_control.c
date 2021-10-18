@@ -184,7 +184,7 @@ void relativeControlTask(void* arg)
   static uint32_t ctrlTick;
   systemWaitStart();
   static logVarId_t logIdStateIsFlying;
-  logIdStateIsFlying = logGetVarId("kalman", "inFlight");
+  logIdStateIsFlying = logGetVarId("controller", "inFlight");
   // height = (float)selfID*0.1f+0.2f;
   while(1) {
     vTaskDelay(10);

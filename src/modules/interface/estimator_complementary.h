@@ -32,3 +32,5 @@ bool estimatorComplementaryTest(void);
 void estimatorComplementary(state_t *state, const uint32_t tick);
 
 bool estimatorComplementaryEnqueueTOF(const tofMeasurement_t *tof);
+
+void complementaryGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, float* posZ);

@@ -15,6 +15,7 @@
 
 #include <radiolink.h>
 #include "estimator_kalman.h"
+#include "estimator_complementary.h"
 #include "lpsTwrTag.h"
 
 static bool isInit;
@@ -99,7 +100,7 @@ void relativeLocoTask(void* arg)
     for (int n=0; n<NumUWB; n++) {
       if (twrGetSwarmInfo(n, &dij, &vxj, &vyj, &vzj, &rj, &hj)){
         connectCount = 0;
-        // estimatorKalmanGetSwarmInfo(&vxi, &vyi, &vzi, &ri, &hi);
+        complementaryGetSwarmInfo(&vxi, &vyi, &vzi, &ri, &hi);
         if(relaVar[n].receiveFlag){
           uint32_t osTick = xTaskGetTickCount();
           float dtEKF = (float)(osTick - relaVar[n].oldTimetick)/configTICK_RATE_HZ;

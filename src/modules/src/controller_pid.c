@@ -244,6 +244,7 @@ LOG_ADD(LOG_FLOAT, pitchRate, &rateDesired.pitch)
  * @brief Desired yaw rate setpoint
  */
 LOG_ADD(LOG_FLOAT, yawRate,   &rateDesired.yaw)
+LOG_ADD(LOG_UINT8, inFlight,  &flying)
 LOG_GROUP_STOP(controller)
 
 
