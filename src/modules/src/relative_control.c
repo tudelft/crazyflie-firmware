@@ -188,11 +188,11 @@ void relativeControlTask(void* arg)
   // height = (float)selfID*0.1f+0.2f;
   while(1) {
     vTaskDelay(10);
-    if(selfID==0){
+    // if(selfID==0){
       keepFlying = logGetUint(logIdStateIsFlying);
       keepFlying = command_share(selfID, keepFlying);
       continue;
-    }
+    // }
 #if USE_MONOCAM
     if(selfID==0)
       uart2Getchar(&c);
@@ -204,7 +204,7 @@ void relativeControlTask(void* arg)
         estimatorKalmanInit(); // reseting kalman filter
         vTaskDelay(M2T(2000));
         for (int i=0; i<50; i++) {
-          setHoverSetpoint(&setpoint, 0, 0, 0.3f, 0);
+          setHoverSetpoint(&setpoint, 0, 0, 1.0f, 0);
           vTaskDelay(M2T(100));
         }
         onGround = false;
@@ -218,29 +218,29 @@ void relativeControlTask(void* arg)
     //       continue;
     //   }
       uint32_t tickInterval = xTaskGetTickCount() - ctrlTick;
-      if( tickInterval < 20000){
+      if( tickInterval < 7000){
           flyRandomIn1meter(1.0f); // random flight within first 10 seconds
         targetX = relaVarInCtrl[0][STATE_rlX];
         targetY = relaVarInCtrl[0][STATE_rlY];
 
         if ((tickInterval > 2000) && (tickInterval < 4000))
-            height = 0.3;
+            height = 1.3;
         if ((tickInterval > 4000) && (tickInterval < 6000))
-            height = 0.5;
+            height = 1.5;
         if ((tickInterval > 6000) && (tickInterval < 8000))
-            height = 0.7;
+            height = 1.7;
         if ((tickInterval > 8000) && (tickInterval < 10000))
-            height = 0.4;
+            height = 1.4;
         if ((tickInterval > 10000) && (tickInterval < 12000))
-            height = 0.8;
+            height = 1.8;
         if ((tickInterval > 12000) && (tickInterval < 14000))
-            height = 0.3;
+            height = 1.3;
         if ((tickInterval > 14000) && (tickInterval < 16000))
-            height = 0.7;
+            height = 1.7;
         if ((tickInterval > 16000) && (tickInterval < 18000))
-            height = 0.9;
+            height = 1.9;
         if ((tickInterval > 18000) && (tickInterval < 20000))
-            height = 0.5;
+            height = 1.5;
       }
       else
       {
@@ -251,15 +251,15 @@ void relativeControlTask(void* arg)
         else
           formation0asCenter(targetX, targetY);
 #else
-        if ( (tickInterval > 20000) && (tickInterval < 30000) ){ // formation
-          srand((unsigned int) relaVarInCtrl[0][STATE_rlX]*100);
-          formation0asCenter(targetX, targetY);
-          // NDI_formation0asCenter(targetX, targetY);
-          // lastTick = tickInterval;
-        }
+        // if ( (tickInterval > 7000) && (tickInterval < 30000) ){ // formation
+        //   srand((unsigned int) relaVarInCtrl[0][STATE_rlX]*100);
+        //   formation0asCenter(targetX, targetY);
+        //   // NDI_formation0asCenter(targetX, targetY);
+        //   // lastTick = tickInterval;
+        // }
 
-        static float relaXof2in1=0.7f, relaYof2in1=0.0f;
-        if ( (tickInterval > 30000) ){
+        static float relaXof2in1=2.0f, relaYof2in1=0.0f;
+        if ( (tickInterval > 7000) ){
           // if(tickInterval - lastTick > 3000)
           // {
           //   lastTick = tickInterval;
@@ -300,7 +300,7 @@ void relativeControlInit(void)
     uart2Init(115200); // only CF0 has monoCam and usart comm
 #endif
   xTaskCreate(relativeControlTask,"relative_Control",configMINIMAL_STACK_SIZE, NULL,3,NULL );
-  height = 0.5f;
+  height = 1.5f;
   isInit = true;
 }
 
