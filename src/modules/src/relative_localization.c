@@ -20,11 +20,14 @@
 
 static bool isInit;
 
-static float Qv = 1.0f; // velocity deviation
-static float Qr = 0.7f; // yaw rate deviation
-static float Ruwb = 2.0f; // ranging deviation
-static float InitCovPos = 1000.0f;
-static float InitCovYaw = 1.0f;
+static float procNoise_velX = 0.1; // velocity deviation
+static float procNoise_velY = 0.25; // velocity deviation
+static float procNoise_velZ = 0.3f; // velocity deviation
+static float procNoise_ryaw = 0.5f; // 5.0f; // yaw rate deviation
+static float measNoise_uwb = 0.06f; // ranging deviation
+
+static float InitCovPos = 10.0f;
+static float InitCovYaw = 1.5f;
 
 static relaVariable_t relaVar[NumUWB];
 static float inputVar[NumUWB][STATE_DIM_rl];
@@ -169,17 +172,20 @@ void relativeEKF(int n, float vxi, float vyi, float vzi, float ri, float hi, flo
 // [ -Qr*xij*yij,          Qv + Qr*xij*xij + Qv, 0,    Qr*xij]
 // [ 0,                    0,                    2*Qv, 0]
 // [ -Qr*yij,              Qr*xij,               0,    2*Qr]
+  float spsi = sin(relaVar[n].S[STATE_rlYaw]);
+  float cpsi = cos(relaVar[n].S[STATE_rlYaw]);
+
   float dt2 = dt*dt;
-  relaVar[n].P[0][0] += dt2*(Qv + Qr*yij*yij + Qv);
-  relaVar[n].P[0][1] += dt2*(-Qr*yij*xij);
-  relaVar[n].P[0][3] += dt2*(-Qr*yij);
-  relaVar[n].P[1][0] += dt2*(-Qr*xij*yij);
-  relaVar[n].P[1][1] += dt2*(Qv+Qv+Qr*xij*xij);
-  relaVar[n].P[1][3] += dt2*(Qr*xij);
-  relaVar[n].P[2][2] += dt2*(2*Qv);
-  relaVar[n].P[3][0] += dt2*(-Qr*yij);
-  relaVar[n].P[3][1] += dt2*(Qr*xij);
-  relaVar[n].P[3][3] += dt2*(2*Qr);
+  relaVar[n].P[0][0] += dt2*((1+cpsi*cpsi)*procNoise_velX + spsi*spsi*procNoise_velY + procNoise_ryaw*yij*yij);
+  relaVar[n].P[0][1] += dt2*(-procNoise_ryaw*yij*xij + cpsi*spsi*(procNoise_velX-procNoise_velY));
+  relaVar[n].P[0][3] += dt2*(-procNoise_ryaw*yij);
+  relaVar[n].P[1][0] += dt2*(-procNoise_ryaw*xij*yij + cpsi*spsi*(procNoise_velX-procNoise_velY));
+  relaVar[n].P[1][1] += dt2*((1+cpsi*cpsi)*procNoise_velY + spsi*spsi*procNoise_velX + procNoise_ryaw*xij*xij);
+  relaVar[n].P[1][3] += dt2*(procNoise_ryaw*xij);
+  relaVar[n].P[2][2] += dt2*(2*procNoise_velZ);
+  relaVar[n].P[3][0] += dt2*(-procNoise_ryaw*yij);
+  relaVar[n].P[3][1] += dt2*(procNoise_ryaw*xij);
+  relaVar[n].P[3][3] += dt2*(2*procNoise_ryaw);
 
   xij = relaVar[n].S[STATE_rlX];
   yij = relaVar[n].S[STATE_rlY];
@@ -195,7 +201,7 @@ void relativeEKF(int n, float vxi, float vyi, float vzi, float ri, float hi, flo
 
   mat_trans(&H, &HTm); // H'
   mat_mult(&Pm, &HTm, &PHTm); // PH'
-  float HPHR = powf(Ruwb, 2);// HPH' + R
+  float HPHR = powf(measNoise_uwb, 2);// HPH' + R
   for (int i=0; i<STATE_DIM_rl; i++) { // Add the element of HPH' to the above
     HPHR += H.pData[i]*PHTd[i]; // this obviously only works if the update is scalar (as in this function)
   }
@@ -227,24 +233,31 @@ bool relativeInfoRead(float* relaVarParam, float* inputVarParam){
     return false;    
 }
 
-LOG_GROUP_START(relative_pos)
+LOG_GROUP_START(relativePosition)
 LOG_ADD(LOG_FLOAT, rlX0, &relaVar[0].S[STATE_rlX])
 LOG_ADD(LOG_FLOAT, rlY0, &relaVar[0].S[STATE_rlY])
+LOG_ADD(LOG_FLOAT, rlZ0, &relaVar[0].S[STATE_rlZ])
 LOG_ADD(LOG_FLOAT, rlYaw0, &relaVar[0].S[STATE_rlYaw])
 LOG_ADD(LOG_FLOAT, rlX1, &relaVar[1].S[STATE_rlX])
 LOG_ADD(LOG_FLOAT, rlY1, &relaVar[1].S[STATE_rlY])
+LOG_ADD(LOG_FLOAT, rlZ1, &relaVar[1].S[STATE_rlZ])
 LOG_ADD(LOG_FLOAT, rlYaw1, &relaVar[1].S[STATE_rlYaw])
-LOG_ADD(LOG_FLOAT, rlZ1, &hij)
 LOG_ADD(LOG_FLOAT, dist1, &dist)
-LOG_ADD(LOG_FLOAT, rlX2, &relaVar[2].S[STATE_rlX])
-LOG_ADD(LOG_FLOAT, rlY2, &relaVar[2].S[STATE_rlY])
-LOG_ADD(LOG_FLOAT, rlYaw2, &relaVar[2].S[STATE_rlYaw])
-LOG_GROUP_STOP(relative_pos)
+LOG_GROUP_STOP(relativePosition)
 
-PARAM_GROUP_START(arelative_pos)
-PARAM_ADD(PARAM_FLOAT, noiFlow, &Qv) // make sure the name is not too long
-PARAM_ADD(PARAM_FLOAT, noiGyroZ, &Qr)
-PARAM_ADD(PARAM_FLOAT, noiUWB, &Ruwb)
+LOG_GROUP_START(swarmInput)
+LOG_ADD(LOG_FLOAT, vx1, &inputVar[1][STATE_rlX])
+LOG_ADD(LOG_FLOAT, vy1, &inputVar[1][STATE_rlY])
+LOG_ADD(LOG_FLOAT, vz1, &inputVar[1][STATE_rlZ])
+LOG_ADD(LOG_FLOAT, r1, &inputVar[1][STATE_rlYaw])
+LOG_GROUP_STOP(swarmInput)
+
+PARAM_GROUP_START(relativeEKF)
+PARAM_ADD(PARAM_FLOAT, sig_vx, &procNoise_velX) // make sure the name is not too long
+PARAM_ADD(PARAM_FLOAT, sig_vy, &procNoise_velY)
+PARAM_ADD(PARAM_FLOAT, sig_vz, &procNoise_velZ)
+PARAM_ADD(PARAM_FLOAT, sig_r, &procNoise_ryaw)
+PARAM_ADD(PARAM_FLOAT, noiUWB, &measNoise_uwb)
 PARAM_ADD(PARAM_FLOAT, Ppos, &InitCovPos)
 PARAM_ADD(PARAM_FLOAT, Pyaw, &InitCovYaw)
-PARAM_GROUP_STOP(arelative_pos)
+PARAM_GROUP_STOP(relativeEKF)
