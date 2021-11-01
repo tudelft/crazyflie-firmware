@@ -235,7 +235,13 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
                                                     acc.z);
 
     positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
-    filtered_gz = update_butterworth_2_low_pass(&gz_filter, gyro.z*DEG2RAD);
+
+    float stheta = sin(state->attitude.pitch * DEG2RAD);
+    float ctheta = cos(state->attitude.pitch * DEG2RAD);
+    float cphi = cos(state->attitude.roll * DEG2RAD);
+    float tmp_gz = (-gyro.x * stheta/cphi + gyro.z * ctheta/cphi) * DEG2RAD;
+    // float tmp_gz = gyro.z * DEG2RAD;
+    filtered_gz = update_butterworth_2_low_pass(&gz_filter, tmp_gz);
   }
   #ifdef SWARMING_USE_OPTITRACK
     if (use_ext_pos){

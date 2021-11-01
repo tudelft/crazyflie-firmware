@@ -20,11 +20,11 @@
 
 static bool isInit;
 
-static float procNoise_velX = 0.1; // velocity deviation
-static float procNoise_velY = 0.25; // velocity deviation
-static float procNoise_velZ = 0.3f; // velocity deviation
-static float procNoise_ryaw = 0.5f; // 5.0f; // yaw rate deviation
-static float measNoise_uwb = 0.06f; // ranging deviation
+static float procNoise_velX = 0.12; //0.1; // velocity deviation
+static float procNoise_velY = 0.28; //0.25; // velocity deviation
+static float procNoise_velZ = 0.28; //0.3f; // velocity deviation
+static float procNoise_ryaw = 0.2; //0.5f; // yaw rate deviation
+static float measNoise_uwb = 0.04; //0.06f; // ranging deviation
 
 static float InitCovPos = 10.0f;
 static float InitCovYaw = 1.5f;
@@ -193,7 +193,7 @@ void relativeEKF(int n, float vxi, float vyi, float vzi, float ri, float hi, flo
   float distPred = arm_sqrt(xij*xij+yij*yij+zij*zij)+0.0001f;
   float distMeas = (float)(dij/1000.0f);
   distMeas = distMeas - (0.048f*distMeas + 0.65f); // UWB biad model
-  if(n==1){dist = distMeas;}
+  if(n==1){dist = distMeas;} // just for logging
   h[0] = xij/distPred;
   h[1] = yij/distPred;
   h[2] = zij/distPred;
@@ -214,6 +214,12 @@ void relativeEKF(int n, float vxi, float vyi, float vzi, float ri, float hi, flo
   mat_trans(&tmpNN1m, &tmpNN2m); // (KH - I)'
   mat_mult(&tmpNN1m, &Pm, &tmpNN3m); // (KH - I)*P
   mat_mult(&tmpNN3m, &tmpNN2m, &Pm); // (KH - I)*P*(KH - I)'
+  
+  for (int i=0; i<STATE_DIM_rl; i++){
+    if (relaVar[n].P[i][i]<0.000001f){
+      DEBUG_PRINT("Covariance Low at rlState%d: %f", i, (double) relaVar[n].P[i][i]);
+    }
+  }
 }
 
 bool relativeInfoRead(float* relaVarParam, float* inputVarParam){
@@ -246,6 +252,10 @@ LOG_ADD(LOG_FLOAT, dist1, &dist)
 LOG_GROUP_STOP(relativePosition)
 
 LOG_GROUP_START(swarmInput)
+LOG_ADD(LOG_FLOAT, vx0, &vxi)
+LOG_ADD(LOG_FLOAT, vy0, &vyi)
+LOG_ADD(LOG_FLOAT, vz0, &vzi)
+LOG_ADD(LOG_FLOAT, r0, &ri)
 LOG_ADD(LOG_FLOAT, vx1, &inputVar[1][STATE_rlX])
 LOG_ADD(LOG_FLOAT, vy1, &inputVar[1][STATE_rlY])
 LOG_ADD(LOG_FLOAT, vz1, &inputVar[1][STATE_rlZ])
