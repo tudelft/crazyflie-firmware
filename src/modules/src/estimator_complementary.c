@@ -94,11 +94,11 @@ bool use_ext_pos = false;
   static Butterworth2LowPass ext_x_filter;
   static Butterworth2LowPass ext_y_filter;
   static Butterworth2LowPass ext_z_filter;
+  static Butterworth2LowPass vx_filter;
+  static Butterworth2LowPass vy_filter;
+  static Butterworth2LowPass vz_filter;
 #endif
 
-static Butterworth2LowPass vx_filter;
-static Butterworth2LowPass vy_filter;
-static Butterworth2LowPass vz_filter;
 static Butterworth2LowPass gz_filter;
 static float filtered_gz = 0.0f;
 
@@ -115,11 +115,6 @@ void estimatorComplementaryInit(void)
     init_butterworth_2_low_pass(&vx_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
     init_butterworth_2_low_pass(&vy_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
     init_butterworth_2_low_pass(&vz_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
-  #else
-    // Initialize Lowpass filters for velocity model
-    init_butterworth_2_low_pass(&vx_filter, LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
-    init_butterworth_2_low_pass(&vy_filter, 2*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
-    init_butterworth_2_low_pass(&vz_filter, 5*LOW_PASS_FILTER_TAU, POS_UPDATE_DT, 0);
   #endif
   
   init_butterworth_2_low_pass(&gz_filter, LOW_PASS_FILTER_TAU, ATTITUDE_UPDATE_DT, 0);
@@ -292,26 +287,23 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
 
       positionEstimate(state, &baro, &tof, POS_UPDATE_DT, tick);
 
+      float tmp;
       float cphi = cos(state->attitude.roll*DEG2RAD);
       float sphi = sin(state->attitude.roll*DEG2RAD);
-      //float ctheta = cos(-state.attitude.pitch*DEG2RAD);
+      float ctheta = cos(-state->attitude.pitch*DEG2RAD);
       float stheta = sin(-state->attitude.pitch*DEG2RAD);
 
-      // Linear velocity model with filter
-      float tmp = -cphi*stheta*GRAVITY_MAGNITUDE/drag_coef.x;
-      state->velocity.x = update_butterworth_2_low_pass(&vx_filter, tmp);
-      tmp = sphi*GRAVITY_MAGNITUDE/drag_coef.y;
-      state->velocity.y = update_butterworth_2_low_pass(&vy_filter, tmp);
-      tmp = state->velocity.z;
-      state->velocity.z = update_butterworth_2_low_pass(&vz_filter, tmp);
-      
+      // Dynamic velocity model (linear drag)
+      tmp = cphi*stheta*GRAVITY_MAGNITUDE + drag_coef.x*state->velocity.x;
+      state->velocity.x += POS_UPDATE_DT*tmp;
+      tmp = -sphi*GRAVITY_MAGNITUDE + drag_coef.y*state->velocity.y;
+      state->velocity.y += POS_UPDATE_DT*tmp;
+
       if (isFlying){
         positionPrediction.x = positionPrediction.x + POS_UPDATE_DT*state->velocity.x;
         positionPrediction.y = positionPrediction.y + POS_UPDATE_DT*state->velocity.y;
         positionPrediction.z = state->position.z;
       }
-    
-
     }
   #endif
 
