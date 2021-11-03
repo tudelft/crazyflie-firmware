@@ -222,7 +222,7 @@ void relativeControlTask(void* arg)
     //       continue;
     //   }
       uint32_t tickInterval = xTaskGetTickCount() - ctrlTick;
-      if( tickInterval < 7000){
+      if( tickInterval < 15000){
           flyRandomIn1meter(1.0f); // random flight within first 10 seconds
         targetX = relaVarInCtrl[0][STATE_rlX];
         targetY = relaVarInCtrl[0][STATE_rlY];
@@ -264,7 +264,7 @@ void relativeControlTask(void* arg)
 
         static float relaXof2in1=2.0f, relaYof2in1=0.0f;
         static float targetZ = 0.0f;
-        if ( (tickInterval > 7000) ){
+        if ( (tickInterval > 15000) ){
           // if(tickInterval - lastTick > 3000)
           // {
           //   lastTick = tickInterval;
