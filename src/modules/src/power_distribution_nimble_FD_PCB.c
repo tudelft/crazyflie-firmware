@@ -115,11 +115,26 @@ void powerStop()
   motorsSetRatio(MOTOR_M4, 0);
 }
 
+#define PITCH_AVG_N 50
+static float pitchCtrlSeq[PITCH_AVG_N];
+static float pitchCtrlTotal;
+static uint8_t  pitchCtrlIdx = 0;
 void powerDistribution(const control_t *control)
 {
   thrust = fmin(control->thrust, NIMBLE_MAX_THRUST);
   
-  motorPower.m2 = limitThrust(flapperConfig.pitchServoNeutral*act_max/100.0f + pitch_ampl*control->pitch); // pitch servo
+  // Average pitch servo inputs to avoid breaking the servo
+  pitchCtrlIdx ++;
+  if(pitchCtrlIdx==PITCH_AVG_N){
+    pitchCtrlIdx=0;
+  }
+  pitchCtrlSeq[pitchCtrlIdx] = pitch_ampl*control->pitch;
+  pitchCtrlTotal = 0;
+  for(int i=0; i<PITCH_AVG_N; i++){
+    pitchCtrlTotal=pitchCtrlTotal+pitchCtrlSeq[i];
+  }
+
+  motorPower.m2 = limitThrust(flapperConfig.pitchServoNeutral*act_max/100.0f + pitchCtrlTotal/PITCH_AVG_N); // pitch servo
   motorPower.m3 = limitThrust(flapperConfig.yawServoNeutral*act_max/100.0f - control->yaw); // yaw servo
   motorPower.m1 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust( 0.5f * control->roll + thrust * (1.0f + flapperConfig.rollBias/100.0f) ); // left motor
   motorPower.m4 = motor_zero + 1.0f/pwm_extended_ratio * limitThrust(-0.5f * control->roll + thrust * (1.0f - flapperConfig.rollBias/100.0f) ); // right motor
