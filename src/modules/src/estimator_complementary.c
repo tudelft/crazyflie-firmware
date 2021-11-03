@@ -34,6 +34,7 @@
 #include "estimator_complementary.h"
 #include "sensfusion6.h"
 #include "position_estimator.h"
+#include "velocity_estimator.h"
 #include "sensors.h"
 #include "stabilizer_types.h"
 #include "static_mem.h"
@@ -102,7 +103,13 @@ bool use_ext_pos = false;
 static Butterworth2LowPass gz_filter;
 static float filtered_gz = 0.0f;
 
+struct CompFilterParams_s {
+  float k1;
+  float k2;
+};
 
+static struct CompFilterParams_s cf_vz_params = {.k1=1.3f, .k2=0.07};
+static ComplementaryFilter2_t vz_comp_filter;
 void estimatorComplementaryInit(void)
 {
   sensfusion6Init();
@@ -119,10 +126,9 @@ void estimatorComplementaryInit(void)
   
   init_butterworth_2_low_pass(&gz_filter, LOW_PASS_FILTER_TAU, ATTITUDE_UPDATE_DT, 0);
 
-  drag_coef.x = -3.596;
-  drag_coef.y = -2.065;
-  drag_coef.z = -1.258;
-  // thrust_coef = 0.0002264;
+  init_complementary_filter_vz(&vz_comp_filter, cf_vz_params.k1, cf_vz_params.k2, POS_UPDATE_DT);
+  drag_coef.x = -3.9;
+  drag_coef.y = -1.8;
   positionPrediction.x = 0.0;
   positionPrediction.y = 0.0;
   positionPrediction.z = 0.0;
@@ -169,8 +175,7 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       acc_count++;
       break;
     case MeasurementTypeBarometer:
-      baro = m.data.barometer.baro;
-      baro_accum += baro.asl;
+      baro_accum += m.data.barometer.baro.asl;
       baro_count += 1;
       break;
     case MeasurementTypeTOF:
@@ -299,6 +304,8 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       tmp = -sphi*GRAVITY_MAGNITUDE + drag_coef.y*state->velocity.y;
       state->velocity.y += POS_UPDATE_DT*tmp;
 
+      state->velocity.z = update_complementary_filter(&vz_comp_filter, horizontal_acc.z - GRAVITY_MAGNITUDE, baro.asl);
+
       if (isFlying){
         positionPrediction.x = positionPrediction.x + POS_UPDATE_DT*state->velocity.x;
         positionPrediction.y = positionPrediction.y + POS_UPDATE_DT*state->velocity.y;
@@ -322,7 +329,8 @@ void complementaryGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, fl
   *vx = estimator_state.velocity.x;
   *vy= estimator_state.velocity.y;
   *vz = estimator_state.velocity.z;
-  *gyroZ = filtered_gz;
+  // *gyroZ = filtered_gz;
+  *gyroZ = 0.0f;
   // float stheta = sin(-estimator_state.attitude.pitch * DEG2RAD);
   // float ctheta = cos(-estimator_state.attitude.pitch * DEG2RAD);
   // float cphi = cos(estimator_state.attitude.roll * DEG2RAD);

@@ -165,6 +165,7 @@ PROJ_OBJ += platformservice.o sound_cf2.o extrx.o sysload.o mem.o
 PROJ_OBJ += range.o app_handler.o static_mem.o app_channel.o
 PROJ_OBJ += eventtrigger.o supervisor.o
 PROJ_OBJ += relative_localization.o relative_control.o
+PROJ_OBJ += velocity_estimator.o
 
 # Stabilizer modules
 PROJ_OBJ += commander.o crtp_commander.o crtp_commander_rpyt.o
