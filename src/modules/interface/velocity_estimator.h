@@ -33,6 +33,29 @@ typedef struct ComplementaryFilter2_s {
  */
 void init_complementary_filter_vz(ComplementaryFilter2_t *filter, float k1, float k2, float Ts);
 
+/** Initialize complementary filter for vx/vy estimation from linear velocity model and accelerometer
+ * Discretization using bilinear transform of Y(s) = G1(s)*U1(s) + G2(s)*U2(s)
+ * G1(s) = s/(s^2 + k1*s + k2)
+ * G2(s) = (k1*s + k2)/(s^2 + k1*s + k2)
+ * 
+ * @param filter 2nd order complementary filter structure for vx/vy
+ * @param k1 parameter
+ * @param k2 parameter
+ * @param Ts sample time
+ */
+void init_complementary_filter_vxy(ComplementaryFilter2_t *filter, float k1, float k2, float Ts);
+
+/** Initialize complementary filter for altitude estimation from baro and accelerometer
+ * Discretization using bilinear transform of Y(s) = G1(s)*U1(s) + G2(s)*U2(s)
+ * G1(s) = 1/(s^2 + k1*s + k2)
+ * G2(s) = (k1*s + k2)/(s^2 + k1*s + k2)
+ * 
+ * @param filter 2nd order complementary filter structure for vz
+ * @param k1 parameter
+ * @param k2 parameter
+ * @param Ts sample time
+ */
+void init_complementary_filter_z(ComplementaryFilter2_t *filter, float k1, float k2, float Ts);
 
 /** Update 2nd order complementary filter from inputs
  *

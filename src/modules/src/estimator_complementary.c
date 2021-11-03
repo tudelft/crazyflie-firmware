@@ -103,13 +103,25 @@ bool use_ext_pos = false;
 static Butterworth2LowPass gz_filter;
 static float filtered_gz = 0.0f;
 
+static Axis3f horizontal_acc;
+
 struct CompFilterParams_s {
   float k1;
   float k2;
 };
 
+static struct CompFilterParams_s cf_vx_params = {.k1=20.0f, .k2=1.0f};
+static struct CompFilterParams_s cf_vy_params = {.k1=13.0f, .k2=0.5f};
 static struct CompFilterParams_s cf_vz_params = {.k1=1.3f, .k2=0.07};
+static struct CompFilterParams_s cf_alt_params = {.k1=23.0f, .k2=0.4f};
+
+static ComplementaryFilter2_t vx_comp_filter;
+static ComplementaryFilter2_t vy_comp_filter;
 static ComplementaryFilter2_t vz_comp_filter;
+static ComplementaryFilter2_t alt_comp_filter;
+static state_t test_states;
+
+
 void estimatorComplementaryInit(void)
 {
   sensfusion6Init();
@@ -126,7 +138,11 @@ void estimatorComplementaryInit(void)
   
   init_butterworth_2_low_pass(&gz_filter, LOW_PASS_FILTER_TAU, ATTITUDE_UPDATE_DT, 0);
 
+  init_complementary_filter_vxy(&vx_comp_filter, cf_vx_params.k1, cf_vx_params.k2, POS_UPDATE_DT);
+  init_complementary_filter_vxy(&vy_comp_filter, cf_vy_params.k1, cf_vy_params.k2, POS_UPDATE_DT);
   init_complementary_filter_vz(&vz_comp_filter, cf_vz_params.k1, cf_vz_params.k2, POS_UPDATE_DT);
+  init_complementary_filter_z(&alt_comp_filter, cf_alt_params.k2, cf_alt_params.k2, POS_UPDATE_DT);
+
   drag_coef.x = -3.9;
   drag_coef.y = -1.8;
   positionPrediction.x = 0.0;
@@ -304,6 +320,15 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       tmp = -sphi*GRAVITY_MAGNITUDE + drag_coef.y*state->velocity.y;
       state->velocity.y += POS_UPDATE_DT*tmp;
 
+      // Complementary filters with rotated (horizontal) acceleration
+      test_states.velocity.x = state->velocity.x;
+      test_states.velocity.y = state->velocity.y;
+      horizontal_acc.x = (ctheta*acc.x + stheta*acc.z) * GRAVITY_MAGNITUDE;
+      horizontal_acc.y = (sphi*stheta*acc.x + cphi*acc.y - ctheta*sphi*acc.z) * GRAVITY_MAGNITUDE;
+      horizontal_acc.z = (-cphi*stheta*acc.x + sphi*acc.y + cphi*ctheta*acc.z) * GRAVITY_MAGNITUDE;
+      // test_states.velocity.x = update_complementary_filter(&vx_comp_filter, horizontal_acc.x, state->velocity.x);
+      // test_states.velocity.y = update_complementary_filter(&vy_comp_filter, horizontal_acc.y, state->velocity.y);
+      test_states.position.z = update_complementary_filter(&alt_comp_filter, horizontal_acc.z - GRAVITY_MAGNITUDE, baro.asl);
       state->velocity.z = update_complementary_filter(&vz_comp_filter, horizontal_acc.z - GRAVITY_MAGNITUDE, baro.asl);
 
       if (isFlying){
@@ -339,11 +364,23 @@ void complementaryGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, fl
 }
 
 LOG_GROUP_START(flapperModel)
-  LOG_ADD(LOG_FLOAT, posX, &positionPrediction.x)
-  LOG_ADD(LOG_FLOAT, posY, &positionPrediction.y)
-  LOG_ADD(LOG_FLOAT, posZ, &positionPrediction.z)
-  LOG_ADD(LOG_UINT8, inFlight, &isFlying)
+  // LOG_ADD(LOG_FLOAT, posX, &positionPrediction.x)
+  // LOG_ADD(LOG_FLOAT, posY, &positionPrediction.y)
+  // LOG_ADD(LOG_FLOAT, posZ, &positionPrediction.z)
+  LOG_ADD(LOG_FLOAT, Altitude, &test_states.position.z)
+  LOG_ADD(LOG_FLOAT, velX, &test_states.velocity.x)
+  LOG_ADD(LOG_FLOAT, velY, &test_states.velocity.y)
+  LOG_ADD(LOG_FLOAT, velZ, &test_states.velocity.z)
 LOG_GROUP_STOP(flapperModel)
+
+LOG_GROUP_START(compInputs)
+  LOG_ADD(LOG_FLOAT, velX, &test_states.velocity.x)
+  LOG_ADD(LOG_FLOAT, velY, &test_states.velocity.y)
+  LOG_ADD(LOG_FLOAT, baroAsl, &baro.asl)
+  LOG_ADD(LOG_FLOAT, haccX, &horizontal_acc.x)
+  LOG_ADD(LOG_FLOAT, haccY, &horizontal_acc.y)
+  LOG_ADD(LOG_FLOAT, haccZ, &horizontal_acc.z)
+LOG_GROUP_STOP(compInputs)
 
 PARAM_GROUP_START(complementaryFilter)
   PARAM_ADD(PARAM_UINT8, reset, &resetEstimation)
@@ -352,3 +389,14 @@ PARAM_GROUP_START(complementaryFilter)
   PARAM_ADD(PARAM_FLOAT, dragZ, &drag_coef.z)
   //PARAM_ADD(PARAM_FLOAT, cT, &thrust_coef)
 PARAM_GROUP_STOP(complementaryFilter)
+
+// PARAM_GROUP_START(velocityCFilter)
+//   PARAM_ADD(PARAM_FLOAT, vxK1, &cf_vx_params.k1)
+//   PARAM_ADD(PARAM_FLOAT, vxK2, &cf_vx_params.k2)
+//   PARAM_ADD(PARAM_FLOAT, vyK1, &cf_vy_params.k1)
+//   PARAM_ADD(PARAM_FLOAT, vyK2, &cf_vy_params.k2)
+//   PARAM_ADD(PARAM_FLOAT, vzK1, &cf_vz_params.k1)
+//   PARAM_ADD(PARAM_FLOAT, vzK2, &cf_vz_params.k2)
+//   PARAM_ADD(PARAM_FLOAT, altK1, &cf_alt_params.k1)
+//   PARAM_ADD(PARAM_FLOAT, altK2, &cf_alt_params.k2)
+// PARAM_GROUP_STOP(velocityCFilter)
