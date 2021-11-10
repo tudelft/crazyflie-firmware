@@ -149,6 +149,7 @@ void estimatorComplementaryInit(void)
   positionPrediction.y = 0.0;
   positionPrediction.z = 0.0;
   isFlying = false;
+  baro_ground_set = false;
   thrustID = logGetVarId("stabilizer", "thrust");
 }
 
@@ -164,7 +165,6 @@ bool estimatorComplementaryTest(void)
 void estimatorComplementary(state_t *state, const uint32_t tick)
 {
   if (resetEstimation){
-    baro_ground_set = false;
     estimatorComplementaryInit();
     resetEstimation = false;
   }

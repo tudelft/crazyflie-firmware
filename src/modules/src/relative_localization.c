@@ -18,6 +18,9 @@
 #include "estimator_complementary.h"
 #include "lpsTwrTag.h"
 
+#define RELATIVE_LOCALIZATION_RATE RATE_100_HZ
+#define RELATIVE_LOCALIZATION_DT 1.0f/RELATIVE_LOCALIZATION_RATE
+
 static bool isInit;
 
 static float procNoise_velX = 0.1; //0.12; // velocity deviation
@@ -73,13 +76,14 @@ void relativeLocoInit(void)
 {
   if (isInit)
     return;
-  xTaskCreate(relativeLocoTask,"relative_Localization",ZRANGER_TASK_STACKSIZE, NULL,ZRANGER_TASK_PRI,NULL );
+  xTaskCreate(relativeLocoTask, RELATIVE_LOC_TASK_NAME, RELATIVE_LOC_TASK_STACKSIZE, NULL, RELATIVE_LOC_TASK_PRI, NULL);
   isInit = true;
 }
 
 void relativeLocoTask(void* arg)
 {
   systemWaitStart();
+
   // Initialize EKF for relative localization
   for (int n=0; n<NumUWB; n++) {
     for (int i=0; i<STATE_DIM_rl; i++) {
@@ -98,32 +102,36 @@ void relativeLocoTask(void* arg)
     relaVar[n].receiveFlag = false;
   }
 
+  static uint32_t tick;
   while(1) {
-    vTaskDelay(10);
-    for (int n=0; n<NumUWB; n++) {
-      if (twrGetSwarmInfo(n, &dij, &vxj, &vyj, &vzj, &rj, &hj)){
-        connectCount = 0;
-        complementaryGetSwarmInfo(&vxi, &vyi, &vzi, &ri, &hi);
-        if(relaVar[n].receiveFlag){
-          uint32_t osTick = xTaskGetTickCount();
-          float dtEKF = (float)(osTick - relaVar[n].oldTimetick)/configTICK_RATE_HZ;
-          relaVar[n].oldTimetick = osTick;
-          relativeEKF(n, vxi, vyi, vzi, ri, hi, vxj, vyj, vzj, rj, hj, dij, dtEKF);
-          if(n==1){hij = hj-hi;}
-          inputVar[n][STATE_rlX] = vxj;
-          inputVar[n][STATE_rlY] = vyj;
-          inputVar[n][STATE_rlZ] = vzj;
-          inputVar[n][STATE_rlYaw] = rj;
-        }else{
-          relaVar[n].oldTimetick = xTaskGetTickCount();
-          relaVar[n].receiveFlag = true;
-          fullConnect = true;
+    vTaskDelay(1);
+    tick = xTaskGetTickCount();
+    if (RATE_DO_EXECUTE(RELATIVE_LOCALIZATION_RATE, tick)){
+      for (int n=0; n<NumUWB; n++) {
+        if (twrGetSwarmInfo(n, &dij, &vxj, &vyj, &vzj, &rj, &hj)){
+          connectCount = 0;
+          complementaryGetSwarmInfo(&vxi, &vyi, &vzi, &ri, &hi);
+          if(relaVar[n].receiveFlag){
+            uint32_t osTick = xTaskGetTickCount();
+            float dtEKF = (float)(osTick - relaVar[n].oldTimetick)/configTICK_RATE_HZ;
+            relaVar[n].oldTimetick = osTick;
+            relativeEKF(n, vxi, vyi, vzi, ri, hi, vxj, vyj, vzj, rj, hj, dij, dtEKF);
+            if(n==1){hij = hj-hi;}
+            inputVar[n][STATE_rlX] = vxj;
+            inputVar[n][STATE_rlY] = vyj;
+            inputVar[n][STATE_rlZ] = vzj;
+            inputVar[n][STATE_rlYaw] = rj;
+          }else{
+            relaVar[n].oldTimetick = xTaskGetTickCount();
+            relaVar[n].receiveFlag = true;
+            fullConnect = true;
+          }
         }
       }
-    }
-    connectCount++;
-    if(connectCount>100){
-      fullConnect = false; // disable control if there is no ranging after 1 second
+      connectCount++;
+      if(connectCount>100){
+        fullConnect = false; // disable control if there is no ranging after 1 second
+      }
     }
   }
 }
