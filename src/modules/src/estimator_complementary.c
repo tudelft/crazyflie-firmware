@@ -252,8 +252,8 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
 
     positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
 
-    float stheta = sin(state->attitude.pitch * DEG2RAD);
-    float ctheta = cos(state->attitude.pitch * DEG2RAD);
+    float stheta = sin(-state->attitude.pitch * DEG2RAD);
+    float ctheta = cos(-state->attitude.pitch * DEG2RAD);
     float cphi = cos(state->attitude.roll * DEG2RAD);
     float tmp_gz = (-gyro.x * stheta/cphi + gyro.z * ctheta/cphi) * DEG2RAD;
     // float tmp_gz = gyro.z * DEG2RAD;
@@ -354,8 +354,8 @@ void complementaryGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, fl
   *vx = estimator_state.velocity.x;
   *vy= estimator_state.velocity.y;
   *vz = estimator_state.velocity.z;
-  // *gyroZ = filtered_gz;
-  *gyroZ = 0.0f;
+  *gyroZ = filtered_gz;
+  // *gyroZ = 0.0f;
   // float stheta = sin(-estimator_state.attitude.pitch * DEG2RAD);
   // float ctheta = cos(-estimator_state.attitude.pitch * DEG2RAD);
   // float cphi = cos(estimator_state.attitude.roll * DEG2RAD);
