@@ -143,8 +143,8 @@ void estimatorComplementaryInit(void)
   init_complementary_filter_vz(&vz_comp_filter, cf_vz_params.k1, cf_vz_params.k2, POS_UPDATE_DT);
   init_complementary_filter_z(&alt_comp_filter, cf_alt_params.k2, cf_alt_params.k2, POS_UPDATE_DT);
 
-  drag_coef.x = -3.9;
-  drag_coef.y = -1.8;
+  drag_coef.x = 4.7;
+  drag_coef.y = 2.0;
   positionPrediction.x = 0.0;
   positionPrediction.y = 0.0;
   positionPrediction.z = 0.0;
@@ -315,9 +315,9 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       float stheta = sin(-state->attitude.pitch*DEG2RAD);
 
       // Dynamic velocity model (linear drag)
-      tmp = cphi*stheta*GRAVITY_MAGNITUDE + drag_coef.x*state->velocity.x;
+      tmp = GRAVITY_MAGNITUDE*stheta/cphi/ctheta - drag_coef.x*ctheta*ctheta*state->velocity.x;
       state->velocity.x += POS_UPDATE_DT*tmp;
-      tmp = -sphi*GRAVITY_MAGNITUDE + drag_coef.y*state->velocity.y;
+      tmp = -GRAVITY_MAGNITUDE*sphi/cphi - drag_coef.y*cphi*cphi*state->velocity.y;
       state->velocity.y += POS_UPDATE_DT*tmp;
 
       // Complementary filters with rotated (horizontal) acceleration
