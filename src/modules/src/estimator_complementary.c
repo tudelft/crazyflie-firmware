@@ -143,8 +143,8 @@ void estimatorComplementaryInit(void)
   init_complementary_filter_vz(&vz_comp_filter, cf_vz_params.k1, cf_vz_params.k2, POS_UPDATE_DT);
   init_complementary_filter_z(&alt_comp_filter, cf_alt_params.k2, cf_alt_params.k2, POS_UPDATE_DT);
 
-  drag_coef.x = 4.7;
-  drag_coef.y = 2.0;
+  drag_coef.x = 4.22;
+  drag_coef.y = 1.78;
   positionPrediction.x = 0.0;
   positionPrediction.y = 0.0;
   positionPrediction.z = 0.0;
@@ -280,11 +280,11 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
     }
   #else
     if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {    
-      if (!isFlying && logGetFloat(thrustID) > 1){
+      if (!isFlying && logGetFloat(thrustID) > 35000){
         isFlying = true;
       }
 
-      if (isFlying && logGetFloat(thrustID) <= 0) {
+      if (isFlying && logGetFloat(thrustID) <= 1000) {
         flightCounter ++;
         if (flightCounter > 20){
           isFlying = false;
@@ -332,8 +332,10 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       state->velocity.z = update_complementary_filter(&vz_comp_filter, horizontal_acc.z - GRAVITY_MAGNITUDE, baro.asl);
 
       if (isFlying){
-        positionPrediction.x = positionPrediction.x + POS_UPDATE_DT*state->velocity.x;
-        positionPrediction.y = positionPrediction.y + POS_UPDATE_DT*state->velocity.y;
+        state->position.x += POS_UPDATE_DT * state->velocity.x;
+        state->position.y += POS_UPDATE_DT * state->velocity.y;
+        positionPrediction.x += POS_UPDATE_DT * state->velocity.x;
+        positionPrediction.y += POS_UPDATE_DT * state->velocity.y;
         positionPrediction.z = state->position.z;
       }
     }
@@ -364,22 +366,26 @@ void complementaryGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, fl
 }
 
 LOG_GROUP_START(flapperModel)
-  // LOG_ADD(LOG_FLOAT, posX, &positionPrediction.x)
-  // LOG_ADD(LOG_FLOAT, posY, &positionPrediction.y)
-  // LOG_ADD(LOG_FLOAT, posZ, &positionPrediction.z)
+  LOG_ADD(LOG_FLOAT, posX, &positionPrediction.x)
+  LOG_ADD(LOG_FLOAT, posY, &positionPrediction.y)
+  LOG_ADD(LOG_FLOAT, posZ, &positionPrediction.z)
   LOG_ADD(LOG_FLOAT, Altitude, &test_states.position.z)
   LOG_ADD(LOG_FLOAT, velX, &test_states.velocity.x)
   LOG_ADD(LOG_FLOAT, velY, &test_states.velocity.y)
   LOG_ADD(LOG_FLOAT, velZ, &test_states.velocity.z)
+  LOG_ADD(LOG_UINT8, flying, &isFlying)
 LOG_GROUP_STOP(flapperModel)
 
 LOG_GROUP_START(compInputs)
   LOG_ADD(LOG_FLOAT, velX, &test_states.velocity.x)
   LOG_ADD(LOG_FLOAT, velY, &test_states.velocity.y)
-  LOG_ADD(LOG_FLOAT, baroAsl, &baro.asl)
+  LOG_ADD(LOG_FLOAT, baroAG, &baro.asl)
   LOG_ADD(LOG_FLOAT, haccX, &horizontal_acc.x)
   LOG_ADD(LOG_FLOAT, haccY, &horizontal_acc.y)
   LOG_ADD(LOG_FLOAT, haccZ, &horizontal_acc.z)
+  LOG_ADD(LOG_FLOAT, accX, &acc.x)
+  LOG_ADD(LOG_FLOAT, accY, &acc.y)
+  LOG_ADD(LOG_FLOAT, accZ, &acc.z)
 LOG_GROUP_STOP(compInputs)
 
 PARAM_GROUP_START(complementaryFilter)
