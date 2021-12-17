@@ -143,8 +143,8 @@ void estimatorComplementaryInit(void)
   init_complementary_filter_vz(&vz_comp_filter, cf_vz_params.k1, cf_vz_params.k2, POS_UPDATE_DT);
   init_complementary_filter_z(&alt_comp_filter, cf_alt_params.k2, cf_alt_params.k2, POS_UPDATE_DT);
 
-  drag_coef.x = 4.22;
-  drag_coef.y = 1.78;
+  drag_coef.x = 4.2;
+  drag_coef.y = 1.8;
   positionPrediction.x = 0.0;
   positionPrediction.y = 0.0;
   positionPrediction.z = 0.0;
@@ -252,10 +252,10 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
 
     positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
 
-    float stheta = sin(-state->attitude.pitch * DEG2RAD);
     float ctheta = cos(-state->attitude.pitch * DEG2RAD);
+    float sphi = sin(state->attitude.roll * DEG2RAD);
     float cphi = cos(state->attitude.roll * DEG2RAD);
-    float tmp_gz = (-gyro.x * stheta/cphi + gyro.z * ctheta/cphi) * DEG2RAD;
+    float tmp_gz = (gyro.y * sphi/ctheta + gyro.z * cphi/ctheta) * DEG2RAD;
     // float tmp_gz = gyro.z * DEG2RAD;
     filtered_gz = update_butterworth_2_low_pass(&gz_filter, tmp_gz);
   }
@@ -315,17 +315,17 @@ void estimatorComplementary(state_t *state, const uint32_t tick)
       float stheta = sin(-state->attitude.pitch*DEG2RAD);
 
       // Dynamic velocity model (linear drag)
-      tmp = GRAVITY_MAGNITUDE*stheta/cphi/ctheta - drag_coef.x*ctheta*ctheta*state->velocity.x;
+      tmp = GRAVITY_MAGNITUDE*stheta/ctheta - drag_coef.x*ctheta*ctheta*state->velocity.x;
       state->velocity.x += POS_UPDATE_DT*tmp;
-      tmp = -GRAVITY_MAGNITUDE*sphi/cphi - drag_coef.y*cphi*cphi*state->velocity.y;
+      tmp = -GRAVITY_MAGNITUDE*sphi/ctheta/cphi - drag_coef.y*cphi*cphi*state->velocity.y;
       state->velocity.y += POS_UPDATE_DT*tmp;
 
       // Complementary filters with rotated (horizontal) acceleration
       test_states.velocity.x = state->velocity.x;
       test_states.velocity.y = state->velocity.y;
-      horizontal_acc.x = (ctheta*acc.x + stheta*acc.z) * GRAVITY_MAGNITUDE;
-      horizontal_acc.y = (sphi*stheta*acc.x + cphi*acc.y - ctheta*sphi*acc.z) * GRAVITY_MAGNITUDE;
-      horizontal_acc.z = (-cphi*stheta*acc.x + sphi*acc.y + cphi*ctheta*acc.z) * GRAVITY_MAGNITUDE;
+      horizontal_acc.x = (ctheta*acc.x +stheta*sphi*acc.y + stheta*cphi*acc.z) * GRAVITY_MAGNITUDE;
+      horizontal_acc.y = (cphi*acc.y - sphi*acc.z) * GRAVITY_MAGNITUDE;
+      horizontal_acc.z = (-stheta*acc.x + ctheta*sphi*acc.y + cphi*ctheta*acc.z) * GRAVITY_MAGNITUDE;
       // test_states.velocity.x = update_complementary_filter(&vx_comp_filter, horizontal_acc.x, state->velocity.x);
       // test_states.velocity.y = update_complementary_filter(&vy_comp_filter, horizontal_acc.y, state->velocity.y);
       test_states.position.z = update_complementary_filter(&alt_comp_filter, horizontal_acc.z - GRAVITY_MAGNITUDE, baro.asl);
