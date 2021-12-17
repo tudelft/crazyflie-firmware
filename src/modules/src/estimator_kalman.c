@@ -73,6 +73,7 @@
 #include "param.h"
 #include "physicalConstants.h"
 #include "supervisor.h"
+#include "filter.h"
 
 #include "statsCnt.h"
 #include "rateSupervisor.h"
@@ -177,6 +178,12 @@ static float swarmVz;
 static float swarmGz;
 static float swarmh;
 
+
+#define LOW_PASS_FILTER_CUTOFF_FREQ_HZ 5
+#define LOW_PASS_FILTER_TAU (1.0/(2*3.1415*LOW_PASS_FILTER_CUTOFF_FREQ_HZ))
+static Axis3f gyroAverage;
+static Butterworth2LowPass gz_filter;
+
 static void kalmanTask(void* parameters);
 static bool predictStateForward(uint32_t osTick, float dt);
 static bool updateQueuedMeasurements(const uint32_t tick);
@@ -190,6 +197,8 @@ void estimatorKalmanTaskInit() {
   vSemaphoreCreateBinary(runTaskSemaphore);
 
   dataMutex = xSemaphoreCreateMutexStatic(&dataMutexBuffer);
+
+  init_butterworth_2_low_pass(&gz_filter, LOW_PASS_FILTER_TAU, 1.0f/PREDICT_RATE, 0);
 
   STATIC_MEM_TASK_CREATE(kalmanTask, kalmanTask, KALMAN_TASK_NAME, NULL, KALMAN_TASK_PRI);
 
@@ -274,7 +283,14 @@ static void kalmanTask(void* parameters) {
       swarmVy = coreData.R[1][0] * coreData.S[KC_STATE_PX] + coreData.R[1][1] * coreData.S[KC_STATE_PY] + coreData.R[1][2] * coreData.S[KC_STATE_PZ];
       swarmVz = coreData.R[2][0] * coreData.S[KC_STATE_PX] + coreData.R[2][1] * coreData.S[KC_STATE_PY] + coreData.R[2][2] * coreData.S[KC_STATE_PZ];
       //swarmGz = atan2f(2*(q[1]*q[2]+q[0]*q[3]) , q[0]*q[0] + q[1]*q[1] - q[2]*q[2] - q[3]*q[3]);
-      swarmGz = gyroSnapshot.z * DEG_TO_RAD;
+      
+      float ctheta = cos(-taskEstimatorState.attitude.pitch * DEG_TO_RAD);
+      float sphi = sin(taskEstimatorState.attitude.roll * DEG_TO_RAD);
+      float cphi = cos(taskEstimatorState.attitude.roll * DEG_TO_RAD);
+      float tmp_gz = gyroAverage.y * sphi/ctheta + gyroAverage.z * cphi/ctheta;
+      // swarmGz = gyroSnapshot.z * DEG_TO_RAD;
+      swarmGz = update_butterworth_2_low_pass(&gz_filter, tmp_gz);
+
       swarmh  = coreData.S[KC_STATE_Z];
       STATS_CNT_RATE_EVENT(&finalizeCounter);
       if (! kalmanSupervisorIsStateWithinBounds(&coreData)) {
@@ -320,7 +336,7 @@ static bool predictStateForward(uint32_t osTick, float dt) {
   }
 
   // gyro is in deg/sec but the estimator requires rad/sec
-  Axis3f gyroAverage;
+  // Axis3f gyroAverage;
   gyroAverage.x = gyroAccumulator.x * DEG_TO_RAD / gyroAccumulatorCount;
   gyroAverage.y = gyroAccumulator.y * DEG_TO_RAD / gyroAccumulatorCount;
   gyroAverage.z = gyroAccumulator.z * DEG_TO_RAD / gyroAccumulatorCount;
