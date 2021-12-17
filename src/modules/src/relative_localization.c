@@ -23,11 +23,11 @@
 
 static bool isInit;
 
-static float procNoise_velX = 0.08;   // velocity deviation
-static float procNoise_velY = 0.12;   // velocity deviation
-static float procNoise_velZ = 0.22;   // velocity deviation
-static float procNoise_ryaw = 0.12;   // yaw rate deviation
-static float measNoise_uwb = 0.04;    // ranging deviation
+static float procNoise_velX = 0.1f;  //0.08;   // velocity deviation
+static float procNoise_velY = 0.15f;  //0.12;   // velocity deviation
+static float procNoise_velZ = 0.2f;  //0.22;   // velocity deviation
+static float procNoise_ryaw = 0.12f;  //0.12;   // yaw rate deviation
+static float measNoise_uwb = 0.06;   //0.04;    // ranging deviation
 
 static float InitCovPos = 10.0f;
 static float InitCovYaw = 1.5f;
@@ -252,10 +252,18 @@ LOG_ADD(LOG_FLOAT, rlX0, &relaVar[0].S[STATE_rlX])
 LOG_ADD(LOG_FLOAT, rlY0, &relaVar[0].S[STATE_rlY])
 LOG_ADD(LOG_FLOAT, rlZ0, &relaVar[0].S[STATE_rlZ])
 LOG_ADD(LOG_FLOAT, rlYaw0, &relaVar[0].S[STATE_rlYaw])
+LOG_ADD(LOG_FLOAT, PX0, &relaVar[0].P[STATE_rlX][STATE_rlX])
+LOG_ADD(LOG_FLOAT, PY0, &relaVar[0].P[STATE_rlY][STATE_rlY])
+LOG_ADD(LOG_FLOAT, PZ0, &relaVar[0].P[STATE_rlZ][STATE_rlZ])
+LOG_ADD(LOG_FLOAT, PYaw0, &relaVar[0].P[STATE_rlYaw][STATE_rlYaw])
 LOG_ADD(LOG_FLOAT, rlX1, &relaVar[1].S[STATE_rlX])
 LOG_ADD(LOG_FLOAT, rlY1, &relaVar[1].S[STATE_rlY])
 LOG_ADD(LOG_FLOAT, rlZ1, &relaVar[1].S[STATE_rlZ])
 LOG_ADD(LOG_FLOAT, rlYaw1, &relaVar[1].S[STATE_rlYaw])
+LOG_ADD(LOG_FLOAT, PX1, &relaVar[1].P[STATE_rlX][STATE_rlX])
+LOG_ADD(LOG_FLOAT, PY1, &relaVar[1].P[STATE_rlY][STATE_rlY])
+LOG_ADD(LOG_FLOAT, PZ1, &relaVar[1].P[STATE_rlZ][STATE_rlZ])
+LOG_ADD(LOG_FLOAT, PYaw1, &relaVar[1].P[STATE_rlYaw][STATE_rlYaw])
 LOG_ADD(LOG_FLOAT, dist1, &dist)
 LOG_GROUP_STOP(relativePosition)
 
