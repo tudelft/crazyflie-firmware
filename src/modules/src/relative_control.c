@@ -109,6 +109,7 @@ static void flyViaDoor(char camYaw){
 #define SIGN(a) ((a>=0)?1:-1)
 static float targetX;
 static float targetY;
+static float targetZ;
 static float PreErr_x = 0;
 static float PreErr_y = 0;
 static float PreErr_z = 0;
@@ -116,7 +117,7 @@ static float IntErr_x = 0;
 static float IntErr_y = 0;
 static float IntErr_z = 0;
 static uint32_t PreTime;
-static void formation0asCenter(float tarX, float tarY){
+static void formation0asCenter(float tarX, float tarY, float tarZ){
   float dt = (float)(xTaskGetTickCount()-PreTime)/configTICK_RATE_HZ;
   PreTime = xTaskGetTickCount();
   if(dt > 1) // skip the first run of the EKF
@@ -124,7 +125,7 @@ static void formation0asCenter(float tarX, float tarY){
   // pid control for formation flight
   float err_x = -(tarX - relaVarInCtrl[0][STATE_rlX]);
   float err_y = -(tarY - relaVarInCtrl[0][STATE_rlY]);
-  float err_z = -(0 - relaVarInCtrl[0][STATE_rlZ]);
+  float err_z = -(tarZ - relaVarInCtrl[0][STATE_rlZ]);
   float pid_vx = relaCtrl_p * err_x;
   float pid_vy = relaCtrl_p * err_y;
   float pid_vz = relaCtrl_p * err_z;
@@ -222,6 +223,7 @@ void relativeControlTask(void* arg)
           flyRandomIn1meter(1.0f); // random flight within first 10 seconds
         targetX = relaVarInCtrl[0][STATE_rlX];
         targetY = relaVarInCtrl[0][STATE_rlY];
+        targetZ = relaVarInCtrl[0][STATE_rlZ];
 
         if ((tickInterval > 2000) && (tickInterval < 4000))
             height = 0.3;
@@ -253,12 +255,12 @@ void relativeControlTask(void* arg)
 #else
         if ( (tickInterval > 20000) && (tickInterval < 30000) ){ // formation
           srand((unsigned int) relaVarInCtrl[0][STATE_rlX]*100);
-          formation0asCenter(targetX, targetY);
+          formation0asCenter(targetX, targetY, targetZ);
           // NDI_formation0asCenter(targetX, targetY);
           // lastTick = tickInterval;
         }
 
-        static float relaXof2in1=0.7f, relaYof2in1=0.0f;
+        static float relaXof2in1=2.0f, relaYof2in1=0.0f;
         if ( (tickInterval > 30000) ){
           // if(tickInterval - lastTick > 3000)
           // {
@@ -268,9 +270,10 @@ void relativeControlTask(void* arg)
           //   height = (rand() / (float)RAND_MAX) * 0.8f + 0.2f;
           // }
 
-          targetX = -cosf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 + sinf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
-          targetY = -sinf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 - cosf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
-          formation0asCenter(targetX, targetY); 
+          targetX = relaXof2in1; //-cosf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 + sinf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
+          targetY = relaYof2in1; //-sinf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 - cosf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
+          targetZ = 0.2f;
+          formation0asCenter(targetX, targetY, targetZ); 
         }
 #endif
       }
