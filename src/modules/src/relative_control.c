@@ -31,10 +31,10 @@ static uint8_t selfID;
 static float height;
 
 // PID control
-#define PID_RELXY_KP 2.0f
+#define PID_RELXY_KP 3.0f
 #define PID_RELXY_KI 0.0f
 #define PID_RELXY_KD 0.05f
-#define PID_RELXY_OUTPUT_LIM 2.5f
+#define PID_RELXY_OUTPUT_LIM 2.0f
 
 #define PID_RELZ_KP 3.0f
 #define PID_RELZ_KI 0.0f
@@ -65,6 +65,19 @@ static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, 
   setpoint->mode.y = modeVelocity;
   setpoint->velocity.x = vx;
   setpoint->velocity.y = vy;
+  setpoint->velocity_body = true;
+  commanderSetSetpoint(setpoint, 3);
+}
+
+static void sendPositionSetpoint(setpoint_t *setpoint, float x, float y, float z, float yaw){
+  setpoint->mode.z = modeAbs;
+  setpoint->position.z = z;
+  setpoint->mode.yaw = modeAbs;
+  setpoint->attitude.yaw = yaw;
+  setpoint->mode.x = modeAbs;
+  setpoint->mode.y = modeAbs;
+  setpoint->position.x = x;
+  setpoint->position.y = y;
   setpoint->velocity_body = true;
   commanderSetSetpoint(setpoint, 3);
 }
@@ -176,11 +189,11 @@ void relativeControlTask(void* arg)
     tick = xTaskGetTickCount();
     if (RATE_DO_EXECUTE(RELATIVE_CONTROL_RATE, tick)){
       // Leader drone: share if flying
-      if(selfID==0){
+      // if(selfID==0){
         keepFlying = logGetUint(logIdStateIsFlying);
         keepFlying = command_share(selfID, keepFlying);       
         continue;
-      }
+      // }
 
       // Follower: Perform relative control if leader is flying and data is available
       keepFlying = command_share(selfID, keepFlying);
@@ -201,8 +214,38 @@ void relativeControlTask(void* arg)
 
         uint32_t time_since_takeoff = T2M(tick - takeoff_tick);
         // Initialization procedure to allow relative EKF to converge
+        if (false){
+          // 2.0/2.0/1.0
+          // 2.0/2.0/2.0
+          // -2.0/2.0/2.0
+          // -2.0/2.0/1.0
+          // -2.0/-2.0/1.0
+          // -2.0/-2.0/2.0
+          // 2.0/-2.0/2.0
+          // 2.0/-2.0/1.0
+          // 0.0/0.0/1.0
+          if ((time_since_takeoff > 2000) && (time_since_takeoff < 4000))
+            sendPositionSetpoint(&setpoint, 2.0f, 2.0f, 1.0f, 0.0f);
+          else if (time_since_takeoff < 6000)
+            sendPositionSetpoint(&setpoint, 2.0f, 2.0f, 2.0f, 0.0f);
+          else if (time_since_takeoff < 8000)
+            sendPositionSetpoint(&setpoint, -2.0f, 2.0f, 2.0f, 0.0f);
+          else if (time_since_takeoff < 10000)
+            sendPositionSetpoint(&setpoint, -2.0f, 2.0f, 1.0f, 0.0f);
+          else if (time_since_takeoff < 12000)
+            sendPositionSetpoint(&setpoint, -2.0f, -2.0f, 1.0f, 0.0f);
+          else if (time_since_takeoff < 14000)
+            sendPositionSetpoint(&setpoint, -2.0f, -2.0f, 2.0f, 0.0f);
+          else if (time_since_takeoff < 16000)
+            sendPositionSetpoint(&setpoint, 2.0f, -2.0f, 2.0f, 0.0f);
+          else if (time_since_takeoff < 18000)
+            sendPositionSetpoint(&setpoint, 2.0f, -2.0f, 1.0f, 0.0f);
+          else
+            takeoff_tick = tick;
+        }
+
         if( time_since_takeoff < 15000){
-          flyRandomIn1meter(1.0f); // random flight within first 15 seconds
+          flyRandomIn1meter(2.0f); // random flight within first 15 seconds
           if ((time_since_takeoff > 2000) && (time_since_takeoff < 4000))
               height = 1.3;
           if ((time_since_takeoff > 4000) && (time_since_takeoff < 6000))
