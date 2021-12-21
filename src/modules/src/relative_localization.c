@@ -23,10 +23,16 @@
 
 static bool isInit;
 
-static float procNoise_velX = 0.1f;//0.22f;  //0.1f;  //0.08;   // velocity deviation
-static float procNoise_velY = 0.15f;//0.31f;  //0.15f;  //0.12;   // velocity deviation
-static float procNoise_velZ = 0.2f;//0.28f;  //0.2f;  //0.22;   // velocity deviation
-static float procNoise_ryaw = 0.12f;   // yaw rate deviation
+// static float procNoise_velX = 0.25f;//0.22f;  //0.1f;  //0.08;   // velocity deviation
+// static float procNoise_velY = 0.35f;//0.31f;  //0.15f;  //0.12;   // velocity deviation
+// static float procNoise_velZ = 0.25f;//0.28f;  //0.2f;  //0.22;   // velocity deviation
+// static float procNoise_ryaw = 0.12f;   // yaw rate deviation
+// static float measNoise_uwb = 0.15f;    //0.06;   //0.04;    // ranging deviation
+
+static float procNoise_velX = 0.2f;// 0.1f;//0.22f;  //0.1f;  //0.08;   // velocity deviation
+static float procNoise_velY = 0.25f;// 0.15f;//0.31f;  //0.15f;  //0.12;   // velocity deviation
+static float procNoise_velZ = 0.2f;// 0.2f;//0.28f;  //0.2f;  //0.22;   // velocity deviation
+static float procNoise_ryaw = 0.12f;// 0.12f;   // yaw rate deviation
 static float measNoise_uwb = 0.1f;    //0.06;   //0.04;    // ranging deviation
 
 static float InitCovPos = 10.0f;

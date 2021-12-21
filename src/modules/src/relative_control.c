@@ -32,13 +32,13 @@ static float height;
 
 // PID control
 #define PID_RELXY_KP 3.0f
-#define PID_RELXY_KI 0.0f
-#define PID_RELXY_KD 0.05f
+#define PID_RELXY_KI 0.0001f
+#define PID_RELXY_KD 0.03f
 #define PID_RELXY_OUTPUT_LIM 2.0f
 
 #define PID_RELZ_KP 3.0f
-#define PID_RELZ_KI 0.0f
-#define PID_RELZ_KD 0.05f
+#define PID_RELZ_KI 0.0001f
+#define PID_RELZ_KD 0.03f
 #define PID_RELZ_OUTPUT_LIM 1.5f
 
 #define PID_INTEGRAL_LIM 0.5f
@@ -46,7 +46,7 @@ static float height;
 static PidObject pid_relX, pid_relY, pid_relZ;
 static float desired_relX = 2.0f;
 static float desired_relY = 0.0f;
-static float desired_relZ = 0.0f;
+static float desired_relZ = 0.2f;
 
 // Shushuai's Proposed Gains (CF)
 // static float relaCtrl_p = 1.5f;
@@ -189,11 +189,11 @@ void relativeControlTask(void* arg)
     tick = xTaskGetTickCount();
     if (RATE_DO_EXECUTE(RELATIVE_CONTROL_RATE, tick)){
       // Leader drone: share if flying
-      // if(selfID==0){
+      if(selfID==0){
         keepFlying = logGetUint(logIdStateIsFlying);
         keepFlying = command_share(selfID, keepFlying);       
         continue;
-      // }
+      }
 
       // Follower: Perform relative control if leader is flying and data is available
       keepFlying = command_share(selfID, keepFlying);
