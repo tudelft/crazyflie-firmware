@@ -31,15 +31,15 @@ static uint8_t selfID;
 static float height;
 
 // PID control
-#define PID_RELXY_KP 3.0f
-#define PID_RELXY_KI 0.0001f
-#define PID_RELXY_KD 0.03f
+#define PID_RELXY_KP 3.5f
+#define PID_RELXY_KI 0.0f
+#define PID_RELXY_KD 0.06f
 #define PID_RELXY_OUTPUT_LIM 2.0f
 
-#define PID_RELZ_KP 3.0f
-#define PID_RELZ_KI 0.0001f
-#define PID_RELZ_KD 0.03f
-#define PID_RELZ_OUTPUT_LIM 1.5f
+#define PID_RELZ_KP 3.5f
+#define PID_RELZ_KI 0.001f
+#define PID_RELZ_KD 0.06f
+#define PID_RELZ_OUTPUT_LIM 2.0f
 
 #define PID_INTEGRAL_LIM 0.5f
 
