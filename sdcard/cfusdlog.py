@@ -96,7 +96,7 @@ def decode(filename):
 
     return result
 
-log_name = "log04_1stworking"
+log_name = "log00"
 result = decode(log_name)
 result = result['fixedFrequency']
 

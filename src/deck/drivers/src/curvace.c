@@ -39,6 +39,10 @@ typedef struct __attribute__((packed)) curvaceFlow_s {
   int16_t y3;
   int16_t x4;
   int16_t y4;
+  int16_t x5;
+  int16_t y5;
+  int16_t x6;
+  int16_t y6;
   uint16_t error;
   int16_t avgx;
   int16_t avgy; 
@@ -89,7 +93,7 @@ void curvaceTask(void *param)
   //int velZid;
 
   char c = 'A';
-  uint8_t buf[33];
+  uint8_t buf[49];
 
   //curvaceData_t packet;
 
@@ -111,7 +115,7 @@ void curvaceTask(void *param)
     int cnt=0;
 
     // Get a line
-    while (cnt < 33) {
+    while (cnt < 49) {
       uart2Getchar(&c);
       buf[cnt] = c;
       if (c == 10) {
@@ -120,7 +124,7 @@ void curvaceTask(void *param)
       cnt++;
     }
 
-    if (cnt == 32) {
+    if (cnt == 48) {
       // Received a message!
       curvaceFlow.x1 = get_hex(buf);
       curvaceFlow.y1 = get_hex(buf+4);
@@ -130,6 +134,10 @@ void curvaceTask(void *param)
       curvaceFlow.y3 = get_hex(buf+20);
       curvaceFlow.x4 = get_hex(buf+24);
       curvaceFlow.y4 = get_hex(buf+28);
+      curvaceFlow.x5 = get_hex(buf+32);
+      curvaceFlow.y5 = get_hex(buf+36);
+      curvaceFlow.x6 = get_hex(buf+40);
+      curvaceFlow.y6 = get_hex(buf+44);
 
 
       uint32_t osTick = xTaskGetTickCount(); // would be nice if this had a precision higher than 1ms...
@@ -145,7 +153,8 @@ void curvaceTask(void *param)
         curvaceFlow.dt = 1.0f/100.0f;
       }
 
-      curvaceFlow.fps = 202.0f; //1.0f / curvaceFlow.dt;
+      //curvaceFlow.fps = 202.0f; //1.0f / curvaceFlow.dt;
+      curvaceFlow.fps = 1.0f / curvaceFlow.dt;
 
 #define FOCAL_LENGTH   56205  //26741.0f
 #define MANUAL_CORRECTION 1.0f //3.3f
@@ -202,6 +211,10 @@ static void curvaceInit()
   curvaceFlow.y3 = 0;
   curvaceFlow.x4 = 0;
   curvaceFlow.y4 = 0;
+  curvaceFlow.x5 = 0;
+  curvaceFlow.y5 = 0;
+  curvaceFlow.x6 = 0;
+  curvaceFlow.y6 = 0;
   curvaceFlow.avgx = 0;
   curvaceFlow.avgy = 0;
   curvaceFlow.error = 0;
@@ -246,6 +259,10 @@ LOG_ADD(LOG_INT16, x3, &curvaceFlow.x3)
 LOG_ADD(LOG_INT16, y3, &curvaceFlow.y3)
 LOG_ADD(LOG_INT16, x4, &curvaceFlow.x4)
 LOG_ADD(LOG_INT16, y4, &curvaceFlow.y4)
+LOG_ADD(LOG_INT16, x5, &curvaceFlow.x5)
+LOG_ADD(LOG_INT16, y5, &curvaceFlow.y5)
+LOG_ADD(LOG_INT16, x6, &curvaceFlow.x6)
+LOG_ADD(LOG_INT16, y6, &curvaceFlow.y6)
 LOG_ADD(LOG_INT16, avgx, &curvaceFlow.avgx)
 LOG_ADD(LOG_INT16, avgy, &curvaceFlow.avgy)
 LOG_ADD(LOG_UINT16, err, &curvaceFlow.error)

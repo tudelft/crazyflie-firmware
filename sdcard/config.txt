@@ -22,5 +22,9 @@ curvace.x3
 curvace.y3
 curvace.x4
 curvace.y4
+curvace.x5
+curvace.y5
+curvace.x6
+curvace.y6
 flowest.mode
 flowest.ROLL
