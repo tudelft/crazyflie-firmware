@@ -23,6 +23,8 @@ static float relaVarInCtrl[NumUWB][STATE_DIM_rl];
 static float inputVarInCtrl[NumUWB][STATE_DIM_rl];
 static uint8_t selfID;
 static float height;
+static float initial_hover_height;
+//static float convergence_procedure_velocity;
 
 static float relaCtrl_p = 2.0f;
 static float relaCtrl_i = 0.0001f;
@@ -207,7 +209,7 @@ void relativeControlTask(void* arg)
         estimatorKalmanInit(); // reseting kalman filter
         vTaskDelay(M2T(2000));
         for (int i=0; i<50; i++) {
-          setHoverSetpoint(&setpoint, 0, 0, 1.0f, 0);
+          setHoverSetpoint(&setpoint, 0, 0, initial_hover_height, 0);
           vTaskDelay(M2T(100));
         }
         onGround = false;
@@ -306,6 +308,8 @@ void relativeControlInit(void)
 #endif
   xTaskCreate(relativeControlTask,"relative_Control",configMINIMAL_STACK_SIZE, NULL,3,NULL );
   height = 1.0f;
+  initial_hover_height = 1.0f;
+  // convergence_procedure_velocity = 0.8f;
   isInit = true;
 }
 
