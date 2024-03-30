@@ -230,23 +230,23 @@ void relativeControlTask(void* arg)
         targetZ = relaVarInCtrl[0][STATE_rlZ];
 
         if ((tickInterval > 2000) && (tickInterval < 4000))
-            height = 0.3;
+            height = initial_hover_height;
         if ((tickInterval > 4000) && (tickInterval < 6000))
-            height = 0.5;
+            height = initial_hover_height + 0.2f;
         if ((tickInterval > 6000) && (tickInterval < 8000))
-            height = 0.7;
+            height = initial_hover_height + 0.4f;
         if ((tickInterval > 8000) && (tickInterval < 10000))
-            height = 0.4;
+            height = initial_hover_height - 0.1f;
         if ((tickInterval > 10000) && (tickInterval < 12000))
-            height = 0.8;
+            height = initial_hover_height + 0.3f;
         if ((tickInterval > 12000) && (tickInterval < 14000))
-            height = 0.3;
+            height =initial_hover_height + 0.5f;
         if ((tickInterval > 14000) && (tickInterval < 16000))
-            height = 0.7;
+            height = initial_hover_height + 0.1f;
         if ((tickInterval > 16000) && (tickInterval < 18000))
-            height = 0.9;
+            height = initial_hover_height - 0.1f;
         if ((tickInterval > 18000) && (tickInterval < 20000))
-            height = 0.5;
+            height = initial_hover_height;
       }
       else
       {
