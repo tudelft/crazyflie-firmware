@@ -26,6 +26,10 @@ static float height;
 static float initial_hover_height;
 //static float convergence_procedure_velocity;
 
+static float formation_dx;
+static float formation_dy;
+static float formation_dz;
+
 static float relaCtrl_p = 2.0f;
 static float relaCtrl_i = 0.0001f;
 static float relaCtrl_d = 0.01f;
@@ -204,7 +208,7 @@ void relativeControlTask(void* arg)
     if(relativeInfoRead((float *)relaVarInCtrl, (float *)inputVarInCtrl) && keepFlying){
 
 
-      // take off
+      // TAKE OFF
       if(onGround){
         estimatorKalmanInit(); // reseting kalman filter
         vTaskDelay(M2T(2000));
@@ -222,6 +226,10 @@ void relativeControlTask(void* arg)
     //       flyRandomIn1meter(1.0f);
     //       continue;
     //   }
+
+
+
+      // CONVERGENCE
       uint32_t tickInterval = xTaskGetTickCount() - ctrlTick;
       if( tickInterval < 20000){
           flyRandomIn1meter(1.0f); // random flight within first 10 seconds
@@ -240,7 +248,7 @@ void relativeControlTask(void* arg)
         if ((tickInterval > 10000) && (tickInterval < 12000))
             height = initial_hover_height + 0.3f;
         if ((tickInterval > 12000) && (tickInterval < 14000))
-            height =initial_hover_height + 0.5f;
+            height = initial_hover_height + 0.5f;
         if ((tickInterval > 14000) && (tickInterval < 16000))
             height = initial_hover_height + 0.1f;
         if ((tickInterval > 16000) && (tickInterval < 18000))
@@ -257,15 +265,20 @@ void relativeControlTask(void* arg)
         else
           formation0asCenter(targetX, targetY);
 #else
-        if ( (tickInterval > 20000) && (tickInterval < 30000) ){ // formation
+
+        // FORMATION
+        if ( (tickInterval > 20000) && (tickInterval < 30000) ){ 
           srand((unsigned int) relaVarInCtrl[0][STATE_rlX]*100);
           formation0asCenter(targetX, targetY, targetZ);
           // NDI_formation0asCenter(targetX, targetY);
           // lastTick = tickInterval;
         }
 
-        static float relaXof2in1=2.0f, relaYof2in1=0.0f;
+        
         if ( (tickInterval > 30000) ){
+
+          formation0asCenter(formation_dx, formation_dy, formation_dz); 
+          
           // if(tickInterval - lastTick > 3000)
           // {
           //   lastTick = tickInterval;
@@ -274,10 +287,10 @@ void relativeControlTask(void* arg)
           //   height = (rand() / (float)RAND_MAX) * 0.8f + 0.2f;
           // }
 
-          targetX = relaXof2in1; //-cosf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 + sinf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
-          targetY = relaYof2in1; //-sinf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 - cosf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
-          targetZ = 0.2f;
-          formation0asCenter(targetX, targetY, targetZ); 
+          //-cosf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 + sinf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
+          //-sinf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 - cosf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
+          
+          
         }
 #endif
       }
@@ -309,6 +322,11 @@ void relativeControlInit(void)
   xTaskCreate(relativeControlTask,"relative_Control",configMINIMAL_STACK_SIZE, NULL,3,NULL );
   height = 1.0f;
   initial_hover_height = 1.0f;
+
+  // Formation distances of follower drone in the frame of leader drone
+  formation_dx = 0.7f;
+  formation_dy = 0.3f;
+  formation_dz = -0.1f;
   // convergence_procedure_velocity = 0.8f;
   isInit = true;
 }
