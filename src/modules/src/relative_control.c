@@ -200,12 +200,14 @@ void relativeControlTask(void* arg)
 #endif
     keepFlying = command_share(selfID, keepFlying);
     if(relativeInfoRead((float *)relaVarInCtrl, (float *)inputVarInCtrl) && keepFlying){
+
+
       // take off
       if(onGround){
         estimatorKalmanInit(); // reseting kalman filter
         vTaskDelay(M2T(2000));
         for (int i=0; i<50; i++) {
-          setHoverSetpoint(&setpoint, 0, 0, 0.3f, 0);
+          setHoverSetpoint(&setpoint, 0, 0, 1.0f, 0);
           vTaskDelay(M2T(100));
         }
         onGround = false;
@@ -303,7 +305,7 @@ void relativeControlInit(void)
     uart2Init(115200); // only CF0 has monoCam and usart comm
 #endif
   xTaskCreate(relativeControlTask,"relative_Control",configMINIMAL_STACK_SIZE, NULL,3,NULL );
-  height = 0.5f;
+  height = 1.0f;
   isInit = true;
 }
 
