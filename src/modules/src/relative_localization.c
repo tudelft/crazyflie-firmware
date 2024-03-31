@@ -34,13 +34,13 @@ static float measNoise_uwb = 0.15f;  //0.06;  // ranging deviation
 static float InitCovPos = 1000.0f;
 static float InitCovYaw = 1.0f;
 
-static relaVariable_t relaVar[NumUWB];
+static relaVariable_t relaVar[NumUWB]; // Array of "structs" that contain P, ...
 static float inputVar[NumUWB][STATE_DIM_rl];
 
 static float A[STATE_DIM_rl][STATE_DIM_rl];
 static float h[STATE_DIM_rl] = {0};
 static arm_matrix_instance_f32 H = {1, STATE_DIM_rl, h};
-static arm_matrix_instance_f32 Am = { STATE_DIM_rl, STATE_DIM_rl, (float *)A};
+static arm_matrix_instance_f32 Am = { STATE_DIM_rl, STATE_DIM_rl, (float *)A}; // ARM matrix pointing to A array. Am in sync with A
 
 // Temporary matrices for the covariance updates
 static float tmpNN1d[STATE_DIM_rl * STATE_DIM_rl];
@@ -57,7 +57,7 @@ static float PHTd[STATE_DIM_rl * 1];
 static arm_matrix_instance_f32 PHTm = {STATE_DIM_rl, 1, PHTd};
 
 static bool fullConnect = false; // a flag for control (fly or not)
-static int8_t connectCount = 0; // watchdog for detecting the connection
+static int8_t failedConnections = 0; // watchdog for detecting the connection
 
 static float vxj, vyj, vzj, rj; // receive vx, vy, vz, gz
 static float vxi, vyi, vzi, ri; // self vx, vy, vz, gz
@@ -67,24 +67,28 @@ static float hij, dist;
 
 static inline void mat_trans(const arm_matrix_instance_f32 * pSrc, arm_matrix_instance_f32 * pDst)
 { configASSERT(ARM_MATH_SUCCESS == arm_mat_trans_f32(pSrc, pDst)); }
+
 static inline void mat_inv(const arm_matrix_instance_f32 * pSrc, arm_matrix_instance_f32 * pDst)
 { configASSERT(ARM_MATH_SUCCESS == arm_mat_inverse_f32(pSrc, pDst)); }
+
 static inline void mat_mult(const arm_matrix_instance_f32 * pSrcA, const arm_matrix_instance_f32 * pSrcB, arm_matrix_instance_f32 * pDst)
 { configASSERT(ARM_MATH_SUCCESS == arm_mat_mult_f32(pSrcA, pSrcB, pDst)); }
+
 static inline float arm_sqrt(float32_t in)
 { float pOut = 0; arm_status result = arm_sqrt_f32(in, &pOut); configASSERT(ARM_MATH_SUCCESS == result); return pOut; }
 
-void relativeLocoInit(void)
-{
+
+
+void relativeLocoInit(void) {
   if (isInit)
     return;
-  xTaskCreate(relativeLocoTask,"relative_Localization",ZRANGER_TASK_STACKSIZE, NULL,ZRANGER_TASK_PRI,NULL );
+  xTaskCreate(relativeLocoTask,"relative_Localization", ZRANGER_TASK_STACKSIZE, NULL, ZRANGER_TASK_PRI, NULL);
   isInit = true;
 }
 
-void relativeLocoTask(void* arg)
-{
+void relativeLocoTask(void* arg) {
   systemWaitStart();
+
   // Initialize EKF for relative localization
   for (int n=0; n<NumUWB; n++) {
     for (int i=0; i<STATE_DIM_rl; i++) {
@@ -92,42 +96,57 @@ void relativeLocoTask(void* arg)
         relaVar[n].P[i][j] = 0;
       }
     }
+    // Initialise error covariance matrix with variances on diagonal
     relaVar[n].P[STATE_rlX][STATE_rlX] = InitCovPos;
     relaVar[n].P[STATE_rlY][STATE_rlY] = InitCovPos;
     relaVar[n].P[STATE_rlZ][STATE_rlZ] = InitCovPos;
     relaVar[n].P[STATE_rlYaw][STATE_rlYaw] = InitCovYaw;  
+
+    // Initialise relative state
     relaVar[n].S[STATE_rlX] = 0;
     relaVar[n].S[STATE_rlY] = 0;
     relaVar[n].S[STATE_rlZ] = 0;
     relaVar[n].S[STATE_rlYaw] = 0;
+
     relaVar[n].receiveFlag = false;
   }
 
+  // Main loop
   while(1) {
     vTaskDelay(10);
     for (int n=0; n<NumUWB; n++) {
-      if (twrGetSwarmInfo(n, &dij, &vxj, &vyj, &vzj, &rj, &hj)){
-        connectCount = 0;
+      
+      // If data received from peer drone
+      if (twrGetSwarmInfo(n, &dij, &vxj, &vyj, &vzj, &rj, &hj)) {
+        // Reset failed connections counter
+        failedConnections = 0;
+
         estimatorKalmanGetSwarmInfo(&vxi, &vyi, &vzi, &ri, &hi);
-        if(relaVar[n].receiveFlag){
+
+        if(relaVar[n].receiveFlag) {
           uint32_t osTick = xTaskGetTickCount();
           float dtEKF = (float)(osTick - relaVar[n].oldTimetick)/configTICK_RATE_HZ;
           relaVar[n].oldTimetick = osTick;
+
+          //Estimate state
           relativeEKF(n, vxi, vyi, vzi, ri, hi, vxj, vyj, vzj, rj, hj, dij, dtEKF);
           if(n==1){hij = hj-hi;}
+
+          // Update Kalman model inputs
           inputVar[n][STATE_rlX] = vxj;
           inputVar[n][STATE_rlY] = vyj;
           inputVar[n][STATE_rlZ] = vzj;
           inputVar[n][STATE_rlYaw] = rj;
-        }else{
+        } else {
           relaVar[n].oldTimetick = xTaskGetTickCount();
           relaVar[n].receiveFlag = true;
           fullConnect = true;
         }
       }
     }
-    connectCount++;
-    if(connectCount>100){
+
+    failedConnections++;
+    if(failedConnections>100){
       fullConnect = false; // disable control if there is no ranging after 1 second
     }
   }
@@ -143,12 +162,16 @@ void relativeEKF(int n, float vxi, float vyi, float vzi, float ri, float hi, flo
   float yij = relaVar[n].S[STATE_rlY];
   float zij = relaVar[n].S[STATE_rlZ];
 
-  // prediction
+  // 1. Prediction step: forward Euler
   relaVar[n].S[STATE_rlX] = xij + (cyaw*vxj-syaw*vyj-vxi+ri*yij)*dt;
   relaVar[n].S[STATE_rlY] = yij + (syaw*vxj+cyaw*vyj-vyi-ri*xij)*dt;
   relaVar[n].S[STATE_rlZ] = zij + (vzj-vzi)*dt;
   relaVar[n].S[STATE_rlYaw] = relaVar[n].S[STATE_rlYaw] + (rj-ri)*dt;
 
+
+  // 2. Calculate Error Covariance Matrix P_k+1_k
+
+  // Jacobian Fx (4x4)
   A[0][0] = 1;
   A[0][1] = ri*dt;
   A[0][2] = 0;
@@ -166,9 +189,10 @@ void relativeEKF(int n, float vxi, float vyi, float vzi, float ri, float hi, flo
   A[3][2] = 0;
   A[3][3] = 1;
 
-  mat_mult(&Am, &Pm, &tmpNN1m); // A P
-  mat_trans(&Am, &tmpNN2m); // A'
-  mat_mult(&tmpNN1m, &tmpNN2m, &Pm); // A P A'
+
+  mat_mult(&Am, &Pm, &tmpNN1m); // tmpNN1m = A P 
+  mat_trans(&Am, &tmpNN2m); // tmpNN2m = A'
+  mat_mult(&tmpNN1m, &tmpNN2m, &Pm); // P = A P A'   misses BQB' (process noise)
 
   // BQB' = [ Qv*c^2 + Qv*s^2 + Qr*y^2 + Qv,                       -Qr*x*y, -Qr*y]
   //        [                       -Qr*x*y, Qv*c^2 + Qv*s^2 + Qr*x^2 + Qv,  Qr*x]
@@ -177,43 +201,56 @@ void relativeEKF(int n, float vxi, float vyi, float vzi, float ri, float hi, flo
 // [ -Qr*xij*yij,          Qv + Qr*xij*xij + Qv, 0,    Qr*xij]
 // [ 0,                    0,                    2*Qv, 0]
 // [ -Qr*yij,              Qr*xij,               0,    2*Qr]
-  float spsi = sin(relaVar[n].S[STATE_rlYaw]);
-  float cpsi = cos(relaVar[n].S[STATE_rlYaw]);
 
+
+  // Addition of Process noise: APA' += BQB'
+  cyaw = arm_cos_f32(relaVar[n].S[STATE_rlYaw]);
+  syaw = arm_sin_f32(relaVar[n].S[STATE_rlYaw]);
   float dt2 = dt*dt;
-  relaVar[n].P[0][0] += dt2*((1+cpsi*cpsi)*procNoise_velX + spsi*spsi*procNoise_velY + procNoise_ryaw*yij*yij);
-  relaVar[n].P[0][1] += dt2*(-procNoise_ryaw*yij*xij + cpsi*spsi*(procNoise_velX-procNoise_velY));
+
+  relaVar[n].P[0][0] += dt2*((1+cyaw*cyaw)*procNoise_velX + syaw*syaw*procNoise_velY + procNoise_ryaw*yij*yij);
+  relaVar[n].P[0][1] += dt2*(-procNoise_ryaw*yij*xij + cyaw*syaw*(procNoise_velX-procNoise_velY));
   relaVar[n].P[0][3] += dt2*(-procNoise_ryaw*yij);
-  relaVar[n].P[1][0] += dt2*(-procNoise_ryaw*xij*yij + cpsi*spsi*(procNoise_velX-procNoise_velY));
-  relaVar[n].P[1][1] += dt2*((1+cpsi*cpsi)*procNoise_velY + spsi*spsi*procNoise_velX + procNoise_ryaw*xij*xij);
+  relaVar[n].P[1][0] += dt2*(-procNoise_ryaw*xij*yij + cyaw*syaw*(procNoise_velX-procNoise_velY));
+  relaVar[n].P[1][1] += dt2*((1+cyaw*cyaw)*procNoise_velY + syaw*syaw*procNoise_velX + procNoise_ryaw*xij*xij);
   relaVar[n].P[1][3] += dt2*(procNoise_ryaw*xij);
   relaVar[n].P[2][2] += dt2*(2*procNoise_velZ);
   relaVar[n].P[3][0] += dt2*(-procNoise_ryaw*yij);
   relaVar[n].P[3][1] += dt2*(procNoise_ryaw*xij);
   relaVar[n].P[3][3] += dt2*(2*procNoise_ryaw);
 
+
+  // Measurements matrix H (1x4)
+  float distPred = arm_sqrt(xij*xij+yij*yij+zij*zij)+0.0001f;
+  float distMeas = (float)(dij/1000.0f);
+  distMeas = distMeas - (0.048f*distMeas + 0.65f); // UWB bias model
+  if(n==1){dist = distMeas;}
+
   xij = relaVar[n].S[STATE_rlX];
   yij = relaVar[n].S[STATE_rlY];
   zij = relaVar[n].S[STATE_rlZ];
-  float distPred = arm_sqrt(xij*xij+yij*yij+zij*zij)+0.0001f;
-  float distMeas = (float)(dij/1000.0f);
-  distMeas = distMeas - (0.048f*distMeas + 0.65f); // UWB biad model
-  if(n==1){dist = distMeas;}
+ 
   h[0] = xij/distPred;
   h[1] = yij/distPred;
   h[2] = zij/distPred;
   h[3] = 0;
 
+
+  // 3. Kalman Gain and 4. State Update
   mat_trans(&H, &HTm); // H'
   mat_mult(&Pm, &HTm, &PHTm); // PH'
   float HPHR = powf(measNoise_uwb, 2);// HPH' + R
   for (int i=0; i<STATE_DIM_rl; i++) { // Add the element of HPH' to the above
     HPHR += H.pData[i]*PHTd[i]; // this obviously only works if the update is scalar (as in this function)
   }
+
   for (int i=0; i<STATE_DIM_rl; i++) {
     K[i] = PHTd[i]/HPHR; // kalman gain = (PH' (HPH' + R )^-1)
     relaVar[n].S[i] = relaVar[n].S[i] + K[i] * (distMeas - distPred); // state update
-  }     
+  }    
+
+
+  // 5. Error Covariance Matrix P_k+1_k+1
   mat_mult(&Km, &H, &tmpNN1m); // KH
   for (int i=0; i<STATE_DIM_rl; i++) { tmpNN1d[STATE_DIM_rl*i+i] -= 1; } // KH - I
   mat_trans(&tmpNN1m, &tmpNN2m); // (KH - I)'
@@ -237,6 +274,10 @@ bool relativeInfoRead(float* relaVarParam, float* inputVarParam){
   else
     return false;    
 }
+
+
+
+// Logging and Parameters
 
 LOG_GROUP_START(relativePosition)
 LOG_ADD(LOG_FLOAT, rlX0, &relaVar[0].S[STATE_rlX])

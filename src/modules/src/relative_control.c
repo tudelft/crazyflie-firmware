@@ -36,8 +36,8 @@ static float relaCtrl_d = 0.01f;
 // static float NDI_k = 2.0f;
 static char c = 0; // monoCam
 
-static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, float yawrate)
-{
+
+static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, float yawrate) {
   setpoint->mode.z = modeAbs;
   setpoint->position.z = z;
   setpoint->mode.yaw = modeVelocity;
@@ -79,38 +79,7 @@ static void flyRandomIn1meter(float vel){
   }
 }
 
-#if USE_MONOCAM
-static float PreErr_yaw = 0;
-static float IntErr_yaw = 0;
-static uint32_t PreTimeYaw;
-static void flyViaDoor(char camYaw){
-  if(camYaw){
-    float dt = (float)(xTaskGetTickCount()-PreTimeYaw)/configTICK_RATE_HZ;
-    PreTimeYaw = xTaskGetTickCount();
-    if(dt > 1) // skip the first run of the EKF
-      return;
-    // pid control for door flight
-    float err_yaw;
-    if(camYaw>128)
-      err_yaw = -(camYaw - 128 - 64); // 0-128, nominal value = 64
-    else
-      err_yaw = -(camYaw - 64); // 0-128, nominal value = 64
-    float pid_vyaw = 1.0f * err_yaw;
-    float dyaw = (err_yaw - PreErr_yaw) / dt;
-    PreErr_yaw = err_yaw;
-    pid_vyaw += 0.01f * dyaw;
-    IntErr_yaw += err_yaw * dt;
-    pid_vyaw += 0.0001f * constrain(IntErr_yaw, -10.0f, 10.0f);
-    pid_vyaw = constrain(pid_vyaw, -100, 100);  
-    if(camYaw<128)
-      setHoverSetpoint(&setpoint, 1, 0, 0.5f, pid_vyaw); // deg/s
-    else
-      setHoverSetpoint(&setpoint, 0, -0.3f, 0.5f, pid_vyaw); // deg/s
-  }else{
-    setHoverSetpoint(&setpoint, 1.5f, 0, 0.5f, 45);
-  }
-}
-#endif
+
 
 #define SIGN(a) ((a>=0)?1:-1)
 static float targetX;
@@ -123,7 +92,9 @@ static float IntErr_x = 0;
 static float IntErr_y = 0;
 static float IntErr_z = 0;
 static uint32_t PreTime;
-static void formation0asCenter(float tarX, float tarY, float tarZ){
+
+
+static void formation0asCenter(float tarX, float tarY, float tarZ) {
   float dt = (float)(xTaskGetTickCount()-PreTime)/configTICK_RATE_HZ;
   PreTime = xTaskGetTickCount();
   if(dt > 1) // skip the first run of the EKF
@@ -186,30 +157,34 @@ static void formation0asCenter(float tarX, float tarY, float tarZ){
 //   setHoverSetpoint(&setpoint, ndi_vx, ndi_vy, height, 0);
 // }
 
-void relativeControlTask(void* arg)
-{
+void relativeControlTask(void* arg) {
   static uint32_t ctrlTick;
   systemWaitStart();
   static logVarId_t logIdStateIsFlying;
   logIdStateIsFlying = logGetVarId("kalman", "inFlight");
   // height = (float)selfID*0.1f+0.2f;
+
+
+  // Task Loop
   while(1) {
+
+    //Check if we should fly
     vTaskDelay(10);
     if(selfID==0){
       keepFlying = logGetUint(logIdStateIsFlying);
       keepFlying = command_share(selfID, keepFlying);
       continue;
     }
-#if USE_MONOCAM
-    if(selfID==0)
-      uart2Getchar(&c);
-#endif
+
     keepFlying = command_share(selfID, keepFlying);
-    if(relativeInfoRead((float *)relaVarInCtrl, (float *)inputVarInCtrl) && keepFlying){
 
 
-      // TAKE OFF
-      if(onGround){
+    // If we should fly
+    if(relativeInfoRead((float *)relaVarInCtrl, (float *)inputVarInCtrl) && keepFlying) {
+
+
+      // TAKE OFF if on ground
+      if(onGround) {
         estimatorKalmanInit(); // reseting kalman filter
         vTaskDelay(M2T(2000));
         for (int i=0; i<50; i++) {
@@ -222,17 +197,20 @@ void relativeControlTask(void* arg)
 
       // control loop
       // setHoverSetpoint(&setpoint, 0, 0, height, 0); // hover
-    //   if (selfID==0){
-    //       flyRandomIn1meter(1.0f);
-    //       continue;
-    //   }
+      //   if (selfID==0){
+      //       flyRandomIn1meter(1.0f);
+      //       continue;
+      //   }
 
 
-
-      // CONVERGENCE
+      // Reset Timer after take off
       uint32_t tickInterval = xTaskGetTickCount() - ctrlTick;
-      if( tickInterval < 20000){
-          flyRandomIn1meter(1.0f); // random flight within first 10 seconds
+
+
+
+      // CONVERGENCE FLIGHT for 20s
+      if(tickInterval < 20000) {
+        flyRandomIn1meter(1.0f);
         targetX = relaVarInCtrl[0][STATE_rlX];
         targetY = relaVarInCtrl[0][STATE_rlY];
         targetZ = relaVarInCtrl[0][STATE_rlZ];
@@ -255,18 +233,10 @@ void relativeControlTask(void* arg)
             height = initial_hover_height - 0.1f;
         if ((tickInterval > 18000) && (tickInterval < 20000))
             height = initial_hover_height;
-      }
-      else
-      {
 
-#if USE_MONOCAM
-        if(selfID==0)
-          flyViaDoor(c);
-        else
-          formation0asCenter(targetX, targetY);
-#else
+      } else {
 
-        // FORMATION
+        // FORMATION for 10s ???
         if ( (tickInterval > 20000) && (tickInterval < 30000) ){ 
           srand((unsigned int) relaVarInCtrl[0][STATE_rlX]*100);
           formation0asCenter(targetX, targetY, targetZ);
@@ -274,29 +244,20 @@ void relativeControlTask(void* arg)
           // lastTick = tickInterval;
         }
 
-        
-        if ( (tickInterval > 30000) ){
+        // FORMATION until crash
+        if (tickInterval > 30000) {
 
           formation0asCenter(formation_dx, formation_dy, formation_dz); 
-          
-          // if(tickInterval - lastTick > 3000)
-          // {
-          //   lastTick = tickInterval;
-          //   relaXof2in1 = (rand() / (float)RAND_MAX) * 0.8f + 0.2f; // in front
-          //   relaYof2in1 = ((rand() / (float)RAND_MAX) -0.5f)* 0.7f * relaXof2in1; // horizon offset based on depth
-          //   height = (rand() / (float)RAND_MAX) * 0.8f + 0.2f;
-          // }
 
           //-cosf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 + sinf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
           //-sinf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 - cosf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
           
-          
         }
-#endif
       }
 
-    }else{
-      // landing procedure
+
+    // If we should not fly: LANDING procedure
+    } else {
       if(!onGround){
         for (int i=1; i<5; i++) {
           if(selfID!=0){
@@ -307,6 +268,8 @@ void relativeControlTask(void* arg)
         onGround = true;
       } 
     }
+
+
   }
 }
 
@@ -315,10 +278,7 @@ void relativeControlInit(void)
   if (isInit)
     return;
   selfID = (uint8_t)(((configblockGetRadioAddress()) & 0x000000000f) - 5);
-#if USE_MONOCAM
-  if(selfID==0)
-    uart2Init(115200); // only CF0 has monoCam and usart comm
-#endif
+
   xTaskCreate(relativeControlTask,"relative_Control",configMINIMAL_STACK_SIZE, NULL,3,NULL );
   height = 1.0f;
   initial_hover_height = 1.0f;
@@ -331,11 +291,23 @@ void relativeControlInit(void)
   isInit = true;
 }
 
+
+
+// Logging and Parameters
+
+
 PARAM_GROUP_START(relative_ctrl)
 PARAM_ADD(PARAM_UINT8, keepFlying, &keepFlying)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_p, &relaCtrl_p)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_i, &relaCtrl_i)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_d, &relaCtrl_d)
+
+// TODO: uncomment and test
+// PARAM_ADD(PARAM_FLOAT, formation_dx, &formation_dx)
+// PARAM_ADD(PARAM_FLOAT, formation_dx, &formation_dx)
+// PARAM_ADD(PARAM_FLOAT, formation_dx, &formation_dx)
+
+
 PARAM_GROUP_STOP(relative_ctrl)
 
 LOG_GROUP_START(mono_cam)
