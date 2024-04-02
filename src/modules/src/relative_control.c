@@ -24,11 +24,12 @@ static float inputVarInCtrl[NumUWB][STATE_DIM_rl];
 static uint8_t selfID;
 static float height;
 static float initial_hover_height;
-//static float convergence_procedure_velocity;
 
-static float formation_dx;
-static float formation_dy;
-static float formation_dz;
+
+static float form_dx = 0.0f;
+static float form_dy = 0.5f;
+static float form_dz = 0.0f;
+
 
 static float relaCtrl_p = 2.0f;
 static float relaCtrl_i = 0.0001f;
@@ -173,7 +174,7 @@ void relativeControlTask(void* arg) {
     if(selfID==0){
       keepFlying = logGetUint(logIdStateIsFlying);
       keepFlying = command_share(selfID, keepFlying);
-      continue;
+      continue; // Do not send commands to leader drone, as it is manually controlled
     }
 
     keepFlying = command_share(selfID, keepFlying);
@@ -247,7 +248,7 @@ void relativeControlTask(void* arg) {
         // FORMATION until crash
         if (tickInterval > 30000) {
 
-          formation0asCenter(formation_dx, formation_dy, formation_dz); 
+          formation0asCenter(form_dx, form_dy, form_dz); 
 
           //-cosf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 + sinf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
           //-sinf(relaVarInCtrl[0][STATE_rlYaw])*relaXof2in1 - cosf(relaVarInCtrl[0][STATE_rlYaw])*relaYof2in1;
@@ -283,10 +284,6 @@ void relativeControlInit(void)
   height = 1.0f;
   initial_hover_height = 1.0f;
 
-  // Formation distances of follower drone in the frame of leader drone
-  formation_dx = 0.7f;
-  formation_dy = 0.3f;
-  formation_dz = -0.1f;
   // convergence_procedure_velocity = 0.8f;
   isInit = true;
 }
@@ -301,12 +298,9 @@ PARAM_ADD(PARAM_UINT8, keepFlying, &keepFlying)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_p, &relaCtrl_p)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_i, &relaCtrl_i)
 PARAM_ADD(PARAM_FLOAT, relaCtrl_d, &relaCtrl_d)
-
-// TODO: uncomment and test
-// PARAM_ADD(PARAM_FLOAT, formation_dx, &formation_dx)
-// PARAM_ADD(PARAM_FLOAT, formation_dx, &formation_dx)
-// PARAM_ADD(PARAM_FLOAT, formation_dx, &formation_dx)
-
+PARAM_ADD(PARAM_FLOAT, form_dx, &form_dx)
+PARAM_ADD(PARAM_FLOAT, form_dy, &form_dy)
+PARAM_ADD(PARAM_FLOAT, form_dz, &form_dz)
 
 PARAM_GROUP_STOP(relative_ctrl)
 
