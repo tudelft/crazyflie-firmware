@@ -51,8 +51,7 @@
  * ============================================================================
  */
 
-#ifndef __ESTIMATOR_KALMAN_H__
-#define __ESTIMATOR_KALMAN_H__
+#pragma once
 
 #include <stdint.h>
 #include "stabilizer_types.h"
@@ -70,6 +69,3 @@ void estimatorKalmanGetEstimatedPos(point_t* pos);
  * Copies 9 floats representing the current state rotation matrix
  */
 void estimatorKalmanGetEstimatedRot(float * rotationMatrix);
-void estimatorKalmanGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, float* height);
-
-#endif // __ESTIMATOR_KALMAN_H__
