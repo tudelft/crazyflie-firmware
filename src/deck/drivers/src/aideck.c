@@ -48,7 +48,15 @@
 #include "uart2.h"
 
 static bool isInit = false;
-static uint8_t byte;
+// static uint8_t byte;
+
+// E5 and E6 have different config.mk file
+// ## For the leader (E5)
+// CFLAGS += -DDECK_FORCE=bcAIDeck
+// CFLAGS += -DLOCODECK_USE_ALT_PINS
+// CFLAGS += -DLOCODECK_ALT_PIN_RESET=DECK_GPIO_RX2
+// ## For the follower (E6)
+// # CFLAGS += -DTURN_OFF_LEDS
 
 //Uncomment when NINA printout read is desired from console
 //#define DEBUG_NINA_PRINT
@@ -86,16 +94,75 @@ static void Gap8Task(void *param)
     vTaskDelay(M2T(1000));
 
     // Pull the reset button to get a clean read out of the data
-    pinMode(DECK_GPIO_IO4, OUTPUT);
-    digitalWrite(DECK_GPIO_IO4, LOW);
-    vTaskDelay(10);
-    digitalWrite(DECK_GPIO_IO4, HIGH);
-    pinMode(DECK_GPIO_IO4, INPUT_PULLUP);
-
+    // pinMode(DECK_GPIO_IO4, OUTPUT);
+    // digitalWrite(DECK_GPIO_IO4, LOW);
+    // vTaskDelay(10);
+    // digitalWrite(DECK_GPIO_IO4, HIGH);
+    // pinMode(DECK_GPIO_IO4, INPUT_PULLUP);
+    static logVarId_t logIdStateEstimateRoll;
+    static logVarId_t logIdStateEstimatePitch;
+    static logVarId_t logIdStateEstimateX;
+    static logVarId_t logIdStateEstimateY;
+    static logVarId_t logIdStateEstimateZ;
+    static logVarId_t logIdStateEstimateD;
+    logIdStateEstimateRoll = logGetVarId("stateEstimate", "roll");
+    logIdStateEstimatePitch = logGetVarId("stateEstimate", "pitch");
+    logIdStateEstimateX = logGetVarId("relative_pos", "rlX1");
+    logIdStateEstimateY = logGetVarId("relative_pos", "rlY1");
+    logIdStateEstimateZ = logGetVarId("relative_pos", "rlZ1");
+    logIdStateEstimateD = logGetVarId("relative_pos", "dist1");
+    unsigned char packet[28];
+    packet[0] = 0xfe;
+    packet[1] = 0xfe;
+    packet[26] = 0xfe;
+    packet[27] = 0xfe;
     // Read out the byte the Gap8 sends and immediately send it to the console.
     while (1)
     {
-        uart1GetDataWithDefaultTimeout(&byte);
+        // uart1GetDataWithDefaultTimeout(&byte);
+        float roll = logGetFloat(logIdStateEstimateRoll);
+        float pitch = logGetFloat(logIdStateEstimatePitch);
+        float x = logGetFloat(logIdStateEstimateX);
+        float y = logGetFloat(logIdStateEstimateY);
+        float z = logGetFloat(logIdStateEstimateZ);
+        float d = logGetFloat(logIdStateEstimateD);
+        union {
+            float a;
+            unsigned char bytes[4];
+        } thing;
+        thing.a = roll;
+        for(uint16_t i=0; i<4; i++)
+        {
+            packet[2+i] = thing.bytes[i];
+        }
+        thing.a = pitch;
+        for(uint16_t i=0; i<4; i++)
+        {
+            packet[6+i] = thing.bytes[i];
+        }
+        thing.a = x;
+        for(uint16_t i=0; i<4; i++)
+        {
+            packet[10+i] = thing.bytes[i];
+        }
+        thing.a = y;
+        for(uint16_t i=0; i<4; i++)
+        {
+            packet[14+i] = thing.bytes[i];
+        }
+        thing.a = z;
+        for(uint16_t i=0; i<4; i++)
+        {
+            packet[18+i] = thing.bytes[i];
+        }
+        thing.a = d;
+        for(uint16_t i=0; i<4; i++)
+        {
+            packet[22+i] = thing.bytes[i];
+        }
+        uart1SendData(28, packet);
+        // vTaskDelay(M2T((rand()%10) + 20));
+        vTaskDelay(M2T(40));
     }
 }
 
@@ -141,9 +208,9 @@ static const DeckDriver aideck_deck = {
     .test = aideckTest,
 };
 
-LOG_GROUP_START(aideck)
-LOG_ADD(LOG_UINT8, receivebyte, &byte)
-LOG_GROUP_STOP(aideck)
+// LOG_GROUP_START(aideck)
+// LOG_ADD(LOG_UINT8, receivebyte, &byte)
+// LOG_GROUP_STOP(aideck)
 
 /** @addtogroup deck
 */

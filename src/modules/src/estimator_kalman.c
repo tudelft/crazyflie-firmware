@@ -73,6 +73,7 @@
 #include "param.h"
 #include "physicalConstants.h"
 #include "supervisor.h"
+#include "filter.h"
 
 #include "statsCnt.h"
 #include "rateSupervisor.h"
@@ -171,6 +172,18 @@ static const bool useBaroUpdate = true;
 static const bool useBaroUpdate = false;
 #endif
 
+static float swarmVx;
+static float swarmVy;
+static float swarmVz;
+static float swarmGz;
+static float swarmh;
+
+
+#define LOW_PASS_FILTER_CUTOFF_FREQ_HZ 5
+#define LOW_PASS_FILTER_TAU (1.0/(2*3.1415*LOW_PASS_FILTER_CUTOFF_FREQ_HZ))
+static Axis3f gyroAverage;
+static Butterworth2LowPass gz_filter;
+
 static void kalmanTask(void* parameters);
 static bool predictStateForward(uint32_t osTick, float dt);
 static bool updateQueuedMeasurements(const uint32_t tick);
@@ -184,6 +197,8 @@ void estimatorKalmanTaskInit() {
   vSemaphoreCreateBinary(runTaskSemaphore);
 
   dataMutex = xSemaphoreCreateMutexStatic(&dataMutexBuffer);
+
+  init_butterworth_2_low_pass(&gz_filter, LOW_PASS_FILTER_TAU, 1.0f/PREDICT_RATE, 0);
 
   STATIC_MEM_TASK_CREATE(kalmanTask, kalmanTask, KALMAN_TASK_NAME, NULL, KALMAN_TASK_PRI);
 
@@ -264,6 +279,19 @@ static void kalmanTask(void* parameters) {
     if (doneUpdate)
     {
       kalmanCoreFinalize(&coreData, osTick);
+      swarmVx = coreData.R[0][0] * coreData.S[KC_STATE_PX] + coreData.R[0][1] * coreData.S[KC_STATE_PY] + coreData.R[0][2] * coreData.S[KC_STATE_PZ];
+      swarmVy = coreData.R[1][0] * coreData.S[KC_STATE_PX] + coreData.R[1][1] * coreData.S[KC_STATE_PY] + coreData.R[1][2] * coreData.S[KC_STATE_PZ];
+      swarmVz = coreData.R[2][0] * coreData.S[KC_STATE_PX] + coreData.R[2][1] * coreData.S[KC_STATE_PY] + coreData.R[2][2] * coreData.S[KC_STATE_PZ];
+      //swarmGz = atan2f(2*(q[1]*q[2]+q[0]*q[3]) , q[0]*q[0] + q[1]*q[1] - q[2]*q[2] - q[3]*q[3]);
+      
+      float ctheta = cos(-taskEstimatorState.attitude.pitch * DEG_TO_RAD);
+      float sphi = sin(taskEstimatorState.attitude.roll * DEG_TO_RAD);
+      float cphi = cos(taskEstimatorState.attitude.roll * DEG_TO_RAD);
+      float tmp_gz = gyroAverage.y * sphi/ctheta + gyroAverage.z * cphi/ctheta;
+      // swarmGz = gyroSnapshot.z * DEG_TO_RAD;
+      swarmGz = update_butterworth_2_low_pass(&gz_filter, tmp_gz);
+
+      swarmh  = coreData.S[KC_STATE_Z];
       STATS_CNT_RATE_EVENT(&finalizeCounter);
       if (! kalmanSupervisorIsStateWithinBounds(&coreData)) {
         coreData.resetEstimation = true;
@@ -308,7 +336,7 @@ static bool predictStateForward(uint32_t osTick, float dt) {
   }
 
   // gyro is in deg/sec but the estimator requires rad/sec
-  Axis3f gyroAverage;
+  // Axis3f gyroAverage;
   gyroAverage.x = gyroAccumulator.x * DEG_TO_RAD / gyroAccumulatorCount;
   gyroAverage.y = gyroAccumulator.y * DEG_TO_RAD / gyroAccumulatorCount;
   gyroAverage.z = gyroAccumulator.z * DEG_TO_RAD / gyroAccumulatorCount;
@@ -447,9 +475,31 @@ void estimatorKalmanGetEstimatedRot(float * rotationMatrix) {
   memcpy(rotationMatrix, coreData.R, 9*sizeof(float));
 }
 
-/**
- * Variables and results from the Extended Kalman Filter
- */
+void estimatorKalmanGetSwarmInfo(float* vx, float* vy, float* vz, float* gyroZ, float* height) {
+  *vx = swarmVx;
+  *vy = swarmVy;
+  *vz = swarmVz;
+  *gyroZ = swarmGz;
+  *height = swarmh;
+}
+
+// Temporary development groups
+LOG_GROUP_START(kalman_states)
+  LOG_ADD(LOG_FLOAT, ox, &coreData.S[KC_STATE_X])
+  LOG_ADD(LOG_FLOAT, oy, &coreData.S[KC_STATE_Y])
+  LOG_ADD(LOG_FLOAT, vx, &coreData.S[KC_STATE_PX])
+  LOG_ADD(LOG_FLOAT, vy, &coreData.S[KC_STATE_PY])
+LOG_GROUP_STOP(kalman_states)
+
+LOG_GROUP_START(swarmstate)
+  LOG_ADD(LOG_FLOAT, swaVx, &swarmVx)
+  LOG_ADD(LOG_FLOAT, swaVy, &swarmVy)
+  LOG_ADD(LOG_FLOAT, swaVz, &swarmVz)
+  LOG_ADD(LOG_FLOAT, swaGz, &swarmGz)
+  LOG_ADD(LOG_FLOAT, swah, &swarmh)
+LOG_GROUP_STOP(swarmstate)
+
+// Stock log groups
 LOG_GROUP_START(kalman)
 /**
  * @brief Nonzero if the drone is in flight
