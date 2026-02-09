@@ -41,6 +41,8 @@
 #include "libdw1000.h"
 #include "stabilizer_types.h"
 
+#include "platform_defaults.h"
+
 // Timestamp counter frequency
 #define LOCODECK_TS_FREQ (499.2e6 * 128)
 
@@ -130,5 +132,7 @@ struct lppShortAnchorPos_s {
   float y;
   float z;
 } __attribute__((packed));
+
+extern bool isAnchor;
 
 #endif // __LOCODECK_H__

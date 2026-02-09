@@ -224,3 +224,8 @@
         #define CONFIG_MOTORS_DEFAULT_IDLE_THRUST 7000
     #endif
 #endif
+
+// Peer localisation initials
+#ifndef IS_ANCHOR
+    #define IS_ANCHOR 0
+#endif

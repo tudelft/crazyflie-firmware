@@ -103,6 +103,9 @@
 #define PLATFORM_SRV_TASK_PRI     0
 #define COLORLED_TASK_PRIO        1
 #define WORKER_TASK_PRI           1
+#define TEENSY_TASK_PRI           3
+#define SWITCH_TASK_PRI           2
+#define MTF02_TASK_PRI            3
 
 // Not compiled
 #if 0
@@ -164,6 +167,9 @@
 #define FLAPPERDECK_TASK_NAME     "FLAPPERDECK"
 #define COLORLED_TASK_NAME        "COLORLED-DECK"
 #define WORKER_TASK_NAME          "WORKER"
+#define TEENSY_TASK_NAME          "TEENSY"
+#define SWITCH_TASK_NAME          "SWITCH"
+#define MTF02_TASK_NAME           "MTF02"
 
 
 //Task stack sizes
@@ -213,6 +219,9 @@
 #define ERROR_UKF_TASK_STACKSIZE        (4 * configMINIMAL_STACK_SIZE)
 #define COLORLED_TASK_STACKSIZE         configMINIMAL_STACK_SIZE
 #define WORKER_TASK_STACKSIZE           (2 * configMINIMAL_STACK_SIZE)
+#define TEENSY_TASK_STACKSIZE           (4 * configMINIMAL_STACK_SIZE)
+#define SWITCH_TASK_STACKSIZE          configMINIMAL_STACK_SIZE
+#define MTF02_TASK_STACKSIZE            (2 * configMINIMAL_STACK_SIZE)
 
 //The radio channel. From 0 to 125
 #define RADIO_CHANNEL 80

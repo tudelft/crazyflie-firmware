@@ -26,6 +26,9 @@
 #define DEBUG_MODULE "STAB"
 
 #include <math.h>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -56,6 +59,7 @@
 #include "statsCnt.h"
 #include "static_mem.h"
 #include "rateSupervisor.h"
+#include "swarm_info.h"
 
 static bool isInit;
 
@@ -324,6 +328,14 @@ static void stabilizerTask(void* param)
       updateStateEstimatorAndControllerTypes();
 
       stateEstimator(&state, stabilizerStep);
+
+      // Publish latest values for UWB swarm telemetry
+      swarmInfoUpdate(
+        state.position.x,   // [m]
+        state.position.y,   // [m]
+        sensorData.gyro.z,  // [deg/s]
+        state.position.z    // [m]
+      );
 
       const bool areMotorsAllowedToRun = supervisorAreMotorsAllowedToRun();
 

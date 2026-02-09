@@ -117,7 +117,7 @@ static void flowdeckTask(void *param)
     // Form flow measurement struct and push into the EKF
     flowMeasurement_t flowData;
     flowData.stdDevX = stdFlow;
-    flowData.stdDevY = stdFlow;
+    flowData.stdDevY = stdFlow; // * 2.0f; // The Y axis is more noisy FOR FLAPPER
     flowData.dt = (float)(usecTimestamp()-lastTime)/1000000.0f;
     // we do want to update dt every measurement and not only in the ones with detected motion,
     // as we work with instantaneous gyro and velocity values in the update function
@@ -318,7 +318,7 @@ PARAM_ADD(PARAM_UINT8, adaptive, &useAdaptiveStd)
 /**
  * @brief Set standard deviation flow measurement (default: 2.0f)
  */
-PARAM_ADD_CORE(PARAM_FLOAT, flowStdFixed, &flowStdFixed)
+PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, flowStdFixed, &flowStdFixed)
 PARAM_GROUP_STOP(motion)
 
 PARAM_GROUP_START(deck)

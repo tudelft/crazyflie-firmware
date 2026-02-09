@@ -517,3 +517,10 @@ config DECK_COLORLED
     default y
     help
         Enables the support for Color LED deck.
+
+config DECK_MTF02
+    bool "Support for the MTF02 deck"
+    default n
+    help
+        Adds support for the MTF02 optical flow and range deck
+        using MSP protocol over UART1.

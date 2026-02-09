@@ -61,7 +61,7 @@ static StaticSemaphore_t waitUntilSendDoneBuffer;
 static xSemaphoreHandle uartBusy;
 static StaticSemaphore_t uartBusyBuffer;
 static xQueueHandle syslinkPacketDelivery;
-STATIC_MEM_QUEUE_ALLOC(syslinkPacketDelivery, 8, sizeof(SyslinkPacket));
+STATIC_MEM_QUEUE_ALLOC(syslinkPacketDelivery, 16, sizeof(SyslinkPacket));
 static bool syslinkPacketDeliveryReadyToReceive = false;
 
 #ifdef CONFIG_SYSLINK_RX_DMA

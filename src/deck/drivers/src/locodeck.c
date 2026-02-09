@@ -60,6 +60,7 @@
 
 
 #define CS_PIN DECK_GPIO_IO1
+#define LOCODECK_NO_LOW_INTERFERENCE
 
 // LOCO deck alternative IRQ and RESET pins(IO_2, IO_3) instead of default (RX1, TX1), leaving UART1 free for use
 #ifdef CONFIG_DECK_LOCODECK_USE_ALT_PINS
@@ -134,6 +135,8 @@ static dwDevice_t *dwm = &dwm_device;
 static QueueHandle_t lppShortQueue;
 
 static uint32_t timeout;
+
+bool isAnchor = IS_ANCHOR;
 
 static STATS_CNT_RATE_DEFINE(spiWriteCount, 1000);
 static STATS_CNT_RATE_DEFINE(spiReadCount, 1000);
@@ -527,7 +530,7 @@ static void dwm1000Init(DeckInfo *info)
   dwEnableMode(dwm, MODE_SHORTDATA_FAST_ACCURACY);
   #endif
 
-  dwSetChannel(dwm, CHANNEL_2);
+  dwSetChannel(dwm, CHANNEL_5);
   dwSetPreambleCode(dwm, PREAMBLE_CODE_64MHZ_9);
 
   #ifdef CONFIG_DECK_LOCO_FULL_TX_POWER
@@ -591,7 +594,6 @@ static const DeckDriver dwm1000_deck = {
   #else
   .requiredLowInterferenceRadioMode = true,
   #endif
-
 
   .init = dwm1000Init,
   .test = dwm1000Test,
@@ -698,5 +700,6 @@ PARAM_GROUP_START(loco)
  * |   3   | TDoA 3 |\n
  */
 PARAM_ADD_CORE(PARAM_UINT8, mode, &algoOptions.userRequestedMode)
+PARAM_ADD_CORE(PARAM_UINT8 | PARAM_PERSISTENT, isAnchor, &isAnchor)
 
 PARAM_GROUP_STOP(loco)

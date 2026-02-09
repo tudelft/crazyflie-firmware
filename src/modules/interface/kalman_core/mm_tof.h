@@ -28,4 +28,4 @@
 #include "kalman_core.h"
 
 // Measurements of TOF from laser sensor
-void kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof);
+void kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof, const bool isFlying);

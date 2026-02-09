@@ -30,11 +30,17 @@
 #include "crtp_commander.h"
 
 #include "commander.h"
+#include "log.h"
 #include "param.h"
 #include "crtp.h"
 #include "num.h"
 #include "quatcompress.h"
 #include "FreeRTOS.h"
+
+#include "debug.h"
+
+uint16_t aux0, aux1, aux2, aux3;
+float roll_log, pitch_log, yawrate_log, thrust_log;
 
 /* The generic commander format contains a packet type and data that has to be
  * decoded into a setpoint_t structure. The aim is to make it future-proof
@@ -312,15 +318,26 @@ float getCPPMYawRateScale()
 static void cppmEmuDecoder(setpoint_t *setpoint, uint8_t type, const void *data, size_t datalen)
 {
   bool isSelfLevelEnabled = true;
-
+  
   ASSERT(datalen >= 9); // minimum 9 bytes expected - 1byte header + four 2byte channels
   const struct cppmEmuPacket_s *values = data;
+  // aux0 = self-level enable/disable
+  // aux3 = test channel for flapper autonomous modes
   ASSERT(datalen == 9 + (2*values->hdr.numAuxChannels)); // Total size is 9 + number of active aux channels
 
   // Aux channel 0 is reserved for enabling/disabling self-leveling
   // If it's in use, check and see if it's set and enable self-leveling.
   // If aux channel 0 is not in use, default to self-leveling enabled.
   isSelfLevelEnabled = !(values->hdr.numAuxChannels >= 1 && values->channelAux[0] < 1500);
+
+  // Store the aux channel in a logged parameter.
+  if (values->hdr.numAuxChannels >= 4) {
+    aux0 = values->channelAux[0];
+    aux1 = values->channelAux[1];
+    aux2 = values->channelAux[2];
+    aux3 = values->channelAux[3];
+  }
+  // isAutonomousModeEnabled = values->hdr.numAuxChannels >= 1 && values->channelAux[3] < 1500;
 
   // Set the modes
 
@@ -335,7 +352,7 @@ static void cppmEmuDecoder(setpoint_t *setpoint, uint8_t type, const void *data,
   // Roll/Pitch mode is either velocity or abs based on isSelfLevelEnabled
   setpoint->mode.roll = isSelfLevelEnabled ? modeAbs : modeVelocity;
   setpoint->mode.pitch = isSelfLevelEnabled ? modeAbs : modeVelocity;
-
+  
   // Rescale the CPPM values into angles to build the setpoint packet
   if(isSelfLevelEnabled)
   {
@@ -356,6 +373,11 @@ static void cppmEmuDecoder(setpoint_t *setpoint, uint8_t type, const void *data,
   {
     setpoint->thrust = 0;
   }
+
+  roll_log = setpoint->attitude.roll;
+  pitch_log = setpoint->attitude.pitch;
+  yawrate_log = setpoint->attitudeRate.yaw;
+  thrust_log = setpoint->thrust;
 }
 
 /* altHoldDecoder
@@ -557,6 +579,26 @@ void crtpCommanderGenericDecodeSetpoint(setpoint_t *setpoint, CRTPPacket *pk)
   }
 }
 
+
+
+LOG_GROUP_START(cppm)
+/**
+ * @brief cppm aux channels status
+ */
+LOG_ADD(LOG_UINT16,aux0, &aux0)
+LOG_ADD(LOG_UINT16,aux1, &aux1)
+LOG_ADD(LOG_UINT16,aux2, &aux2)
+LOG_ADD(LOG_UINT16,aux3, &aux3)
+/**
+ * @brief cppm roll/pitch/yawrate/thrust channels
+ */
+LOG_ADD(LOG_FLOAT,roll, &roll_log)
+LOG_ADD(LOG_FLOAT,pitch, &pitch_log)
+LOG_ADD(LOG_FLOAT,yawrate, &yawrate_log)
+LOG_ADD(LOG_FLOAT,thrust, &thrust_log)
+
+LOG_GROUP_STOP(cppm)
+
 /**
  * The CPPM (Combined Pulse Position Modulation) parameters
  * configure the maximum angle/rate output given a maximum stick input
@@ -586,5 +628,4 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, angRoll, &s_CppmEmuRollMaxAngleDeg)
  * @brief Config of max yaw rate at max stick input [DPS] (default: 400)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, rateYaw, &s_CppmEmuYawMaxRateDps)
-
 PARAM_GROUP_STOP(cppm)

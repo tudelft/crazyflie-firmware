@@ -25,8 +25,71 @@
 
 #include "mm_flow.h"
 #include "log.h"
+#include "param.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
-#define FLOW_RESOLUTION 0.1f //We do get the measurements in 10x the motion pixels (experimentally measured)
+#define FLOW_RESOLUTION 0.10f //We do get the measurements in 10x the motion pixels (experimentally measured)
+
+// ============================================================================
+// Gyro history buffer for delay compensation
+// ============================================================================
+#define GYRO_HISTORY_SIZE 32
+
+typedef struct {
+  Axis3f gyro;
+  uint32_t timestamp;  // ms
+} GyroHistoryEntry;
+
+static GyroHistoryEntry gyroHistory[GYRO_HISTORY_SIZE];
+static uint8_t gyroHistoryIdx = 0;
+static bool gyroHistoryFull = false;
+
+// Configurable delay compensation (ms)
+static float flowDelayMs = 30.0f;
+
+// Add a gyro sample to history
+void mmFlowAddGyroSample(const Axis3f *gyro, uint32_t timestampMs) {
+  gyroHistory[gyroHistoryIdx].gyro = *gyro;
+  gyroHistory[gyroHistoryIdx].timestamp = timestampMs;
+  gyroHistoryIdx = (gyroHistoryIdx + 1) % GYRO_HISTORY_SIZE;
+  if (gyroHistoryIdx == 0) {
+    gyroHistoryFull = true;
+  }
+}
+
+// Get the gyro reading from a specific time ago (with interpolation)
+static Axis3f getGyroAtDelay(float delayMs, const Axis3f *currentGyro) {
+  if (!gyroHistoryFull && gyroHistoryIdx == 0) {
+    // No history yet, use current
+    return *currentGyro;
+  }
+
+  uint32_t now = xTaskGetTickCount();
+  uint32_t targetTime = now - (uint32_t)delayMs;
+
+  // Search for closest sample
+  uint8_t count = gyroHistoryFull ? GYRO_HISTORY_SIZE : gyroHistoryIdx;
+  int bestIdx = -1;
+  uint32_t bestDiff = UINT32_MAX;
+
+  for (uint8_t i = 0; i < count; i++) {
+    uint32_t diff = (gyroHistory[i].timestamp > targetTime) ? 
+                    (gyroHistory[i].timestamp - targetTime) : 
+                    (targetTime - gyroHistory[i].timestamp);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestIdx = i;
+    }
+  }
+
+  if (bestIdx >= 0 && bestDiff < 50) {  // Only use if within 50ms
+    return gyroHistory[bestIdx].gyro;
+  }
+
+  // Fallback to current
+  return *currentGyro;
+}
 
 // TODO remove the temporary test variables (used for logging)
 static float predictedNX;
@@ -34,9 +97,17 @@ static float predictedNY;
 static float measuredNX;
 static float measuredNY;
 
-void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *flow, const Axis3f *gyro)
+void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *flow, const Axis3f *gyro, const bool isFlying)
 {
   // Inclusion of flow measurements in the EKF done by two scalar updates
+  
+  // Get historical gyro if delay compensation is enabled
+  Axis3f gyroCompensated;
+  if (flowDelayMs > 0.0f) {
+    gyroCompensated = getGyroAtDelay(flowDelayMs, gyro);
+  } else {
+    gyroCompensated = *gyro;
+  }
 
   // ~~~ Camera constants ~~~
   // The angle of aperture is guessed from the raw data register and thankfully look to be symmetric
@@ -44,9 +115,9 @@ void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *f
   //float thetapix = DEG_TO_RAD * 4.0f;     // [rad]    (same in x and y)
   float thetapix = 0.71674f;// 2*sin(42/2); 42degree is the agnle of aperture, here we computed the corresponding ground length
   //~~~ Body rates ~~~
-  // TODO check if this is feasible or if some filtering has to be done
-  float omegax_b = gyro->x * DEG_TO_RAD;
-  float omegay_b = gyro->y * DEG_TO_RAD;
+  // Use delay-compensated gyro for flow prediction
+  float omegax_b = gyroCompensated.x * DEG_TO_RAD;
+  float omegay_b = gyroCompensated.y * DEG_TO_RAD;
 
   // ~~~ Moves the body velocity into the global coordinate system ~~~
   // [bar{x},bar{y},bar{z}]_G = R*[bar{x},bar{y},bar{z}]_B
@@ -83,8 +154,16 @@ void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *f
   hx[KC_STATE_Z] = (Npix * flow->dt / thetapix) * ((this->R[2][2] * dx_g) / (-z_g * z_g));
   hx[KC_STATE_PX] = (Npix * flow->dt / thetapix) * (this->R[2][2] / z_g);
 
+
   //First update
-  kalmanCoreScalarUpdate(this, &Hx, (measuredNX-predictedNX), flow->stdDevX*FLOW_RESOLUTION);
+  if (!isFlying) {
+    kalmanCoreScalarUpdate(this, &Hx, (0.0f-predictedNX), 0.0f);
+  }
+
+
+  if (isFlying && (this->S[KC_STATE_Z] > 0.12f)) {
+    kalmanCoreScalarUpdate(this, &Hx, (measuredNX-predictedNX), flow->stdDevX*FLOW_RESOLUTION);
+  }
 
   // ~~~ Y velocity prediction and update ~~~
   float hy[KC_STATE_DIM] = {0};
@@ -96,8 +175,13 @@ void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *f
   hy[KC_STATE_Z] = (Npix * flow->dt / thetapix) * ((this->R[2][2] * dy_g) / (-z_g * z_g));
   hy[KC_STATE_PY] = (Npix * flow->dt / thetapix) * (this->R[2][2] / z_g);
 
-  // Second update
-  kalmanCoreScalarUpdate(this, &Hy, (measuredNY-predictedNY), flow->stdDevY*FLOW_RESOLUTION);
+  if (!isFlying) {
+    kalmanCoreScalarUpdate(this, &Hy, (0.0f-predictedNY), 0.0f);
+  }
+
+  if (isFlying && (this->S[KC_STATE_Z] > 0.12f)) {
+    kalmanCoreScalarUpdate(this, &Hy, (measuredNY-predictedNY), flow->stdDevY*FLOW_RESOLUTION);
+  }
 }
 
 /**
@@ -130,3 +214,18 @@ LOG_GROUP_START(kalman_pred)
  */
   LOG_ADD(LOG_FLOAT, measNY, &measuredNY)
 LOG_GROUP_STOP(kalman_pred)
+
+/**
+ * Parameters for flow delay compensation
+ */
+PARAM_GROUP_START(motion)
+/**
+ * @brief Flow sensor delay compensation in milliseconds
+ * 
+ * Set to the estimated delay between when the flow sensor captures
+ * the image and when the measurement is processed by the EKF.
+ * This uses historical gyro data to improve the prediction.
+ * Set to 0 to disable delay compensation.
+ */
+  PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, delayMs, &flowDelayMs)
+PARAM_GROUP_STOP(motion)
