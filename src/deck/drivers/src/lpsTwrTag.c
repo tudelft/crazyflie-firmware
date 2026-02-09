@@ -132,6 +132,8 @@ typedef struct
   float y[MAX_SWARM_SIZE];
   float gz[MAX_SWARM_SIZE];
   float h[MAX_SWARM_SIZE];
+  float vx[MAX_SWARM_SIZE];   // velocity x
+  float vy[MAX_SWARM_SIZE];   // velocity y
   bool refresh[MAX_SWARM_SIZE];
   bool keep_flying;
   int failedRanging[LOCODECK_NR_OF_TWR_ANCHORS];
@@ -480,6 +482,8 @@ static void rxcallback(dwDevice_t *dev) {
         state.y[current_receiveID] = report->selfY;
         state.gz[current_receiveID] = report->selfGz;
         state.h[current_receiveID] = report->selfh;
+        state.vx[current_receiveID] = report->selfVx;
+        state.vy[current_receiveID] = report->selfVy;
         if (current_receiveID == 0)
           state.keep_flying = report->keep_flying;
         // Store peer AUX mask
@@ -519,14 +523,18 @@ static void rxcallback(dwDevice_t *dev) {
       float selfY2 = report2->selfY;
       float selfGz2 = report2->selfGz;
       float selfh2 = report2->selfh;
+      float selfVx2 = report2->selfVx;
+      float selfVy2 = report2->selfVy;
 
       // Fetch latest self state to include in the report
-      swarmInfoGet(&selfX2, &selfY2, &selfGz2, &selfh2);
+      swarmInfoGet(&selfX2, &selfY2, &selfGz2, &selfh2, &selfVx2, &selfVy2);
 
       report2->selfX = selfX2;
       report2->selfY = selfY2;
       report2->selfGz = selfGz2;
       report2->selfh = selfh2;
+      report2->selfVx = selfVx2;
+      report2->selfVy = selfVy2;
       
       report2->keep_flying = state.keep_flying;
       uint8_t localMask2 = (selfID == auxPublisherId) ? buildLocalAuxMask() : 0;
@@ -578,13 +586,17 @@ static void rxcallback(dwDevice_t *dev) {
         float selfY = report->selfY;
         float selfGz = report->selfGz;
         float selfh = report->selfh;
+        float selfVx = report->selfVx;
+        float selfVy = report->selfVy;
 
         // Fetch latest self state to include in the report
-        swarmInfoGet(&selfX, &selfY, &selfGz, &selfh);
+        swarmInfoGet(&selfX, &selfY, &selfGz, &selfh, &selfVx, &selfVy);
         report->selfX = selfX;
         report->selfY = selfY;
         report->selfGz = selfGz;
         report->selfh = selfh;
+        report->selfVx = selfVx;
+        report->selfVy = selfVy;
 
         report->keep_flying = state.keep_flying;
         report->auxMask = buildLocalAuxMask();
@@ -616,6 +628,8 @@ static void rxcallback(dwDevice_t *dev) {
           state.y[rangingID] = report2->selfY;
           state.gz[rangingID] = report2->selfGz;
           state.h[rangingID] = report2->selfh;
+          state.vx[rangingID] = report2->selfVx;
+          state.vy[rangingID] = report2->selfVy;
           if (rangingID == 0)
             state.keep_flying = report2->keep_flying;
           // Store peer AUX mask
@@ -718,7 +732,7 @@ static uint32_t twrTagOnEvent(dwDevice_t *dev, uwbEvent_t event)
       txcallback(dev);
       break;
     case eventReceiveFailed:
-    // Likely collision/CRC/SFD error. Don’t spend seconds retrying on same peer.
+    // Likely collision/CRC/SFD error. Don't spend seconds retrying on same peer.
       dwIdle(dev);
       if (current_mode_trans) {
         current_receiveID = selectNextPeer();
@@ -910,7 +924,7 @@ static uint8_t getActiveAnchorIdList(uint8_t unorderedAnchorList[], const int ma
   return count;
 }
 
-bool twrGetSwarmInfo(int robNum, uint16_t *range, float *x, float *y, float *gyroZ, float *height)
+bool twrGetSwarmInfo(int robNum, uint16_t *range, float *x, float *y, float *gyroZ, float *height, float *vx, float *vy)
 {
   // DEBUG_PRINT("twrGetSwarmInfo called for robot %d\n", robNum);
   uint8_t n = effectiveSwarmSize();
@@ -925,6 +939,8 @@ bool twrGetSwarmInfo(int robNum, uint16_t *range, float *x, float *y, float *gyr
     *y = state.y[robNum];
     *gyroZ = state.gz[robNum];
     *height = state.h[robNum];
+    *vx = state.vx[robNum];
+    *vy = state.vy[robNum];
     return (true);
   }
   else
@@ -967,7 +983,19 @@ LOG_ADD(LOG_FLOAT, height1, &state.h[1])
 LOG_ADD(LOG_FLOAT, height2, &state.h[2])
 LOG_ADD(LOG_FLOAT, height3, &state.h[3])
 LOG_ADD(LOG_FLOAT, height4, &state.h[4])
-// Replace per-peer auxMask logs with 4 shared AUX channels
+// Peer velocity X (m/s)
+LOG_ADD(LOG_FLOAT, vx0, &state.vx[0])
+LOG_ADD(LOG_FLOAT, vx1, &state.vx[1])
+LOG_ADD(LOG_FLOAT, vx2, &state.vx[2])
+LOG_ADD(LOG_FLOAT, vx3, &state.vx[3])
+LOG_ADD(LOG_FLOAT, vx4, &state.vx[4])
+// Peer velocity Y (m/s)
+LOG_ADD(LOG_FLOAT, vy0, &state.vy[0])
+LOG_ADD(LOG_FLOAT, vy1, &state.vy[1])
+LOG_ADD(LOG_FLOAT, vy2, &state.vy[2])
+LOG_ADD(LOG_FLOAT, vy3, &state.vy[3])
+LOG_ADD(LOG_FLOAT, vy4, &state.vy[4])
+// Shared AUX channels
 LOG_ADD(LOG_UINT8,  aux0, &state.aux[0])
 LOG_ADD(LOG_UINT8,  aux1, &state.aux[1])
 LOG_ADD(LOG_UINT8,  aux2, &state.aux[2])

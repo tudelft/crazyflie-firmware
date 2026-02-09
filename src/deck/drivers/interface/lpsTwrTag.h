@@ -25,11 +25,13 @@ typedef struct {
   float selfY;
   float selfGz;
   float selfh;
+  float selfVx;   // velocity x (m/s)
+  float selfVy;   // velocity y (m/s)
   bool keep_flying;
   uint8_t auxMask;  // bit0..bit3 represent cppm.aux0..aux3 active=1
 } __attribute__((packed)) lpsTwrTagReportPayload_t;
 
-bool twrGetSwarmInfo(int robNum, uint16_t* range, float* x, float* y, float* gyroZ, float* height);
+bool twrGetSwarmInfo(int robNum, uint16_t* range, float* x, float* y, float* gyroZ, float* height, float* vx, float* vy);
 bool command_share(int RobIDfromControl, bool keep_flying);
 
 typedef struct {

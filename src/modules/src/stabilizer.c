@@ -334,7 +334,9 @@ static void stabilizerTask(void* param)
         state.position.x,   // [m]
         state.position.y,   // [m]
         sensorData.gyro.z,  // [deg/s]
-        state.position.z    // [m]
+        state.position.z,   // [m]
+        state.velocity.x,   // [m/s]
+        state.velocity.y    // [m/s]
       );
 
       const bool areMotorsAllowedToRun = supervisorAreMotorsAllowedToRun();
