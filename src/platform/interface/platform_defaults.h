@@ -229,3 +229,13 @@
 #ifndef IS_ANCHOR
     #define IS_ANCHOR 0
 #endif
+
+#ifndef FLOWDECK_POS_X
+    #define FLOWDECK_POS_X 0.0f
+#endif
+#ifndef FLOWDECK_POS_Y
+    #define FLOWDECK_POS_Y 0.0f
+#endif
+#ifndef FLOWDECK_POS_Z
+    #define FLOWDECK_POS_Z 0.0f
+#endif

@@ -173,3 +173,7 @@
 #ifndef EKF_DRAG_RZ
     #define EKF_DRAG_RZ 0.11f
 #endif
+
+#define FLOWDECK_POS_X 0.0f 
+#define FLOWDECK_POS_Y 0.0f
+#define FLOWDECK_POS_Z -0.12f
