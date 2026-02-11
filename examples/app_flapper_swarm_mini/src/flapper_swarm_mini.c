@@ -8,8 +8,9 @@
  *   - Uses measured distance as circle radius, calculates yaw rate accordingly
  *   - Both drones fly CW circles around beacon
  *   - If drones get too close, enter DANCE state:
- *     - Drone 1: lands, waits for drone 2 to be far enough, takes off
- *     - Drone 2: continues circling, waits for drone 1 to land
+ *     - Drones alternate who lands (drone 1 first, then drone 2, etc.)
+ *     - Landing drone waits for peer to be far enough, then takes off
+ *     - Other drone continues circling
  *   - Emergency land if distance to beacon exceeds outer bound
  * 
  * States: CIRCLE, DANCE, (emergency land handled separately)
@@ -124,9 +125,11 @@ static uint8_t peerFarCount = 0;
 static uint8_t peerLandedCount = 0;
 static uint8_t rejoinCount = 0;
 
-// Dance state tracking (drone 1)
+// Dance state tracking
 static bool danceHasLanded = false;
 static bool danceHasTakenOff = false;
+static bool myTurnToLand = false;  // Alternates each DANCE
+static uint8_t danceCount = 0;     // Counts dance encounters for alternating
 
 // Emergency abort flag
 static volatile bool seqAbort = false;
@@ -397,8 +400,8 @@ static bool shouldEnterDance(void) {
 }
 
 static bool shouldExitDance(void) {
-  // Drone 2+: exit when peer (drone 1) has landed
-  if (droneId != 1) {
+  // The drone that's circling exits when peer has landed
+  if (!myTurnToLand) {
     if (isPeerLanded()) {
       if (++peerLandedCount >= PEER_LANDED_CONFIRM_COUNT) {
         peerLandedCount = 0;
@@ -409,8 +412,8 @@ static bool shouldExitDance(void) {
     }
   }
   
-  // Drone 1: exit handled by danceHasTakenOff flag
-  if (droneId == 1 && danceHasTakenOff) {
+  // The drone that landed exits after taking off again
+  if (myTurnToLand && danceHasTakenOff) {
     return true;
   }
   
@@ -432,7 +435,20 @@ static void executeCircle(void) {
 }
 
 static void onEnterDance(void) {
-  DEBUG_PRINT("[%.2f] Enter DANCE (drone %u)\n", (double)getTimestamp(), droneId);
+  // Determine if it's my turn to land (alternates each dance)
+  // danceCount even: drone 1 lands, danceCount odd: drone 2 lands
+  if (droneId == 1) {
+    myTurnToLand = (danceCount % 2 == 0);
+  } else {
+    myTurnToLand = (danceCount % 2 == 1);
+  }
+  
+  danceCount++;
+  
+  DEBUG_PRINT("[%.2f] Enter DANCE #%u (drone %u, %s)\n", 
+              (double)getTimestamp(), danceCount, droneId, 
+              myTurnToLand ? "I land" : "I circle");
+  
   peerLandedCount = 0;
   rejoinCount = 0;
   danceHasLanded = false;
@@ -440,18 +456,18 @@ static void onEnterDance(void) {
 }
 
 static void executeDance(void) {
-  if (droneId == 1) {
-    // Drone 1: Land, wait for peer to be far enough, then take off
+  if (myTurnToLand) {
+    // This drone lands, waits for peer to be far enough, then takes off
     
     if (!danceHasLanded) {
       // Pause briefly then land
-      DEBUG_PRINT("[%.2f] DANCE: drone 1 pausing then landing\n", (double)getTimestamp());
+      DEBUG_PRINT("[%.2f] DANCE: drone %u pausing then landing\n", (double)getTimestamp(), droneId);
       sendHover(0.0f, 0.0f, targetHeightM, 0.0f);
       vTaskDelay(pdMS_TO_TICKS(500));  // Brief pause
       
       landToZero();
       danceHasLanded = true;
-      DEBUG_PRINT("[%.2f] DANCE: drone 1 landed\n", (double)getTimestamp());
+      DEBUG_PRINT("[%.2f] DANCE: drone %u landed\n", (double)getTimestamp(), droneId);
       
     } else if (!danceHasTakenOff) {
       // Wait for peer to be far enough
@@ -469,11 +485,11 @@ static void executeDance(void) {
       
       if (peerDist >= peerSafeMm) {
         if (++rejoinCount >= REJOIN_CONFIRM_COUNT) {
-          DEBUG_PRINT("[%.2f] DANCE: drone 1 taking off (peer dist=%lu >= %u)\n",
-                      (double)getTimestamp(), (unsigned long)peerDist, peerSafeMm);
+          DEBUG_PRINT("[%.2f] DANCE: drone %u taking off (peer dist=%lu >= %u)\n",
+                      (double)getTimestamp(), droneId, (unsigned long)peerDist, peerSafeMm);
           rampToHeight(targetHeightM, RAMP_TIME_MS);
           danceHasTakenOff = true;
-          DEBUG_PRINT("[%.2f] DANCE: drone 1 airborne\n", (double)getTimestamp());
+          DEBUG_PRINT("[%.2f] DANCE: drone %u airborne\n", (double)getTimestamp(), droneId);
         }
       } else {
         rejoinCount = 0;
@@ -481,7 +497,7 @@ static void executeDance(void) {
     }
     
   } else {
-    // Drone 2+: Continue circling while waiting for drone 1 to land
+    // This drone continues circling while waiting for peer to land
     executeCircle();
   }
 }
@@ -549,6 +565,7 @@ static void runSequence(void) {
   rejoinCount = 0;
   danceHasLanded = false;
   danceHasTakenOff = false;
+  danceCount = 0;  // Reset dance counter for each sequence
   
   currentState = STATE_CIRCLE;
 
@@ -583,8 +600,8 @@ static void runSequence(void) {
 
     if (checkKillAndDisarm()) break;
 
-    // Emergency check (skip during drone 1 landed phase of DANCE)
-    if (!(currentState == STATE_DANCE && droneId == 1 && danceHasLanded && !danceHasTakenOff)) {
+    // Emergency check (skip during landed phase of DANCE)
+    if (!(currentState == STATE_DANCE && myTurnToLand && danceHasLanded && !danceHasTakenOff)) {
       if (checkEmergencyLand()) break;
     }
 
@@ -701,4 +718,5 @@ LOG_GROUP_START(miniswarm)
   LOG_ADD(LOG_UINT8, state, &currentState)
   LOG_ADD(LOG_FLOAT, radius, &measuredRadiusM)
   LOG_ADD(LOG_FLOAT, yawRate, &circleYawRateDps)
+  LOG_ADD(LOG_UINT8, danceNum, &danceCount)
 LOG_GROUP_STOP(miniswarm)
