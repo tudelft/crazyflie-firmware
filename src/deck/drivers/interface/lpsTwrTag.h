@@ -29,6 +29,7 @@ typedef struct {
   float selfVy;   // velocity y (m/s)
   bool keep_flying;
   uint8_t auxMask;  // bit0..bit3 represent cppm.aux0..aux3 active=1
+  uint16_t distToPeers[5];  // This drone's distances to peers 0-4 (mm)
 } __attribute__((packed)) lpsTwrTagReportPayload_t;
 
 bool twrGetSwarmInfo(int robNum, uint16_t* range, float* x, float* y, float* gyroZ, float* height, float* vx, float* vy);
