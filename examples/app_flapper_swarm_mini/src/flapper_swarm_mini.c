@@ -52,7 +52,7 @@ static uint8_t droneId = 0;
 // ============================================================================
 static float targetHeightM = 1.0f;           // Flight height (m)
 static float circleSpeedMps = 0.5f;          // Forward speed while circling (m/s)
-static uint16_t outerBoundMm = 2000U;        // Emergency land if d0 > this (mm)
+static uint16_t outerBoundMm = 1750U;        // Emergency land if d0 > this (mm)
 static uint16_t peerCloseMm = 1000U;         // Enter DANCE if peer distance < this (mm)
 static uint16_t peerSafeMm = 1500U;          // Exit DANCE when peer distance > this (mm)
 static uint32_t demoTimeMs = 60000U;         // Demo duration (ms)
