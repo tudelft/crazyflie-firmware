@@ -74,6 +74,7 @@
 #define EXTRX_TASK_PRI            2
 #define ZRANGER_TASK_PRI          2
 #define ZRANGER2_TASK_PRI         2
+#define ZRANGER3_TASK_PRI         2
 #define LOG_TASK_PRI              1
 #define MEM_TASK_PRI              1
 #define PARAM_TASK_PRI            1
@@ -137,6 +138,7 @@
 #define UART_RX_TASK_NAME         "UART"
 #define ZRANGER_TASK_NAME         "ZRANGER"
 #define ZRANGER2_TASK_NAME        "ZRANGER2"
+#define ZRANGER3_TASK_NAME        "ZRANGER3"
 #define FLOW_TASK_NAME            "FLOW"
 #define USDLOG_TASK_NAME          "USDLOG"
 #define USDWRITE_TASK_NAME        "USDWRITE"
@@ -195,6 +197,7 @@
 #define UART_RX_TASK_STACKSIZE          configMINIMAL_STACK_SIZE
 #define ZRANGER_TASK_STACKSIZE          (2 * configMINIMAL_STACK_SIZE)
 #define ZRANGER2_TASK_STACKSIZE         (2 * configMINIMAL_STACK_SIZE)
+#define ZRANGER3_TASK_STACKSIZE         (4 * configMINIMAL_STACK_SIZE)
 #define FLOW_TASK_STACKSIZE             (2 * configMINIMAL_STACK_SIZE)
 #define USDLOG_TASK_STACKSIZE           (2 * configMINIMAL_STACK_SIZE)
 #define USDWRITE_TASK_STACKSIZE         (3 * configMINIMAL_STACK_SIZE)
