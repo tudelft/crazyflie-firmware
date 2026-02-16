@@ -36,6 +36,24 @@
 
 #include "debug.h"
 
+// Debug: track UWB health
+static uint32_t uwbPacketsSent = 0;
+static uint32_t uwbPacketsReceived = 0;
+static uint32_t uwbErrors = 0;
+static uint32_t lastUwbHealthCheck = 0;
+#define UWB_HEALTH_CHECK_INTERVAL_MS 5000
+
+static void checkUwbHealth(void) {
+  uint32_t now = xTaskGetTickCount();
+  if (now - lastUwbHealthCheck > UWB_HEALTH_CHECK_INTERVAL_MS) {
+    DEBUG_PRINT("UWB health: TX=%lu RX=%lu ERR=%lu\n", 
+                (unsigned long)uwbPacketsSent, 
+                (unsigned long)uwbPacketsReceived,
+                (unsigned long)uwbErrors);
+    lastUwbHealthCheck = now;
+  }
+}
+
 // Forward declaration
 static uint8_t buildLocalAuxMask(void);
 
@@ -221,6 +239,8 @@ static uint8_t selectNextPeer(void)
 
 static void txcallback(dwDevice_t *dev)
 {
+  uwbPacketsSent++;  // Add this line
+  
   dwTime_t departure;
   dwGetTransmitTimestamp(dev, &departure);
   departure.full += (options->antennaDelay / 2);
@@ -269,6 +289,8 @@ static void rxcallback(dwDevice_t *dev) {
 
   if (dataLength == 0) return;
 
+  uwbPacketsReceived++;  // Add this line
+  
   packet_t rxPacket;
   memset(&rxPacket, 0, MAC802154_HEADER_LENGTH);
 
@@ -369,7 +391,7 @@ static void rxcallback(dwDevice_t *dev) {
         state.refresh[current_receiveID] = true;
 
         // Store indirect distances from this peer
-        for (int j = 0; j < MAX_SWARM_SIZE; j++) {
+        for (int j = 0; j < 3; j++) {
           state.indirectDist[current_receiveID][j] = report->distToPeers[j];
         }
 
@@ -420,7 +442,7 @@ static void rxcallback(dwDevice_t *dev) {
       }
 
       // Include our distances to all peers (indirect distances)
-      for (int j = 0; j < MAX_SWARM_SIZE; j++) {
+      for (int j = 0; j < 3; j++) {
         report2->distToPeers[j] = state.distance[j];
       }
 
@@ -482,7 +504,7 @@ static void rxcallback(dwDevice_t *dev) {
         report->auxMask = buildLocalAuxMask();
 
         // Include our distances to all peers (indirect distances)
-        for (int j = 0; j < MAX_SWARM_SIZE; j++) {
+        for (int j = 0; j < 3; j++) {
           report->distToPeers[j] = state.distance[j];
         }
 
@@ -529,7 +551,7 @@ static void rxcallback(dwDevice_t *dev) {
           state.refresh[rangingID] = true;
 
           // Store indirect distances from this peer
-          for (int j = 0; j < MAX_SWARM_SIZE; j++) {
+          for (int j = 0; j < 3; j++) {
             state.indirectDist[rangingID][j] = report2->distToPeers[j];
           }
 
@@ -579,10 +601,8 @@ static void rxcallback(dwDevice_t *dev) {
 
 static uint32_t twrTagOnEvent(dwDevice_t *dev, uwbEvent_t event)
 {
-  // TODO: Nothing is done with failedRanging. This should be calculated
-  // if (event != eventReceiveTimeout) {
-    // DEBUG_PRINT("TWR Tag event: %d\n", event);
-  // }
+  checkUwbHealth();  // Add this line at the start
+  
   switch(event) {
     case eventPacketReceived:
       rxcallback(dev);
@@ -594,7 +614,9 @@ static uint32_t twrTagOnEvent(dwDevice_t *dev, uwbEvent_t event)
       txcallback(dev);
       break;
     case eventReceiveFailed:
-    // Likely collision/CRC/SFD error. Don't spend seconds retrying on same peer.
+      uwbErrors++;  // Add this line
+      DEBUG_PRINT("UWB RX failed\n");  // Add this line
+      // Likely collision/CRC/SFD error. Don't spend seconds retrying on same peer.
       dwIdle(dev);
       if (current_mode_trans) {
         current_receiveID = selectNextPeer();
@@ -687,6 +709,16 @@ static uint32_t twrTagOnEvent(dwDevice_t *dev, uwbEvent_t event)
 
 static void twrTagInit(dwDevice_t *dev)
 {
+  // Check packet size - UWB max payload is ~127 bytes
+  size_t reportPayloadSize = sizeof(lpsTwrTagReportPayload_t);
+  size_t totalPacketSize = MAC802154_HEADER_LENGTH + 2 + reportPayloadSize;
+  DEBUG_PRINT("TWR report payload size: %u bytes, total packet: %u bytes\n", 
+              (unsigned int)reportPayloadSize, (unsigned int)totalPacketSize);
+  if (totalPacketSize > 120) {
+    DEBUG_PRINT("WARNING: Packet size %u may be too large for reliable UWB!\n", 
+                (unsigned int)totalPacketSize);
+  }
+
   // Initialize the packet in the TX buffer
   memset(&txPacket, 0, sizeof(txPacket));
   MAC80215_PACKET_INIT(txPacket, MAC802154_TYPE_DATA);
@@ -732,7 +764,7 @@ static void twrTagInit(dwDevice_t *dev)
     median_data[i].index_inserting = 0;
     state.refresh[i] = false;
     // Initialize indirect distances to 0
-    for (int j = 0; j < MAX_SWARM_SIZE; j++) {
+    for (int j = 0; j < 3; j++) {
       state.indirectDist[i][j] = 0;
     }
   }
@@ -899,6 +931,10 @@ LOG_ADD(LOG_UINT8,  aux0, &state.aux[0])
 LOG_ADD(LOG_UINT8,  aux1, &state.aux[1])
 LOG_ADD(LOG_UINT8,  aux2, &state.aux[2])
 LOG_ADD(LOG_UINT8,  aux3, &state.aux[3])
+// UWB health monitoring
+LOG_ADD(LOG_UINT32, uwbTx, &uwbPacketsSent)
+LOG_ADD(LOG_UINT32, uwbRx, &uwbPacketsReceived)
+LOG_ADD(LOG_UINT32, uwbErr, &uwbErrors)
 LOG_GROUP_STOP(ranging)
 
 PARAM_GROUP_START(swarm)
