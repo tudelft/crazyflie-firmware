@@ -64,8 +64,8 @@
 
 static bool isInit = false;
 
-NO_DMA_CCM_SAFE_ZERO_INIT static VL53L8CX_Configuration dev;
-NO_DMA_CCM_SAFE_ZERO_INIT static VL53L8CX_ResultsData   results;
+static VL53L8CX_Configuration dev;
+static VL53L8CX_ResultsData   results;
 
 /* Per-zone distance in mm (4x4 = 16 zones, row-major).
  * Zones are numbered 0..15 in a 4x4 grid as seen from above:
