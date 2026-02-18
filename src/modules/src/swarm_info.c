@@ -5,7 +5,7 @@
 
 static volatile swarm_info_t g_swarm_info = {0};
 
-void swarmInfoUpdate(float x, float y, float gz, float h, float vx, float vy) {
+void swarmInfoUpdate(float x, float y, float gz, float h, float vx, float vy, float vz) {
   taskENTER_CRITICAL();
   g_swarm_info.x = x;
   g_swarm_info.y = y;
@@ -13,10 +13,11 @@ void swarmInfoUpdate(float x, float y, float gz, float h, float vx, float vy) {
   g_swarm_info.h  = h;
   g_swarm_info.vx = vx;
   g_swarm_info.vy = vy;
+  g_swarm_info.vz = vz;
   taskEXIT_CRITICAL();
 }
 
-void swarmInfoGet(float* x, float* y, float* gz, float* h, float* vx, float* vy) {
+void swarmInfoGet(float* x, float* y, float* gz, float* h, float* vx, float* vy, float* vz) {
   taskENTER_CRITICAL();
   if (x)  *x  = g_swarm_info.x;
   if (y)  *y  = g_swarm_info.y;
@@ -24,5 +25,6 @@ void swarmInfoGet(float* x, float* y, float* gz, float* h, float* vx, float* vy)
   if (h)  *h  = g_swarm_info.h;
   if (vx) *vx = g_swarm_info.vx;
   if (vy) *vy = g_swarm_info.vy;
+  if (vz) *vz = g_swarm_info.vz;
   taskEXIT_CRITICAL();
 }

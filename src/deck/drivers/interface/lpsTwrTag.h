@@ -12,10 +12,10 @@
 
 #define LPS_TWR_TYPE 0
 #define LPS_TWR_SEQ 1
-#define LOCODECK_NR_OF_TWR_ANCHORS 9 // Number of other UWB devices used in the swarm
 
 extern uwbAlgorithm_t uwbTwrTagAlgorithm;
 
+// Update the report payload - reduce distToPeers array
 typedef struct {
   uint8_t pollRx[5];
   uint8_t answerTx[5];
@@ -25,14 +25,15 @@ typedef struct {
   float selfY;
   float selfGz;
   float selfh;
-  float selfVx;   // velocity x (m/s)
-  float selfVy;   // velocity y (m/s)
+  float selfVx;
+  float selfVy;
+  float selfVz;
   bool keep_flying;
-  uint8_t auxMask;  // bit0..bit3 represent cppm.aux0..aux3 active=1
-  uint16_t distToPeers[3];  // Reduced from 5 to 3
+  uint8_t auxMask;
+  uint16_t distToPeers[3];  // Back to [3] - simpler to just index by peer ID
 } __attribute__((packed)) lpsTwrTagReportPayload_t;
 
-bool twrGetSwarmInfo(int robNum, uint16_t* range, float* x, float* y, float* gyroZ, float* height, float* vx, float* vy);
+bool twrGetSwarmInfo(int robNum, uint16_t* range, float* x, float* y, float* gyroZ, float* height, float* vx, float* vy, float* vz);
 bool command_share(int RobIDfromControl, bool keep_flying);
 
 typedef struct {
@@ -52,5 +53,12 @@ typedef struct {
 } lpsTwrAlgoOptions_t;
 
 #define TWR_RECEIVE_TIMEOUT 1000
+
+uint16_t twrGetIndirectDist(uint8_t peerJ, uint8_t peerK);
+
+// Only define if not already defined elsewhere
+#ifndef LOCODECK_NR_OF_TWR_ANCHORS
+#define LOCODECK_NR_OF_TWR_ANCHORS 3
+#endif
 
 #endif // __LPS_TWR_TAG_H__

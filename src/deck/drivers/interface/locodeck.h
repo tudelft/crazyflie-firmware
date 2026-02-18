@@ -135,4 +135,7 @@ struct lppShortAnchorPos_s {
 
 extern bool isAnchor;
 
+// Change from 9 to 3 for your swarm size
+#define LOCODECK_NR_OF_TWR_ANCHORS 3
+
 #endif // __LOCODECK_H__

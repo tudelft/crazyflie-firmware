@@ -85,7 +85,7 @@ static uint8_t selfID;
 static locoAddress_t selfAddress;
 
 // Swarm size runtime control
-#define MAX_SWARM_SIZE (LOCODECK_NR_OF_TWR_ANCHORS + 1)
+#define MAX_SWARM_SIZE 3  // 3 drones total (2 flying + 1 anchor)
 
 // Swarm size: total number of crazyflies in the swarm (including self)
 static uint8_t swarmSize = 3;
@@ -110,23 +110,26 @@ static lpsTwrAlgoOptions_t defaultOptions = {
 
 static lpsTwrAlgoOptions_t* options = &defaultOptions;
 
-typedef struct
-{
-  uint16_t distance[MAX_SWARM_SIZE];
-  float x[MAX_SWARM_SIZE];
-  float y[MAX_SWARM_SIZE];
-  float gz[MAX_SWARM_SIZE];
-  float h[MAX_SWARM_SIZE];
-  float vx[MAX_SWARM_SIZE];
-  float vy[MAX_SWARM_SIZE];
-  bool refresh[MAX_SWARM_SIZE];
+// Update the swarmInfo_t struct
+typedef struct {
+  uint16_t distance[3];
+  float x[3];
+  float y[3];
+  float gz[3];
+  float h[3];
+  float vx[3];
+  float vy[3];
+  float vz[3];
+  uint8_t aux[4];              // Keep at 4 - this is for AUX channels, not drones
+  uint16_t indirectDist[3][3];
+  uint32_t lastUpdate[3];
+  bool dataValid[3];
   bool keep_flying;
-  int failedRanging[LOCODECK_NR_OF_TWR_ANCHORS];
-  uint8_t auxMask[MAX_SWARM_SIZE];
-  uint8_t aux[4];
-  // Indirect distance matrix: indirectDist[i][j] = drone i's distance to drone j
-  uint16_t indirectDist[MAX_SWARM_SIZE][MAX_SWARM_SIZE];
+  uint8_t auxMask[3];
+  bool refresh[3];
+  uint8_t failedRanging[3];
 } swarmInfo_t;
+
 static swarmInfo_t state;
 
 // Timestamps for ranging
@@ -150,7 +153,7 @@ static uint32_t checkTurnTick = 0;
 #endif
 
 // Timeout and peer tracking for robust communication
-static uint32_t lastSuccessfulRanging[MAX_SWARM_SIZE];
+static uint32_t lastSuccessfulRanging[3];  // Changed to match MAX_SWARM_SIZE
 static uint32_t consecutiveTimeouts = 0;
 #define MAX_CONSECUTIVE_TIMEOUTS 3
 #define PEER_TIMEOUT_MS 5000  // Consider peer inactive after 5 seconds
@@ -378,6 +381,7 @@ static void rxcallback(dwDevice_t *dev) {
         state.h[current_receiveID] = report->selfh;
         state.vx[current_receiveID] = report->selfVx;
         state.vy[current_receiveID] = report->selfVy;
+        state.vz[current_receiveID] = report->selfVz; // NEW
         if (current_receiveID == 0)
           state.keep_flying = report->keep_flying;
         // Store peer AUX mask
@@ -391,7 +395,7 @@ static void rxcallback(dwDevice_t *dev) {
         state.refresh[current_receiveID] = true;
 
         // Store indirect distances from this peer
-        for (int j = 0; j < 3; j++) {
+        for (int j = 0; j < MAX_SWARM_SIZE; j++) {
           state.indirectDist[current_receiveID][j] = report->distToPeers[j];
         }
 
@@ -421,9 +425,10 @@ static void rxcallback(dwDevice_t *dev) {
       float selfh2 = report2->selfh;
       float selfVx2 = report2->selfVx;
       float selfVy2 = report2->selfVy;
+      float selfVz2 = report2->selfVz;
 
       // Fetch latest self state to include in the report
-      swarmInfoGet(&selfX2, &selfY2, &selfGz2, &selfh2, &selfVx2, &selfVy2);
+      swarmInfoGet(&selfX2, &selfY2, &selfGz2, &selfh2, &selfVx2, &selfVy2, &selfVz2);
 
       report2->selfX = selfX2;
       report2->selfY = selfY2;
@@ -431,7 +436,9 @@ static void rxcallback(dwDevice_t *dev) {
       report2->selfh = selfh2;
       report2->selfVx = selfVx2;
       report2->selfVy = selfVy2;
-      
+      report2->selfVz = selfVz2;
+
+      // Keep all the existing AUX mask code below:
       report2->keep_flying = state.keep_flying;
       uint8_t localMask2 = (selfID == auxPublisherId) ? buildLocalAuxMask() : 0;
       report2->auxMask = localMask2;
@@ -442,7 +449,7 @@ static void rxcallback(dwDevice_t *dev) {
       }
 
       // Include our distances to all peers (indirect distances)
-      for (int j = 0; j < 3; j++) {
+      for (int j = 0; j < MAX_SWARM_SIZE; j++) {
         report2->distToPeers[j] = state.distance[j];
       }
 
@@ -484,27 +491,29 @@ static void rxcallback(dwDevice_t *dev) {
         memcpy(&report->finalRx, &final_rx, 5);
         
         // first load data into local variable to prevent memory misalignment warning
-        float selfX= report->selfX;
+        float selfX = report->selfX;
         float selfY = report->selfY;
         float selfGz = report->selfGz;
         float selfh = report->selfh;
         float selfVx = report->selfVx;
         float selfVy = report->selfVy;
+        float selfVz = report->selfVz;
 
         // Fetch latest self state to include in the report
-        swarmInfoGet(&selfX, &selfY, &selfGz, &selfh, &selfVx, &selfVy);
+        swarmInfoGet(&selfX, &selfY, &selfGz, &selfh, &selfVx, &selfVy, &selfVz);
         report->selfX = selfX;
         report->selfY = selfY;
         report->selfGz = selfGz;
         report->selfh = selfh;
         report->selfVx = selfVx;
         report->selfVy = selfVy;
+        report->selfVz = selfVz;
 
         report->keep_flying = state.keep_flying;
         report->auxMask = buildLocalAuxMask();
 
         // Include our distances to all peers (indirect distances)
-        for (int j = 0; j < 3; j++) {
+        for (int j = 0; j < MAX_SWARM_SIZE; j++) {
           report->distToPeers[j] = state.distance[j];
         }
 
@@ -538,6 +547,7 @@ static void rxcallback(dwDevice_t *dev) {
           state.h[rangingID] = report2->selfh;
           state.vx[rangingID] = report2->selfVx;
           state.vy[rangingID] = report2->selfVy;
+          state.vz[rangingID] = report2->selfVz; // NEW
           if (rangingID == 0)
             state.keep_flying = report2->keep_flying;
           // Store peer AUX mask
@@ -551,7 +561,7 @@ static void rxcallback(dwDevice_t *dev) {
           state.refresh[rangingID] = true;
 
           // Store indirect distances from this peer
-          for (int j = 0; j < 3; j++) {
+          for (int j = 0; j < MAX_SWARM_SIZE; j++) {
             state.indirectDist[rangingID][j] = report2->distToPeers[j];
           }
 
@@ -736,7 +746,7 @@ static void twrTagInit(dwDevice_t *dev)
 
   // Initialize peer activity tracking
   uint32_t currentTick = xTaskGetTickCount();
-  for (int i = 0; i < (LOCODECK_NR_OF_TWR_ANCHORS + 1); i++)
+  for (int i = 0; i < MAX_SWARM_SIZE; i++)
   {
     lastSuccessfulRanging[i] = currentTick;
   }
@@ -817,7 +827,7 @@ static uint8_t getActiveAnchorIdList(uint8_t unorderedAnchorList[], const int ma
   return count;
 }
 
-bool twrGetSwarmInfo(int robNum, uint16_t *range, float *x, float *y, float *gyroZ, float *height, float *vx, float *vy)
+bool twrGetSwarmInfo(int robNum, uint16_t *range, float *x, float *y, float *gyroZ, float *height, float *vx, float *vy, float *vz)
 {
   // DEBUG_PRINT("twrGetSwarmInfo called for robot %d\n", robNum);
   uint8_t n = effectiveSwarmSize();
@@ -834,6 +844,7 @@ bool twrGetSwarmInfo(int robNum, uint16_t *range, float *x, float *y, float *gyr
     *height = state.h[robNum];
     *vx = state.vx[robNum];
     *vy = state.vy[robNum];
+    *vz = state.vz[robNum];
     return (true);
   }
   else
@@ -869,68 +880,42 @@ LOG_GROUP_START(ranging)
 LOG_ADD(LOG_UINT16, distance0, &state.distance[0])
 LOG_ADD(LOG_UINT16, distance1, &state.distance[1])
 LOG_ADD(LOG_UINT16, distance2, &state.distance[2])
-LOG_ADD(LOG_UINT16, distance3, &state.distance[3])
-LOG_ADD(LOG_UINT16, distance4, &state.distance[4])
 // Peer heights (meters)
 LOG_ADD(LOG_FLOAT, height0, &state.h[0])
 LOG_ADD(LOG_FLOAT, height1, &state.h[1])
 LOG_ADD(LOG_FLOAT, height2, &state.h[2])
-LOG_ADD(LOG_FLOAT, height3, &state.h[3])
-LOG_ADD(LOG_FLOAT, height4, &state.h[4])
 // Peer yaw rate (rad/s)
 LOG_ADD(LOG_FLOAT, yawR0, &state.gz[0])
 LOG_ADD(LOG_FLOAT, yawR1, &state.gz[1])
 LOG_ADD(LOG_FLOAT, yawR2, &state.gz[2])
-LOG_ADD(LOG_FLOAT, yawR3, &state.gz[3])
-LOG_ADD(LOG_FLOAT, yawR4, &state.gz[4])
 // Peer velocity X (m/s)
 LOG_ADD(LOG_FLOAT, vx0, &state.vx[0])
 LOG_ADD(LOG_FLOAT, vx1, &state.vx[1])
 LOG_ADD(LOG_FLOAT, vx2, &state.vx[2])
-LOG_ADD(LOG_FLOAT, vx3, &state.vx[3])
-LOG_ADD(LOG_FLOAT, vx4, &state.vx[4])
 // Peer velocity Y (m/s)
 LOG_ADD(LOG_FLOAT, vy0, &state.vy[0])
 LOG_ADD(LOG_FLOAT, vy1, &state.vy[1])
 LOG_ADD(LOG_FLOAT, vy2, &state.vy[2])
-LOG_ADD(LOG_FLOAT, vy3, &state.vy[3])
-LOG_ADD(LOG_FLOAT, vy4, &state.vy[4])
-// Indirect distances: drone i's distance to drone j (inDij)
-// Drone 0's distances to others
-LOG_ADD(LOG_UINT16, inD00, &state.indirectDist[0][0])
+// Peer velocity Z (m/s)
+LOG_ADD(LOG_FLOAT, vz0, &state.vz[0])
+LOG_ADD(LOG_FLOAT, vz1, &state.vz[1])
+LOG_ADD(LOG_FLOAT, vz2, &state.vz[2])
+
+// Indirect distances - only log a few key ones for 3 drones
+// inDij = drone i's measured distance to drone j
+#if 1  // Enable indirect distance logging for 3 drones
 LOG_ADD(LOG_UINT16, inD01, &state.indirectDist[0][1])
 LOG_ADD(LOG_UINT16, inD02, &state.indirectDist[0][2])
-LOG_ADD(LOG_UINT16, inD03, &state.indirectDist[0][3])
-LOG_ADD(LOG_UINT16, inD04, &state.indirectDist[0][4])
-// Drone 1's distances to others
 LOG_ADD(LOG_UINT16, inD10, &state.indirectDist[1][0])
-LOG_ADD(LOG_UINT16, inD11, &state.indirectDist[1][1])
 LOG_ADD(LOG_UINT16, inD12, &state.indirectDist[1][2])
-LOG_ADD(LOG_UINT16, inD13, &state.indirectDist[1][3])
-LOG_ADD(LOG_UINT16, inD14, &state.indirectDist[1][4])
-// Drone 2's distances to others
 LOG_ADD(LOG_UINT16, inD20, &state.indirectDist[2][0])
 LOG_ADD(LOG_UINT16, inD21, &state.indirectDist[2][1])
-LOG_ADD(LOG_UINT16, inD22, &state.indirectDist[2][2])
-LOG_ADD(LOG_UINT16, inD23, &state.indirectDist[2][3])
-LOG_ADD(LOG_UINT16, inD24, &state.indirectDist[2][4])
-// Drone 3's distances to others
-LOG_ADD(LOG_UINT16, inD30, &state.indirectDist[3][0])
-LOG_ADD(LOG_UINT16, inD31, &state.indirectDist[3][1])
-LOG_ADD(LOG_UINT16, inD32, &state.indirectDist[3][2])
-LOG_ADD(LOG_UINT16, inD33, &state.indirectDist[3][3])
-LOG_ADD(LOG_UINT16, inD34, &state.indirectDist[3][4])
-// Drone 4's distances to others
-LOG_ADD(LOG_UINT16, inD40, &state.indirectDist[4][0])
-LOG_ADD(LOG_UINT16, inD41, &state.indirectDist[4][1])
-LOG_ADD(LOG_UINT16, inD42, &state.indirectDist[4][2])
-LOG_ADD(LOG_UINT16, inD43, &state.indirectDist[4][3])
-LOG_ADD(LOG_UINT16, inD44, &state.indirectDist[4][4])
+#endif
+
 // Shared AUX channels
-LOG_ADD(LOG_UINT8,  aux0, &state.aux[0])
-LOG_ADD(LOG_UINT8,  aux1, &state.aux[1])
-LOG_ADD(LOG_UINT8,  aux2, &state.aux[2])
-LOG_ADD(LOG_UINT8,  aux3, &state.aux[3])
+LOG_ADD(LOG_UINT8, aux0, &state.aux[0])
+LOG_ADD(LOG_UINT8, aux1, &state.aux[1])
+LOG_ADD(LOG_UINT8, aux2, &state.aux[2])
 // UWB health monitoring
 LOG_ADD(LOG_UINT32, uwbTx, &uwbPacketsSent)
 LOG_ADD(LOG_UINT32, uwbRx, &uwbPacketsReceived)
@@ -941,3 +926,9 @@ PARAM_GROUP_START(swarm)
 PARAM_ADD(PARAM_UINT8 | PARAM_PERSISTENT, size, &swarmSize)
 PARAM_ADD(PARAM_UINT8 | PARAM_PERSISTENT, auxPub, &auxPublisherId)
 PARAM_GROUP_STOP(swarm)
+
+// Add this function to expose indirect distances
+uint16_t twrGetIndirectDist(uint8_t peerJ, uint8_t peerK) {
+  if (peerJ >= MAX_SWARM_SIZE || peerK >= MAX_SWARM_SIZE) return 0;
+  return state.indirectDist[peerJ][peerK];
+}
