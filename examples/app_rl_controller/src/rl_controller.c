@@ -246,17 +246,17 @@ static void computeObservation(void) {
   // Sim uses z-negative-up (NED-like altitude).  Firmware uses z-positive-up.
   // Horizontal axes (x, y) share the same convention.
   float sim_x  =  fw_x;
-  float sim_y  =  fw_y;
+  float sim_y  =  -fw_y;
   float sim_z  = -fw_z;                   // flip z
   float sim_vx =  fw_vx;
-  float sim_vy =  fw_vy;
+  float sim_vy =  -fw_vy;
   float sim_vz = -fw_vz;                  // flip vz
   float sim_phi   = fw_roll  * DEG2RAD;
   float sim_theta = fw_pitch * DEG2RAD;
-  float sim_psi   = fw_yaw   * DEG2RAD;
+  float sim_psi   = -fw_yaw   * DEG2RAD;
   float sim_p     = fw_gx * DEG2RAD;
-  float sim_q     = fw_gy * DEG2RAD;
-  float sim_r     = fw_gz * DEG2RAD;
+  float sim_q     = -fw_gz * DEG2RAD;     // this is weird, but correct?
+  float sim_r     = -fw_gy * DEG2RAD;
 
   // ---- Gate-frame transform -----------------------------------------------
   int gi   = currentTargetGate % NUM_GATES;
