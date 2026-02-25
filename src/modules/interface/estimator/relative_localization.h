@@ -117,6 +117,12 @@ uint8_t relativeLocalizationGetNumConnected(void);
 // ============ CONFIGURATION ============
 
 /**
+ * Set this drone's own ID so the EKF skips the self-slot
+ * (a drone never receives UWB data about itself)
+ */
+void relativeLocalizationSetSelfId(uint8_t id);
+
+/**
  * Set number of peers to track (max 9)
  */
 void relativeLocalizationSetNumPeers(uint8_t n);

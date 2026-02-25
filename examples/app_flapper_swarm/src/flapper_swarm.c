@@ -30,6 +30,7 @@
 #include "stabilizer_types.h"
 #include "supervisor.h"
 #include "configblock.h"
+#include "estimator/relative_localization.h"
 
 // ============================================================================
 // Timestamp helper
@@ -93,6 +94,27 @@ static uint32_t demoTimeMs = 60000U;         // time of the demo in ms
 #define UTURN_YAW_RATE_DPS 60.0f            // Yaw rate for 180° turn (deg/s)
 #define UTURN_YAW_TOLERANCE 5.0f            // Degrees tolerance for completing turn
 #define UTURN_COOLDOWN_MS 2000U             // Cooldown before another UTURN can be triggered
+
+// ============================================================================
+// BEGIN EKF INTEGRATION — copy this block into any swarm app
+//
+// Requires: #include "estimator/relative_localization.h" (above)
+// Requires: relative_localization.c compiled into firmware (already in src/modules/)
+// Runtime params in cfclient: ekf.enabled, ekf.useInd
+// Logs in cfclient: swarm.relX0..relPsi2, swarm.ekfConn, swarm.ekfNConn
+// Also see: relLoc.*, relDbg.*, relSelf.* for deeper EKF diagnostics
+// ============================================================================
+#define EKF_MAX_PEERS 3             // Must match MAX_PEERS in relative_localization.c
+static uint8_t ekfEnabled = 1;      // 1=run EKF, 0=disable  (cfclient: ekf.enabled)
+static uint8_t ekfUseIndirect = 1;  // 1=use indirect+direct, 0=direct only (cfclient: ekf.useInd)
+static float relX[EKF_MAX_PEERS];   // Relative X of each peer in self's body frame (m)
+static float relY[EKF_MAX_PEERS];   // Relative Y (m)
+static float relZ[EKF_MAX_PEERS];   // Relative Z (m)
+static float relPsi[EKF_MAX_PEERS]; // Relative heading (rad)
+static float relDist[EKF_MAX_PEERS];// Euclidean distance to peer (m)
+static uint8_t ekfConnected = 0;    // 1 if any peer is tracked
+static uint8_t ekfNumConnected = 0; // Number of tracked peers
+// END EKF INTEGRATION — variables
 
 // ============================================================================
 // Log variable IDs
@@ -1195,6 +1217,32 @@ static void runSequence(void) {
     }
 
     // ========================================================================
+    // BEGIN EKF INTEGRATION — in-flight update (copy this block)
+    // Runs at the flight loop rate (100 Hz). Identical logic to idle-loop
+    // but with the actual dt from the flight loop.
+    // ========================================================================
+    if (ekfEnabled) {
+      relativeLocalizationSetUseIndirect(ekfUseIndirect != 0);
+      relativeLocalizationUpdate((float)dtMs / 1000.0f, ekfUseIndirect != 0);
+
+      ekfConnected = relativeLocalizationIsConnected() ? 1 : 0;
+      ekfNumConnected = relativeLocalizationGetNumConnected();
+
+      for (uint8_t j = 0; j < EKF_MAX_PEERS; j++) {
+        float st[4];
+        if (relativeLocalizationGetState(j, st)) {
+          relX[j] = st[0];
+          relY[j] = st[1];
+          relZ[j] = st[2];
+          relPsi[j] = st[3];
+          relDist[j] = sqrtf(st[0]*st[0] + st[1]*st[1] + st[2]*st[2]);
+        }
+      }
+    }
+    // END EKF INTEGRATION — in-flight update
+    // ========================================================================
+
+    // ========================================================================
     // State machine: check transitions and execute current state
     // ========================================================================
     FlightState nextState = checkTransition(currentState);
@@ -1314,6 +1362,18 @@ void appMain(void) {
       (double)getTimestamp(), droneId, AUX_UWB_ACTIVE_THRESHOLD, peerCloseMm);
   }
       
+  // ========================================================================
+  // BEGIN EKF INTEGRATION — initialization (copy this block)
+  // ========================================================================
+  relativeLocalizationInit();
+  relativeLocalizationSetSelfId(droneId);       // Skip self-slot in EKF
+  relativeLocalizationSetNumPeers(EKF_MAX_PEERS); // Swarm size including self
+  relativeLocalizationSetUseIndirect(ekfUseIndirect != 0);
+  DEBUG_PRINT("[%.2f] EKF initialized (selfId=%u, peers=%u, indirect=%u)\n",
+              (double)getTimestamp(), droneId, EKF_MAX_PEERS, ekfUseIndirect);
+  // END EKF INTEGRATION — initialization
+  // ========================================================================
+
   bool wasActive = false;
 
   if (droneId != 0) {
@@ -1324,7 +1384,28 @@ void appMain(void) {
       if (checkAndMaybeEmergencyLand()) {
         landToZero();
       }
-      
+
+      // ====================================================================
+      // BEGIN EKF INTEGRATION — idle-loop update (runs even on the ground)
+      // This lets you verify EKF convergence in cfclient before takeoff.
+      // ====================================================================
+      if (ekfEnabled) {
+        relativeLocalizationSetUseIndirect(ekfUseIndirect != 0);
+        relativeLocalizationUpdate(0.02f, ekfUseIndirect != 0); // 50 Hz idle
+        ekfConnected = relativeLocalizationIsConnected() ? 1 : 0;
+        ekfNumConnected = relativeLocalizationGetNumConnected();
+        for (uint8_t j = 0; j < EKF_MAX_PEERS; j++) {
+          float st[4];
+          if (relativeLocalizationGetState(j, st)) {
+            relX[j] = st[0]; relY[j] = st[1];
+            relZ[j] = st[2]; relPsi[j] = st[3];
+            relDist[j] = sqrtf(st[0]*st[0] + st[1]*st[1] + st[2]*st[2]);
+          }
+        }
+      }
+      // END EKF INTEGRATION — idle-loop update
+      // ====================================================================
+
       // On rising edge of trigger, run the sequence only if the middle beacon is on.
       if ((logGetUint(idDistance0) > 0) && active && !wasActive) {
         // Set velocity controller gains to ensure consistent behavior
@@ -1365,4 +1446,36 @@ PARAM_GROUP_STOP(swarm)
 // ============================================================================
 LOG_GROUP_START(swarm)
   LOG_ADD(LOG_UINT8, state, &currentState)
+  // --- BEGIN EKF INTEGRATION — log variables (copy this block) ---
+  LOG_ADD(LOG_UINT8, ekfConn, &ekfConnected)    // 1 if any peer tracked
+  LOG_ADD(LOG_UINT8, ekfNConn, &ekfNumConnected) // Number of tracked peers
+  // Peer 0: relative position in self's body frame
+  LOG_ADD(LOG_FLOAT, relX0, &relX[0])       // forward (m)
+  LOG_ADD(LOG_FLOAT, relY0, &relY[0])       // left (m)
+  LOG_ADD(LOG_FLOAT, relZ0, &relZ[0])       // up (m)
+  LOG_ADD(LOG_FLOAT, relD0, &relDist[0])    // Euclidean distance (m)
+  LOG_ADD(LOG_FLOAT, relPsi0, &relPsi[0])   // relative heading (rad)
+  // Peer 1
+  LOG_ADD(LOG_FLOAT, relX1, &relX[1])
+  LOG_ADD(LOG_FLOAT, relY1, &relY[1])
+  LOG_ADD(LOG_FLOAT, relZ1, &relZ[1])
+  LOG_ADD(LOG_FLOAT, relD1, &relDist[1])
+  LOG_ADD(LOG_FLOAT, relPsi1, &relPsi[1])
+  // Peer 2
+  LOG_ADD(LOG_FLOAT, relX2, &relX[2])
+  LOG_ADD(LOG_FLOAT, relY2, &relY[2])
+  LOG_ADD(LOG_FLOAT, relZ2, &relZ[2])
+  LOG_ADD(LOG_FLOAT, relD2, &relDist[2])
+  LOG_ADD(LOG_FLOAT, relPsi2, &relPsi[2])
+  // --- END EKF INTEGRATION — log variables ---
 LOG_GROUP_STOP(swarm)
+
+// ============================================================================
+// BEGIN EKF INTEGRATION — parameters (copy this block)
+// Change at runtime in cfclient: ekf.enabled, ekf.useInd
+// ============================================================================
+PARAM_GROUP_START(ekf)
+  PARAM_ADD(PARAM_UINT8, enabled, &ekfEnabled)   // 1=run EKF, 0=off
+  PARAM_ADD(PARAM_UINT8, useInd, &ekfUseIndirect) // 1=direct+indirect, 0=direct only
+PARAM_GROUP_STOP(ekf)
+// END EKF INTEGRATION — parameters
