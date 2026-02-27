@@ -77,10 +77,10 @@ static VL53L8CX_ResultsData   results;
 static int16_t zoneDistances[16];
 
 /* Column averages in mm (valid zones only; 4000 if all zones invalid).
- * colAvg[0] = left  (zones 0,4,8,12)
- * colAvg[1] = mid-left  (zones 1,5,9,13)
- * colAvg[2] = mid-right (zones 2,6,10,14)
- * colAvg[3] = right (zones 3,7,11,15)
+ * colAvg[0] = right (zones 0,4,8,12)
+ * colAvg[1] = mid-right (zones 1,5,9,13)
+ * colAvg[2] = mid-left (zones 2,6,10,14)
+ * colAvg[3] = left (zones 3,7,11,15)
  */
 static int16_t colAvg[4];
 
@@ -237,8 +237,8 @@ LOG_GROUP_START(range8)
   LOG_ADD(LOG_INT16, z14, &zoneDistances[14])
   LOG_ADD(LOG_INT16, z15, &zoneDistances[15])
   /* Column averages for obstacle detection */
-  LOG_ADD(LOG_INT16, colL,  &colAvg[0])
-  LOG_ADD(LOG_INT16, colML, &colAvg[1])
-  LOG_ADD(LOG_INT16, colMR, &colAvg[2])
-  LOG_ADD(LOG_INT16, colR,  &colAvg[3])
+  LOG_ADD(LOG_INT16, colR,  &colAvg[0])
+  LOG_ADD(LOG_INT16, colMR, &colAvg[1])
+  LOG_ADD(LOG_INT16, colML, &colAvg[2])
+  LOG_ADD(LOG_INT16, colL,  &colAvg[3])
 LOG_GROUP_STOP(range8)
