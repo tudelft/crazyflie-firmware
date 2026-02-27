@@ -56,6 +56,14 @@ static bool peerInitialized[MAX_PEERS];
 static uint32_t lastUpdateTick[MAX_PEERS];
 static uint32_t lastPredictTick[MAX_PEERS];
 static uint16_t lastDirectRange_mm[MAX_PEERS];
+static bool     freshRange[MAX_PEERS];          // true only on the cycle a new packet arrived
+
+// Cached peer velocities: reuse last-known value between UWB packets
+// so the predict step doesn't assume peer is stationary (peerV=0)
+static float cachedPeerVx[MAX_PEERS];
+static float cachedPeerVy[MAX_PEERS];
+static float cachedPeerVz[MAX_PEERS];
+static float cachedPeerGz[MAX_PEERS];           // rad/s
 
 // Self state
 static float selfVx, selfVy, selfVz;
@@ -182,6 +190,11 @@ static void resetPeerBlock(uint8_t peerId) {
   lastUpdateTick[peerId] = 0;
   lastPredictTick[peerId] = 0;
   lastDirectRange_mm[peerId] = 0;
+  freshRange[peerId] = false;
+  cachedPeerVx[peerId] = 0.0f;
+  cachedPeerVy[peerId] = 0.0f;
+  cachedPeerVz[peerId] = 0.0f;
+  cachedPeerGz[peerId] = 0.0f;
 }
 
 static void initPeer(uint8_t peerId, float x, float y, float z, float psi) {
@@ -492,11 +505,19 @@ void relativeLocalizationUpdate(float dt, bool useIndirect) {
 
   bool doIndirect = (useIndirect || (useIndirectMeas != 0));
 
-  // Gather peer inputs
-  float peerVx[MAX_PEERS] = {0};
-  float peerVy[MAX_PEERS] = {0};
-  float peerVz[MAX_PEERS] = {0};
-  float peerGz[MAX_PEERS] = {0};
+  // Gather peer inputs — start from CACHED values (last-known velocity)
+  // so predict doesn't assume peer is stationary between UWB packets.
+  float peerVx[MAX_PEERS];
+  float peerVy[MAX_PEERS];
+  float peerVz[MAX_PEERS];
+  float peerGz[MAX_PEERS];
+  for (int i = 0; i < MAX_PEERS; i++) {
+    peerVx[i] = cachedPeerVx[i];
+    peerVy[i] = cachedPeerVy[i];
+    peerVz[i] = cachedPeerVz[i];
+    peerGz[i] = cachedPeerGz[i];
+    freshRange[i] = false;  // Assume no fresh data this cycle
+  }
 
   uint32_t now = xTaskGetTickCount();
   connectedMask = 0;
@@ -524,16 +545,23 @@ void relativeLocalizationUpdate(float dt, bool useIndirect) {
         initPeer(j, initDist, defaultInitY, initZ, defaultInitPsi);
       }
 
+      // Update predict inputs AND cache for next cycle
       peerVx[j] = vjx;
       peerVy[j] = vjy;
       peerVz[j] = vjz;
       peerGz[j] = peerGzDeg * M_PI_F / 180.0f;
+
+      cachedPeerVx[j] = vjx;
+      cachedPeerVy[j] = vjy;
+      cachedPeerVz[j] = vjz;
+      cachedPeerGz[j] = peerGzDeg * M_PI_F / 180.0f;
 
       connectedMask |= (1 << j);
       numConnected++;
 
       lastUpdateTick[j] = now;
       lastDirectRange_mm[j] = range;
+      freshRange[j] = true;  // Mark: this cycle has a NEW measurement
 
     } else {
       dbgPeerValid[j] = 0;  // No fresh UWB data for this peer
@@ -544,13 +572,15 @@ void relativeLocalizationUpdate(float dt, bool useIndirect) {
     }
   }
 
-  // Predict
+  // Predict (uses cached velocity when no fresh packet → peer not assumed stationary)
   ekfPredictAll(peerVx, peerVy, peerVz, peerGz, dt);
 
-  // Direct updates
+  // Direct updates — ONLY when we got a FRESH range this cycle.
+  // Using stale ranges every cycle causes predict-update oscillation.
   for (uint8_t j = 0; j < numPeers && j < MAX_PEERS; j++) {
     if (j == selfId) continue;  // Skip self
     if (!peerInitialized[j]) continue;
+    if (!freshRange[j]) continue;  // Skip stale — only update on new UWB data
     uint16_t r = lastDirectRange_mm[j];
     if (r > 0) {
       // Debug: compute innovation before update

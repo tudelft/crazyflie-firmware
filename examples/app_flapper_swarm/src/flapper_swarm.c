@@ -1416,6 +1416,30 @@ void appMain(void) {
       wasActive = active;
       vTaskDelay(pdMS_TO_TICKS(20));
     }
+  } else {
+    // ====================================================================
+    // Drone 0 (beacon/anchor): no flight, but still run EKF so you can
+    // monitor relative positions from the beacon's perspective in cfclient.
+    // ====================================================================
+    DEBUG_PRINT("[%.2f] Drone 0: beacon mode, running EKF only (no flight)\n",
+                (double)getTimestamp());
+    while (1) {
+      if (ekfEnabled) {
+        relativeLocalizationSetUseIndirect(ekfUseIndirect != 0);
+        relativeLocalizationUpdate(0.02f, ekfUseIndirect != 0); // 50 Hz
+        ekfConnected = relativeLocalizationIsConnected() ? 1 : 0;
+        ekfNumConnected = relativeLocalizationGetNumConnected();
+        for (uint8_t j = 0; j < EKF_MAX_PEERS; j++) {
+          float st[4];
+          if (relativeLocalizationGetState(j, st)) {
+            relX[j] = st[0]; relY[j] = st[1];
+            relZ[j] = st[2]; relPsi[j] = st[3];
+            relDist[j] = sqrtf(st[0]*st[0] + st[1]*st[1] + st[2]*st[2]);
+          }
+        }
+      }
+      vTaskDelay(pdMS_TO_TICKS(20));
+    }
   }
 }
 
