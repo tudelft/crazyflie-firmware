@@ -62,6 +62,14 @@ static float avoidSpeedFactor = 1.0f;        // full speed during avoidance
 static float avoidYawRateMagnitude = 70.0f;  // absolute yaw rate for avoidance (deg/s)
 static uint32_t demoTimeMs = 60000U;         // time of the demo in ms
 
+// Obstacle avoidance (VL53L8CX forward sensor)
+static uint16_t obstTrigMm = 1200U;          // Middle-col avg trigger distance (mm)
+static uint16_t obstBackDurMs = 500U;        // Backup phase duration (ms)
+static float obstBackVx = -0.3f;             // Backup body-x velocity (m/s, negative = rearward)
+static float obstRotDeg = 80.0f;             // Rotation angle after backup (degrees)
+static float obstRotRate = 50.0f;            // Yaw rate during rotation (deg/s)
+static uint8_t obstEnterConfirmCount = 2U;   // Confirmation samples to enter OBSTACLE
+
 // ============================================================================
 // Fixed parameters (not runtime configurable)
 // ============================================================================
@@ -87,6 +95,9 @@ static uint32_t demoTimeMs = 60000U;         // time of the demo in ms
 #define REJOIN_EXTRA_MM 50U
 #define REJOIN_CONFIRM_COUNT 3
 
+// OBSTACLE state constants
+#define OBSTACLE_YAW_TOLERANCE 5.0f         // Degrees tolerance for obstacle rotation completion
+
 // UTURN state constants
 #define MIDDLE_BOUND_OFFSET_MM 400U         // Middle bound = dist0AbortMm - 400mm
 #define UTURN_CONFIRM_COUNT 2               // Samples to confirm middle bound exceeded
@@ -106,6 +117,12 @@ static logVarId_t idYaw         = (logVarId_t)0xFFFF;
 static logVarId_t idMotionDeltaX = (logVarId_t)0xFFFF;
 static logVarId_t idMotionDeltaY = (logVarId_t)0xFFFF;
 static logVarId_t idZrange       = (logVarId_t)0xFFFF;  // raw z-ranger reading (mm)
+
+// Obstacle: VL53L8CX column averages (optional, requires zranger3 deck)
+static logVarId_t idObstColL     = (logVarId_t)0xFFFF;  // left column avg (mm)
+static logVarId_t idObstColML    = (logVarId_t)0xFFFF;  // mid-left column avg (mm)
+static logVarId_t idObstColMR    = (logVarId_t)0xFFFF;  // mid-right column avg (mm)
+static logVarId_t idObstColR     = (logVarId_t)0xFFFF;  // right column avg (mm)
 
 // Drone 1 specific
 static logVarId_t idCppmAux0    = (logVarId_t)0xFFFF;  // RC trigger
@@ -128,7 +145,8 @@ typedef enum {
   STATE_RECOVER   = 3,
   STATE_DANCE     = 4,
   STATE_UTURN     = 5,   // Emergency 180° turn near outer bound (one-shot)
-  STATE_UTURN_FLY = 6    // Flying straight after UTURN, trying to reach inner bound
+  STATE_UTURN_FLY = 6,   // Flying straight after UTURN, trying to reach inner bound
+  STATE_OBSTACLE  = 7    // Forward obstacle detected: back up then rotate to clear side
 } FlightState;
 
 static uint8_t currentState = STATE_STRAIGHT;  // Exposed for logging
@@ -159,6 +177,15 @@ static float uturnYawStart = 0.0f;          // Yaw at start of UTURN
 static float uturnTargetYaw = 0.0f;         // Target yaw (180° from start)
 static bool uturnActive = false;            // Whether we're actively tracking the 180° turn
 static uint32_t uturnCooldownEndTime = 0;   // Timestamp when UTURN cooldown ends
+
+// OBSTACLE state variables
+static int8_t  obstFreeDir = 1;             // +1 = positive yaw, -1 = negative yaw
+static uint8_t obstPhase = 0;               // 0 = backup, 1 = rotate
+static uint32_t obstPhaseStartMs = 0;       // Tick timestamp when current phase started
+static float obstRotYawStart = 0.0f;        // Yaw at start of rotation phase
+static float obstRotTargetYaw = 0.0f;       // Target yaw for rotation
+static bool obstComplete = false;           // True when both phases complete
+static uint8_t obstEnterCount = 0;          // Confirmation counter for OBSTACLE entry
 
 // Sequence abort flag set by emergency check
 static volatile bool seqAbort = false;
@@ -519,6 +546,31 @@ static bool shouldEnterDance(void) {
 }
 
 // ============================================================================
+// Obstacle helper
+// ============================================================================
+
+// Returns true when the middle two column averages are both below obstTrigMm
+// (with confirmation). Requires the zranger3 deck to be present.
+static bool shouldEnterObstacle(void) {
+  if (!logVarIdIsValid(idObstColML) || !logVarIdIsValid(idObstColMR)) {
+    obstEnterCount = 0;
+    return false;
+  }
+  int32_t midL = logGetInt(idObstColML);
+  int32_t midR = logGetInt(idObstColMR);
+  float midAvg = (float)(midL + midR) / 2.0f;
+  if (midAvg > 0.0f && midAvg < (float)obstTrigMm) {
+    if (++obstEnterCount >= obstEnterConfirmCount) {
+      obstEnterCount = 0;
+      return true;
+    }
+  } else {
+    obstEnterCount = 0;
+  }
+  return false;
+}
+
+// ============================================================================
 // UTURN helper functions
 // ============================================================================
 static inline uint16_t getMiddleBoundMm(void) {
@@ -626,7 +678,14 @@ static FlightState checkTransitionStraight(void) {
     DEBUG_PRINT("[%.2f] STRAIGHT -> AVOID: peer too close\n", (double)getTimestamp());
     return STATE_AVOID;
   }
-  
+
+  // STRAIGHT -> OBSTACLE: forward obstacle detected
+  if (shouldEnterObstacle()) {
+    DEBUG_PRINT("[%.2f] STRAIGHT -> OBSTACLE: middle cols avg < %u mm\n",
+                (double)getTimestamp(), obstTrigMm);
+    return STATE_OBSTACLE;
+  }
+
   // STRAIGHT -> UTURN: approaching outer bound (one-shot emergency turn)
   if (shouldEnterUturn()) {
     DEBUG_PRINT("[%.2f] STRAIGHT -> UTURN: middle bound exceeded (d0=%lu >= %u)\n",
@@ -676,6 +735,13 @@ static FlightState checkTransitionTurn(void) {
   if (shouldEnterAvoid()) {
     DEBUG_PRINT("[%.2f] TURN -> AVOID: peer too close\n", (double)getTimestamp());
     return STATE_AVOID;
+  }
+
+  // TURN -> OBSTACLE: forward obstacle detected
+  if (shouldEnterObstacle()) {
+    DEBUG_PRINT("[%.2f] TURN -> OBSTACLE: middle cols avg < %u mm\n",
+                (double)getTimestamp(), obstTrigMm);
+    return STATE_OBSTACLE;
   }
 
   // TURN -> UTURN: approaching outer bound (one-shot emergency turn)
@@ -752,6 +818,13 @@ static FlightState checkTransitionAvoid(void) {
     return STATE_DANCE;
   }
 
+  // AVOID -> OBSTACLE: forward obstacle detected
+  if (shouldEnterObstacle()) {
+    DEBUG_PRINT("[%.2f] AVOID -> OBSTACLE: middle cols avg < %u mm\n",
+                (double)getTimestamp(), obstTrigMm);
+    return STATE_OBSTACLE;
+  }
+
   // AVOID -> UTURN: approaching outer bound (emergency turn)
   if (shouldEnterUturn()) {
     DEBUG_PRINT("[%.2f] AVOID -> UTURN: middle bound exceeded (d0=%lu >= %u)\n",
@@ -811,7 +884,14 @@ static FlightState checkTransitionRecover(void) {
     DEBUG_PRINT("[%.2f] RECOVER -> AVOID: peer too close\n", (double)getTimestamp());
     return STATE_AVOID;
   }
-  
+
+  // RECOVER -> OBSTACLE: forward obstacle detected
+  if (shouldEnterObstacle()) {
+    DEBUG_PRINT("[%.2f] RECOVER -> OBSTACLE: middle cols avg < %u mm\n",
+                (double)getTimestamp(), obstTrigMm);
+    return STATE_OBSTACLE;
+  }
+
   // RECOVER -> UTURN: approaching outer bound (one-shot emergency turn)
   if (shouldEnterUturn()) {
     DEBUG_PRINT("[%.2f] RECOVER -> UTURN: middle bound exceeded (d0=%lu >= %u)\n",
@@ -956,6 +1036,88 @@ static void executeDance(void) {
   }
 }
 
+// --- OBSTACLE state ---
+// Phase 0: back up for obstBackDurMs, then Phase 1: rotate obstRotDeg toward free side.
+// Free side is determined once on entry by comparing left vs right column averages.
+
+static void onEnterObstacle(void) {
+  uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+  // Decide turn direction: whichever outer column has larger average distance is "freer"
+  int32_t colL = logVarIdIsValid(idObstColL) ? logGetInt(idObstColL) : 4000;
+  int32_t colR = logVarIdIsValid(idObstColR) ? logGetInt(idObstColR) : 4000;
+  obstFreeDir = (colR > colL) ? 1 : -1;
+
+  obstPhase = 0;
+  obstPhaseStartMs = now;
+  obstComplete = false;
+
+  DEBUG_PRINT("[%.2f] Enter OBSTACLE: colL=%ld colR=%ld freeDir=%d\n",
+              (double)getTimestamp(), (long)colL, (long)colR, (int)obstFreeDir);
+}
+
+static void onExitObstacle(void) {
+  obstEnterCount = 0;
+  obstComplete = false;
+  DEBUG_PRINT("[%.2f] Exit OBSTACLE\n", (double)getTimestamp());
+}
+
+static FlightState checkTransitionObstacle(void) {
+  // OBSTACLE -> UTURN: approaching outer bound
+  if (shouldEnterUturn()) {
+    DEBUG_PRINT("[%.2f] OBSTACLE -> UTURN: middle bound exceeded (d0=%lu >= %u)\n",
+                (double)getTimestamp(), (unsigned long)ctx.d0, getMiddleBoundMm());
+    return STATE_UTURN;
+  }
+
+  // OBSTACLE -> STRAIGHT or RECOVER: both phases complete
+  if (obstComplete) {
+    if (ctx.d0 < innerBoundMm) {
+      DEBUG_PRINT("[%.2f] OBSTACLE -> STRAIGHT: complete, inside bound (d0=%lu)\n",
+                  (double)getTimestamp(), (unsigned long)ctx.d0);
+      return STATE_STRAIGHT;
+    } else {
+      DEBUG_PRINT("[%.2f] OBSTACLE -> RECOVER: complete, outside bound (d0=%lu)\n",
+                  (double)getTimestamp(), (unsigned long)ctx.d0);
+      return STATE_RECOVER;
+    }
+  }
+
+  return STATE_OBSTACLE;
+}
+
+static void executeObstacle(void) {
+  uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+  if (obstPhase == 0) {
+    // Phase 0: backup
+    if ((now - obstPhaseStartMs) < (uint32_t)obstBackDurMs) {
+      sendHover(obstBackVx, 0.0f, targetHeightM, 0.0f);
+      return;
+    }
+    // Transition to rotation phase
+    obstPhase = 1;
+    obstPhaseStartMs = now;
+    obstRotYawStart = logGetFloat(idYaw);
+    obstRotTargetYaw = normalizeAngle(obstRotYawStart + (float)obstFreeDir * obstRotDeg);
+    DEBUG_PRINT("[%.2f] OBSTACLE phase1: startYaw=%.1f targetYaw=%.1f dir=%d\n",
+                (double)getTimestamp(), (double)obstRotYawStart,
+                (double)obstRotTargetYaw, (int)obstFreeDir);
+  }
+
+  // Phase 1: rotate toward free side
+  float curYaw = logGetFloat(idYaw);
+  float yawDiff = fabsf(normalizeAngle(curYaw - obstRotTargetYaw));
+  if (yawDiff <= OBSTACLE_YAW_TOLERANCE) {
+    obstComplete = true;
+    sendHover(0.0f, 0.0f, targetHeightM, 0.0f);
+    DEBUG_PRINT("[%.2f] OBSTACLE: rotation done, curYaw=%.1f\n",
+                (double)getTimestamp(), (double)curYaw);
+  } else {
+    sendHover(0.0f, 0.0f, targetHeightM, (float)obstFreeDir * obstRotRate);
+  }
+}
+
 // --- UTURN state (turning phase) ---
 static void onEnterUturn(void) {
   DEBUG_PRINT("[%.2f] Enter UTURN (drone %u)\n", (double)getTimestamp(), droneId);
@@ -1074,25 +1236,27 @@ static void executeUturnFly(void) {
 // ============================================================================
 static void onEnterState(FlightState state) {
   switch (state) {
-    case STATE_STRAIGHT:  onEnterStraight();  break;
-    case STATE_TURN:      onEnterTurn();      break;
-    case STATE_AVOID:     onEnterAvoid();     break;
-    case STATE_RECOVER:   onEnterRecover();   break;
-    case STATE_DANCE:     onEnterDance();     break;
-    case STATE_UTURN:     onEnterUturn();     break;
-    case STATE_UTURN_FLY: onEnterUturnFly();  break;
+    case STATE_STRAIGHT:  onEnterStraight();   break;
+    case STATE_TURN:      onEnterTurn();       break;
+    case STATE_AVOID:     onEnterAvoid();      break;
+    case STATE_RECOVER:   onEnterRecover();    break;
+    case STATE_DANCE:     onEnterDance();      break;
+    case STATE_UTURN:     onEnterUturn();      break;
+    case STATE_UTURN_FLY: onEnterUturnFly();   break;
+    case STATE_OBSTACLE:  onEnterObstacle();   break;
   }
 }
 
 static void onExitState(FlightState state) {
   switch (state) {
-    case STATE_STRAIGHT:  onExitStraight();  break;
-    case STATE_TURN:      onExitTurn();      break;
-    case STATE_AVOID:     onExitAvoid();     break;
-    case STATE_RECOVER:   onExitRecover();   break;
-    case STATE_DANCE:     onExitDance();     break;
-    case STATE_UTURN:     onExitUturn();     break;
-    case STATE_UTURN_FLY: onExitUturnFly();  break;
+    case STATE_STRAIGHT:  onExitStraight();   break;
+    case STATE_TURN:      onExitTurn();       break;
+    case STATE_AVOID:     onExitAvoid();      break;
+    case STATE_RECOVER:   onExitRecover();    break;
+    case STATE_DANCE:     onExitDance();      break;
+    case STATE_UTURN:     onExitUturn();      break;
+    case STATE_UTURN_FLY: onExitUturnFly();   break;
+    case STATE_OBSTACLE:  onExitObstacle();   break;
   }
 }
 
@@ -1105,19 +1269,21 @@ static FlightState checkTransition(FlightState state) {
     case STATE_DANCE:     return checkTransitionDance();
     case STATE_UTURN:     return checkTransitionUturn();
     case STATE_UTURN_FLY: return checkTransitionUturnFly();
+    case STATE_OBSTACLE:  return checkTransitionObstacle();
   }
   return state;
 }
 
 static void executeState(FlightState state) {
   switch (state) {
-    case STATE_STRAIGHT:  executeStraight();  break;
-    case STATE_TURN:      executeTurn();      break;
-    case STATE_AVOID:     executeAvoid();     break;
-    case STATE_RECOVER:   executeRecover();   break;
-    case STATE_DANCE:     executeDance();     break;
-    case STATE_UTURN:     executeUturn();     break;
-    case STATE_UTURN_FLY: executeUturnFly();  break;
+    case STATE_STRAIGHT:  executeStraight();   break;
+    case STATE_TURN:      executeTurn();       break;
+    case STATE_AVOID:     executeAvoid();      break;
+    case STATE_RECOVER:   executeRecover();    break;
+    case STATE_DANCE:     executeDance();      break;
+    case STATE_UTURN:     executeUturn();      break;
+    case STATE_UTURN_FLY: executeUturnFly();   break;
+    case STATE_OBSTACLE:  executeObstacle();   break;
   }
 }
 
@@ -1134,6 +1300,9 @@ static void runSequence(void) {
   middleBoundOverCount = 0;
   uturnCooldownEndTime = 0;   // Reset cooldown for new sequence
   uturnActive = false;
+  obstEnterCount = 0;
+  obstComplete = false;
+  obstPhase = 0;
   
   // Reset state context
   memset(&ctx, 0, sizeof(ctx));
@@ -1289,6 +1458,12 @@ void appMain(void) {
   ensureLogId(&idMotionDeltaY, "motion", "deltaY");
   ensureLogId(&idZrange,       "range", "zrange");
 
+  // Obstacle: VL53L8CX column averages (optional, require zranger3 deck)
+  ensureLogId(&idObstColL,  "range8", "colL");
+  ensureLogId(&idObstColML, "range8", "colML");
+  ensureLogId(&idObstColMR, "range8", "colMR");
+  ensureLogId(&idObstColR,  "range8", "colR");
+
   // Drone-specific IDs
   if (droneId == 1) {
     // Drone 1: RC trigger and distance/height to drone 2
@@ -1357,11 +1532,17 @@ PARAM_GROUP_START(swarm)
   PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, avoidSpeed, &avoidSpeedFactor)
   PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, avoidYawRate, &avoidYawRateMagnitude)
   PARAM_ADD(PARAM_UINT32 | PARAM_PERSISTENT, demoTime, &demoTimeMs)
+  PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, obstTrigMm, &obstTrigMm)
+  PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, obstBackMs, &obstBackDurMs)
+  PARAM_ADD(PARAM_FLOAT  | PARAM_PERSISTENT, obstBackVx, &obstBackVx)
+  PARAM_ADD(PARAM_FLOAT  | PARAM_PERSISTENT, obstRotDeg, &obstRotDeg)
+  PARAM_ADD(PARAM_FLOAT  | PARAM_PERSISTENT, obstRotRate, &obstRotRate)
+  PARAM_ADD(PARAM_UINT8  | PARAM_PERSISTENT, obstEnterCnt, &obstEnterConfirmCount)
 PARAM_GROUP_STOP(swarm)
 
 // ============================================================================
 // Log definitions (for monitoring state)
-// State values: 0=STRAIGHT, 1=TURN, 2=AVOID, 3=RECOVER, 4=DANCE, 5=UTURN, 6=UTURN_FLY
+// State values: 0=STRAIGHT, 1=TURN, 2=AVOID, 3=RECOVER, 4=DANCE, 5=UTURN, 6=UTURN_FLY, 7=OBSTACLE
 // ============================================================================
 LOG_GROUP_START(swarm)
   LOG_ADD(LOG_UINT8, state, &currentState)

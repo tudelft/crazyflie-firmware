@@ -76,6 +76,14 @@ static VL53L8CX_ResultsData   results;
  */
 static int16_t zoneDistances[16];
 
+/* Column averages in mm (valid zones only; 4000 if all zones invalid).
+ * colAvg[0] = left  (zones 0,4,8,12)
+ * colAvg[1] = mid-left  (zones 1,5,9,13)
+ * colAvg[2] = mid-right (zones 2,6,10,14)
+ * colAvg[3] = right (zones 3,7,11,15)
+ */
+static int16_t colAvg[4];
+
 /* ---------------------------------------------------------------------------
  * Deck driver callbacks
  * --------------------------------------------------------------------------- */
@@ -87,11 +95,11 @@ void zRanger3Init(DeckInfo* info)
 
   if (vl53l8cxInit(&dev, I2C1_DEV))
   {
-    DEBUG_PRINT("Z-down VL53L8CX [OK]\n");
+    DEBUG_PRINT("Z-forward VL53L8CX [OK]\n");
   }
   else
   {
-    DEBUG_PRINT("Z-down VL53L8CX [FAIL]\n");
+    DEBUG_PRINT("Z-forward VL53L8CX [FAIL]\n");
     return;
   }
 
@@ -151,8 +159,28 @@ void zRanger3Task(void* arg)
     for (uint8_t i = 0; i < nZones && i < 16; i++)
     {
 #ifndef VL53L8CX_DISABLE_DISTANCE_MM
+#ifndef VL53L8CX_DISABLE_TARGET_STATUS
+      /* Only accept zones with a valid ranging status (5 = valid, 9 = valid) */
+      uint8_t s = results.target_status[i];
+      zoneDistances[i] = (s == 5 || s == 9) ? results.distance_mm[i] : 0;
+#else
       zoneDistances[i] = results.distance_mm[i];
 #endif
+#endif
+    }
+
+    /* Compute column averages over valid (positive) zones.
+     * Column j contains row-major zones: j, j+4, j+8, j+12. */
+    for (uint8_t col = 0; col < 4; col++)
+    {
+      int32_t sum   = 0;
+      int32_t count = 0;
+      for (uint8_t row = 0; row < 4; row++)
+      {
+        int16_t d = zoneDistances[row * 4 + col];
+        if (d > 0) { sum += d; count++; }
+      }
+      colAvg[col] = (count > 0) ? (int16_t)(sum / count) : 4000;
     }
   }
 }
@@ -208,4 +236,9 @@ LOG_GROUP_START(range8)
   LOG_ADD(LOG_INT16, z13, &zoneDistances[13])
   LOG_ADD(LOG_INT16, z14, &zoneDistances[14])
   LOG_ADD(LOG_INT16, z15, &zoneDistances[15])
+  /* Column averages for obstacle detection */
+  LOG_ADD(LOG_INT16, colL,  &colAvg[0])
+  LOG_ADD(LOG_INT16, colML, &colAvg[1])
+  LOG_ADD(LOG_INT16, colMR, &colAvg[2])
+  LOG_ADD(LOG_INT16, colR,  &colAvg[3])
 LOG_GROUP_STOP(range8)
