@@ -43,6 +43,10 @@
 
 #define PEER_TIMEOUT_TICKS 500
 
+// EKF debug print throttle
+static uint32_t ekfDbgCounter = 0;
+#define EKF_DBG_INTERVAL 250  // print every 250th update (~5s at 50Hz)
+
 // ============ MODULE STATE ============
 
 static bool moduleInitialized = false;
@@ -633,6 +637,49 @@ void relativeLocalizationUpdate(float dt, bool useIndirect) {
       logPxx[j] = 0.0f;
       logPyy[j] = 0.0f;
     }
+  }
+
+  // ---- Throttled EKF debug summary ----
+  ekfDbgCounter++;
+  if (ekfDbgCounter % EKF_DBG_INTERVAL == 0) {
+    // CTRL: self state used for predict
+    DEBUG_PRINT("=== EKF[self=%d] CTRL: self_vx=%.3f self_vy=%.3f self_vz=%.3f self_gz=%.3f self_h=%.3f ===\n",
+      selfId,
+      (double)selfVx, (double)selfVy, (double)selfVz,
+      (double)selfGz, (double)selfHeight);
+
+    for (uint8_t j = 0; j < numPeers && j < MAX_PEERS; j++) {
+      if (j == selfId) continue;
+      // CTRL: peer velocities used in predict for this peer
+      DEBUG_PRINT("  CTRL peer=%d: peer_vx=%.3f peer_vy=%.3f peer_vz=%.3f peer_gz=%.3f (fresh=%d init=%d)\n",
+        j,
+        (double)peerVx[j], (double)peerVy[j], (double)peerVz[j], (double)peerGz[j],
+        freshRange[j] ? 1 : 0,
+        peerInitialized[j] ? 1 : 0);
+
+      // MEAS: direct range measurement for this peer
+      DEBUG_PRINT("  MEAS peer=%d: direct_range=%umm (fresh=%d) | pred_range=%.3fm innov=%.3fm\n",
+        j,
+        (unsigned)lastDirectRange_mm[j],
+        freshRange[j] ? 1 : 0,
+        (double)dbgPredRange[j],
+        (double)dbgInnov[j]);
+
+      // EST: output estimate for this peer
+      DEBUG_PRINT("  EST  peer=%d: x=%.3f y=%.3f z=%.3f psi=%.3f | Pxx=%.4f Pyy=%.4f\n",
+        j,
+        (double)X[IDX(j, STATE_X)], (double)X[IDX(j, STATE_Y)],
+        (double)X[IDX(j, STATE_Z)], (double)X[IDX(j, STATE_PSI)],
+        (double)P[IDX(j, STATE_X)][IDX(j, STATE_X)],
+        (double)P[IDX(j, STATE_Y)][IDX(j, STATE_Y)]);
+    }
+
+    // MEAS: indirect ranges
+    if (doIndirect) {
+      DEBUG_PRINT("  MEAS indirect: [0<->1]=%umm [0<->2]=%umm [1<->2]=%umm\n",
+        (unsigned)dbgIndRange01_mm, (unsigned)dbgIndRange02_mm, (unsigned)dbgIndRange12_mm);
+    }
+    DEBUG_PRINT("  connMask=0x%02X numConn=%d\n", connectedMask, numConnected);
   }
 }
 

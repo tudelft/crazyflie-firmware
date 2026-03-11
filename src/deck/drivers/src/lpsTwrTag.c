@@ -33,8 +33,12 @@
 #include "configblock.h"
 #include "estimator.h"
 #include "swarm_info.h"
-
+#include "locodeck.h"
 #include "debug.h"
+
+// Anchor/beacon support
+extern bool isAnchor;
+#define ANCHOR_VEL_EPSILON 1e-6f
 
 // Debug: track UWB health
 static uint32_t uwbPacketsSent = 0;
@@ -42,6 +46,10 @@ static uint32_t uwbPacketsReceived = 0;
 static uint32_t uwbErrors = 0;
 static uint32_t lastUwbHealthCheck = 0;
 #define UWB_HEALTH_CHECK_INTERVAL_MS 5000
+
+// Debug counter to throttle prints
+static uint32_t debugPrintCounter = 0;
+#define DEBUG_PRINT_INTERVAL 200
 
 static void checkUwbHealth(void) {
   uint32_t now = xTaskGetTickCount();
@@ -90,8 +98,8 @@ static locoAddress_t selfAddress;
 // Swarm size: total number of crazyflies in the swarm (including self)
 static uint8_t swarmSize = 3;
 
-// Only this drone ID is allowed to publish AUX (default: 1)
-static uint8_t auxPublisherId = 1;
+// Only this drone ID is allowed to publish AUX (default: 0)
+static uint8_t auxPublisherId = 0;
 
 static inline uint8_t effectiveSwarmSize(void) {
   uint8_t n = swarmSize;
@@ -399,6 +407,25 @@ static void rxcallback(dwDevice_t *dev) {
           state.indirectDist[current_receiveID][j] = report->distToPeers[j];
         }
 
+        // Debug: log received peer state + indirect distances
+        debugPrintCounter++;
+        if (debugPrintCounter % DEBUG_PRINT_INTERVAL == 0) {
+          DEBUG_PRINT("[self=%d] GOT REPORT from peer=%d | "
+            "peer_dist=%umm peer_vx=%.3f peer_vy=%.3f peer_vz=%.3f "
+            "peer_gz=%.3f peer_h=%.3f | "
+            "indirect[%d->0]=%u [%d->1]=%u [%d->2]=%u\n",
+            selfID, current_receiveID,
+            (unsigned)state.distance[current_receiveID],
+            (double)state.vx[current_receiveID],
+            (double)state.vy[current_receiveID],
+            (double)state.vz[current_receiveID],
+            (double)state.gz[current_receiveID],
+            (double)state.h[current_receiveID],
+            current_receiveID, (unsigned)state.indirectDist[current_receiveID][0],
+            current_receiveID, (unsigned)state.indirectDist[current_receiveID][1],
+            current_receiveID, (unsigned)state.indirectDist[current_receiveID][2]);
+        }
+
         if (isAnchor == 0)
         {
           distanceMeasurement_t dist;
@@ -429,6 +456,14 @@ static void rxcallback(dwDevice_t *dev) {
 
       // Fetch latest self state to include in the report
       swarmInfoGet(&selfX2, &selfY2, &selfGz2, &selfh2, &selfVx2, &selfVy2, &selfVz2);
+
+      // If we are an anchor/beacon, override velocities and yaw rate to near-zero
+      if (isAnchor) {
+        selfVx2 = ANCHOR_VEL_EPSILON;
+        selfVy2 = ANCHOR_VEL_EPSILON;
+        selfVz2 = ANCHOR_VEL_EPSILON;
+        selfGz2 = ANCHOR_VEL_EPSILON;
+      }
 
       report2->selfX = selfX2;
       report2->selfY = selfY2;
@@ -501,6 +536,15 @@ static void rxcallback(dwDevice_t *dev) {
 
         // Fetch latest self state to include in the report
         swarmInfoGet(&selfX, &selfY, &selfGz, &selfh, &selfVx, &selfVy, &selfVz);
+
+        // If we are an anchor/beacon, override velocities and yaw rate to near-zero
+        if (isAnchor) {
+          selfVx = ANCHOR_VEL_EPSILON;
+          selfVy = ANCHOR_VEL_EPSILON;
+          selfVz = ANCHOR_VEL_EPSILON;
+          selfGz = ANCHOR_VEL_EPSILON;
+        }
+
         report->selfX = selfX;
         report->selfY = selfY;
         report->selfGz = selfGz;
@@ -563,6 +607,25 @@ static void rxcallback(dwDevice_t *dev) {
           // Store indirect distances from this peer
           for (int j = 0; j < MAX_SWARM_SIZE; j++) {
             state.indirectDist[rangingID][j] = report2->distToPeers[j];
+          }
+
+          // Debug: log received peer state + indirect distances
+          debugPrintCounter++;
+          if (debugPrintCounter % DEBUG_PRINT_INTERVAL == 0) {
+            DEBUG_PRINT("[self=%d] GOT REPORT+1 from peer=%d | "
+              "peer_dist=%umm peer_vx=%.3f peer_vy=%.3f peer_vz=%.3f "
+              "peer_gz=%.3f peer_h=%.3f | "
+              "indirect[%d->0]=%u [%d->1]=%u [%d->2]=%u\n",
+              selfID, rangingID,
+              (unsigned)state.distance[rangingID],
+              (double)state.vx[rangingID],
+              (double)state.vy[rangingID],
+              (double)state.vz[rangingID],
+              (double)state.gz[rangingID],
+              (double)state.h[rangingID],
+              rangingID, (unsigned)state.indirectDist[rangingID][0],
+              rangingID, (unsigned)state.indirectDist[rangingID][1],
+              rangingID, (unsigned)state.indirectDist[rangingID][2]);
           }
 
           if (isAnchor == 0)

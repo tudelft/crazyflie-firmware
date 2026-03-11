@@ -30,6 +30,7 @@
 #include "stabilizer_types.h"
 #include "supervisor.h"
 #include "configblock.h"
+#include "locodeck.h"
 #include "estimator/relative_localization.h"
 
 // ============================================================================
@@ -1321,6 +1322,13 @@ void appMain(void) {
   // Get drone ID from radio address (last nibble, like lpsTwrTag does)
   droneId = (uint8_t)(configblockGetRadioAddress() & 0xF);
   DEBUG_PRINT("[%.2f] Flapper Swarm App started, droneId=%u (from radio address)\n", (double)getTimestamp(), droneId);
+
+  // If this is the beacon drone (ID 0), mark it as an anchor so the UWB driver
+  // sends near-zero velocities/rates — prevents EKF drift on other drones
+  if (droneId == 0) {
+    isAnchor = true;
+    DEBUG_PRINT("[%.2f] Drone 0: set isAnchor=true (beacon on ground)\n", (double)getTimestamp());
+  }
 
   
   // Resolve log IDs based on droneId
