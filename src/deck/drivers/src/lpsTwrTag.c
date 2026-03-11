@@ -98,8 +98,8 @@ static locoAddress_t selfAddress;
 // Swarm size: total number of crazyflies in the swarm (including self)
 static uint8_t swarmSize = 3;
 
-// Only this drone ID is allowed to publish AUX (default: 0)
-static uint8_t auxPublisherId = 0;
+// Only this drone ID is allowed to publish AUX (default: 1)
+static uint8_t auxPublisherId = 1;
 
 static inline uint8_t effectiveSwarmSize(void) {
   uint8_t n = swarmSize;
