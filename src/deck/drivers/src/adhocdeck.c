@@ -29,7 +29,7 @@
 
 #ifndef UWB_DEBUG_ENABLE
   #undef DEBUG_PRINT
-  #define DEBUG_PRINT
+  #define DEBUG_PRINT(...)
 #endif
 
 #define CS_PIN DECK_GPIO_IO1
@@ -328,7 +328,7 @@ static void reset(void) {
   vTaskDelay(M2T(10));
 }
 
-extern dwOps_t dwt_ops = {
+dwOps_t dwt_ops = {
     .spiRead = spiRead,
     .spiWrite = spiWrite,
     .spiSetSpeed = spiSetSpeed,

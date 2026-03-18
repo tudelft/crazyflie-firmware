@@ -455,8 +455,10 @@ void raftInit() {
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftNode.config = EMPTY_CONFIG;
   raftNode.config.clusterId = raftClusterId;
-  for (int i = 0; i <= 4; i++) {
-    raftConfigAdd(i);
+  for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+    if (raftMembers & (1 << i)) {
+      raftConfigAdd(i);
+    }
   }
   DEBUG_PRINT("raftInit: node id = %u, cluster id = %u.\n", raftNode.me, raftClusterId);
   printRaftConfig(raftNode.config);
@@ -1006,6 +1008,6 @@ void printRaftLogItem(Raft_Log_Item_t *item) {
 }
 
 PARAM_GROUP_START(RAFT)
-  PARAM_ADD_CORE(PARAM_UINT32 | PARAM_PERSISTENT, RAFT_CONFIG, &raftMembers)
-  PARAM_ADD_CORE(PARAM_UINT8 | PARAM_PERSISTENT, RAFT_CONFIG, &raftClusterId)
+  PARAM_ADD_CORE(PARAM_UINT32 | PARAM_PERSISTENT, RAFT_MEMBERS, &raftMembers)
+  PARAM_ADD_CORE(PARAM_UINT8 | PARAM_PERSISTENT, RAFT_CLUSTER_ID, &raftClusterId)
 PARAM_GROUP_STOP(RAFT)

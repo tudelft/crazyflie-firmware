@@ -30,4 +30,6 @@ obj-y += pid.o
 obj-y += version.o
 version-objs := version_gen.o
 src/utils/src/version_gen.c: src/utils/src/version.vtpl FORCE
-	 $(PYTHON) $(srctree)/tools/make/versionTemplate.py --crazyflie-base $(srctree) $< $@
+	$(PYTHON) $(srctree)/tools/make/versionTemplate.py --crazyflie-base $(srctree) $< $@
+
+obj-y += syscalls.o

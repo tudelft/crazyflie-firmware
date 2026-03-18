@@ -197,6 +197,8 @@ SECTIONS
 
     PROVIDE ( end = _enzds );
     PROVIDE ( _end = _enzds );
+    PROVIDE ( __HeapBase = __end);
+    PROVIDE ( __HeapLimit = _estack);
 
 
     /* This is the user stack section

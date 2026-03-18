@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "task.h"
 #include "app.h"
+#include "system.h"
 #include "raft.h"
 
 static TaskHandle_t raftTaskHandle;
@@ -84,6 +85,7 @@ static void raftTestTask() {
 }
 
 void appMain() {
+  systemWaitStart();
   raftNode = getGlobalRaftNode();
   xTaskCreate(raftTestTask, "RAFT_TEST", UWB_TASK_STACK_SIZE, NULL,
               ADHOC_DECK_TASK_PRI, &raftTaskHandle);
