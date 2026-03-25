@@ -161,6 +161,12 @@ static logVarId_t idGyroX = (logVarId_t)0xFFFF;
 static logVarId_t idGyroY = (logVarId_t)0xFFFF;
 static logVarId_t idGyroZ = (logVarId_t)0xFFFF;
 
+// Motor PWM log IDs — read stabilizer output before switching to RL override
+static logVarId_t idMotLogM1 = (logVarId_t)0xFFFF;
+static logVarId_t idMotLogM2 = (logVarId_t)0xFFFF;
+static logVarId_t idMotLogM3 = (logVarId_t)0xFFFF;
+static logVarId_t idMotLogM4 = (logVarId_t)0xFFFF;
+
 // Param variable IDs for motor override
 static paramVarId_t idMotorEnable;
 static paramVarId_t idMotorM1, idMotorM2, idMotorM3, idMotorM4;
@@ -375,10 +381,10 @@ static void applyActions(const float* act) {
   logPwmM4 = pwm_m4;
 
   // Write to motorPowerSet params (overrides stabilizer output)
-  paramSetInt(idMotorM1, pwm_m1);
-  paramSetInt(idMotorM2, pwm_m2);
-  paramSetInt(idMotorM3, pwm_m3);
-  paramSetInt(idMotorM4, pwm_m4);
+  // paramSetInt(idMotorM1, pwm_m1);
+  // paramSetInt(idMotorM2, pwm_m2);
+  // paramSetInt(idMotorM3, pwm_m3);
+  // paramSetInt(idMotorM4, pwm_m4);
 }
 
 // ============================================================================
@@ -401,11 +407,12 @@ static void sendKeepAliveSetpoint(void) {
 // ============================================================================
 static void enableMotorOverride(bool enable) {
   if (enable) {
-    // Set all PWMs to 0 before enabling override (safety)
-    paramSetInt(idMotorM1, 0);
-    paramSetInt(idMotorM2, 0);
-    paramSetInt(idMotorM3, 0);
-    paramSetInt(idMotorM4, 0);
+    // Snapshot the stabilizer's current PWM outputs and seed the override with them,
+    // so the transition to RL doesn't cause a sudden motor cut.
+    paramSetInt(idMotorM1, (uint32_t)logGetFloat(idMotLogM1));
+    paramSetInt(idMotorM2, (uint32_t)logGetFloat(idMotLogM2));
+    paramSetInt(idMotorM3, (uint32_t)logGetFloat(idMotLogM3));
+    paramSetInt(idMotorM4, (uint32_t)logGetFloat(idMotLogM4));
     paramSetInt(idMotorEnable, 1);
     // Disable tumble check — RL may produce aggressive manoeuvres
     paramSetInt(idTumbleCheck, 0);
@@ -421,6 +428,19 @@ static void enableMotorOverride(bool enable) {
 // RL controller — one step (called at 100 Hz)
 // ============================================================================
 static void rlControllerCompute(void) {
+  // Measure and periodically print actual update rate
+  static TickType_t lastRlTick = 0;
+  static uint32_t rlStepCount = 0;
+  TickType_t now = xTaskGetTickCount();
+  if (lastRlTick != 0) {
+    TickType_t dt_ticks = now - lastRlTick;
+    if (dt_ticks > 0 && (++rlStepCount % 100) == 0) {
+      float hz = (float)configTICK_RATE_HZ / (float)dt_ticks;
+      DEBUG_PRINT("RL rate: %.1f Hz\n", (double)hz);
+    }
+  }
+  lastRlTick = now;
+
   // Detect gate crossing (uses prev position stored last step)
   checkGatePassing();
 
@@ -446,6 +466,7 @@ static void rlControllerCompute(void) {
 // ============================================================================
 // Helper: send hover command
 // ============================================================================
+__attribute__((unused))
 static void sendHoverCommand(float altitudeM, float xM, float yM) {
   setpoint_t sp;
   memset(&sp, 0, sizeof(sp));
@@ -467,6 +488,7 @@ static void sendHoverCommand(float altitudeM, float xM, float yM) {
 // ============================================================================
 // Helper: send landing velocity command
 // ============================================================================
+__attribute__((unused))
 static void sendLandingCommand(void) {
   setpoint_t sp;
   memset(&sp, 0, sizeof(sp));
@@ -501,14 +523,20 @@ void appMain(void) {
     ensureLogId(&idRoll,  "stateEstimate", "roll");
     ensureLogId(&idPitch, "stateEstimate", "pitch");
     ensureLogId(&idYawSe, "stateEstimate", "yaw");
-    ensureLogId(&idGyroX, "gyro", "x");
-    ensureLogId(&idGyroY, "gyro", "y");
-    ensureLogId(&idGyroZ, "gyro", "z");
+    ensureLogId(&idGyroX,    "gyro",  "x");
+    ensureLogId(&idGyroY,    "gyro",  "y");
+    ensureLogId(&idGyroZ,    "gyro",  "z");
+    ensureLogId(&idMotLogM1, "motor", "m1");
+    ensureLogId(&idMotLogM2, "motor", "m2");
+    ensureLogId(&idMotLogM3, "motor", "m3");
+    ensureLogId(&idMotLogM4, "motor", "m4");
 
     allFound = logVarIdIsValid(idX)  && logVarIdIsValid(idY)  && logVarIdIsValid(idZ)
             && logVarIdIsValid(idVx) && logVarIdIsValid(idVy) && logVarIdIsValid(idVz)
             && logVarIdIsValid(idRoll) && logVarIdIsValid(idPitch) && logVarIdIsValid(idYawSe)
-            && logVarIdIsValid(idGyroX) && logVarIdIsValid(idGyroY) && logVarIdIsValid(idGyroZ);
+            && logVarIdIsValid(idGyroX) && logVarIdIsValid(idGyroY) && logVarIdIsValid(idGyroZ)
+            && logVarIdIsValid(idMotLogM1) && logVarIdIsValid(idMotLogM2)
+            && logVarIdIsValid(idMotLogM3) && logVarIdIsValid(idMotLogM4);
 
     if (!allFound) {
       vTaskDelay(pdMS_TO_TICKS(100));
@@ -584,6 +612,8 @@ void appMain(void) {
     // ---- State machine -----------------------------------------------------
     switch (currentState) {
       case STATE_IDLE:
+        // [DEBUG] Commented out landing commands
+        /*
         if (!landingFinished) {
           if (!isLanding) {
             DEBUG_PRINT("Landing from z=%.2f\n", (double)currentZ);
@@ -603,10 +633,12 @@ void appMain(void) {
             landingFinished = true;
           }
         }
+        */
         break;
 
       case STATE_HOVERING:
-        sendHoverCommand(hoverAltitudeM, hoverXM, hoverYM);
+        // [DEBUG] Commented out hovering commands
+        // sendHoverCommand(hoverAltitudeM, hoverXM, hoverYM);
         break;
 
       case STATE_RL_CONTROL:
