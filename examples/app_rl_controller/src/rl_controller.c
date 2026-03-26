@@ -134,6 +134,17 @@ static float gateRelZ[NUM_GATES];
 static float gateRelYaw[NUM_GATES];
 
 // ============================================================================
+// Servo zero-PWM calibration
+// Measured during STATE_HOVERING so we know the neutral servo position for
+// this specific Flapper unit.  Initialized at startup from the live motor log
+// (capturing the firmware-configured servo center for this unit) so the value
+// is valid even if we never complete a hover step.
+// ============================================================================
+static float    zeroPwmM1          = 0.0f;  // pitch servo neutral (set at startup)
+static float    zeroPwmM3          = 0.0f;  // yaw servo neutral   (set at startup)
+static uint32_t hoverPwmSampleCount = 0;   // reset each time we enter hovering
+
+// ============================================================================
 // RL state
 // ============================================================================
 static int   currentTargetGate = 0;
@@ -178,6 +189,8 @@ static paramVarId_t idTumbleCheck;
 static float   logNnOut0, logNnOut1, logNnOut2, logNnOut3;
 static uint16_t logPwmM1, logPwmM2, logPwmM3, logPwmM4;
 static uint8_t  logTargetGate = 0;
+static float    logZeroPwmM1  = 0.0f;
+static float    logZeroPwmM3  = 0.0f;
 
 // ============================================================================
 // Helper: wrap angle to [-pi, pi]
@@ -343,25 +356,26 @@ static void applyActions(const float* act) {
   lastActions[2] = act[2];
   lastActions[3] = act[3];
 
-  // Scale [-1,1] → [0,1]
-  // Action mapping: [0]=left flap, [1]=right flap, [2]=dihedral, [3]=yaw
+  // Scale [-1,1] → [0,1] for flapping motors
+  // Action mapping: [0]=left flap, [1]=right flap, [2]=dihedral servo, [3]=yaw servo
   float s0 = (act[0] + 1.0f) * 0.5f;
   float s1 = (act[1] + 1.0f) * 0.5f;
-  float s2 = (act[2] + 1.0f) * 0.5f;
-  float s3 = (act[3] + 1.0f) * 0.5f;
 
   // Clamp to [0,1] for safety (NN clip should already ensure this)
   if (s0 < 0.0f) { s0 = 0.0f; } else if (s0 > 1.0f) { s0 = 1.0f; }
   if (s1 < 0.0f) { s1 = 0.0f; } else if (s1 > 1.0f) { s1 = 1.0f; }
-  if (s2 < 0.0f) { s2 = 0.0f; } else if (s2 > 1.0f) { s2 = 1.0f; }
-  if (s3 < 0.0f) { s3 = 0.0f; } else if (s3 > 1.0f) { s3 = 1.0f; }
 
-  // Scale [0,1] → [0, pwm_max_mi], then clip to [pwm_min_mi, pwm_max_mi]
-  // Motor mapping (Flapper revD): m1=pitch, m2=left, m3=yaw, m4=right
-  int32_t raw_m1 = (int32_t)(s2 * PWM_MAX_M1);
+  // Flapping motors: scale [0,1] → [0, pwm_max]
+  // Motor mapping (Flapper revD): m2=left flap, m4=right flap
   int32_t raw_m2 = (int32_t)(s0 * PWM_MAX_M2);
-  int32_t raw_m3 = (int32_t)(s3 * PWM_MAX_M3);
   int32_t raw_m4 = (int32_t)(s1 * PWM_MAX_M4);
+
+  // Servo motors: zero-centred around the measured hover PWM so that action=0
+  // produces neutral deflection on this specific Flapper unit.
+  // Formula: pwm = zeroPwm + act * (PWM_MAX / 2)
+  // (s_i is unused for servos — we use the raw act[] directly)
+  int32_t raw_m1 = (int32_t)(zeroPwmM1 + act[2] * ((float)PWM_MAX_M1 * 0.5f));
+  int32_t raw_m3 = (int32_t)(zeroPwmM3 + act[3] * ((float)PWM_MAX_M3 * 0.5f));
 
   // Clip to per-motor [min, max] (matches _compute_control_states clamp)
   if (raw_m1 < PWM_MIN_M1) { raw_m1 = PWM_MIN_M1; } else if (raw_m1 > PWM_MAX_M1) { raw_m1 = PWM_MAX_M1; }
@@ -551,6 +565,16 @@ void appMain(void) {
   idMotorM4     = paramGetVarId("motorPowerSet", "m4");
   idTumbleCheck = paramGetVarId("supervisor",    "tmblChckEn");
 
+  // Seed servo-zero estimates from the current motor output.  This captures the
+  // firmware-configured servo center for this specific Flapper unit and gives a
+  // valid baseline even if STATE_HOVERING is never reached.
+  zeroPwmM1 = logGetFloat(idMotLogM1);
+  zeroPwmM3 = logGetFloat(idMotLogM3);
+  logZeroPwmM1 = zeroPwmM1;
+  logZeroPwmM3 = zeroPwmM3;
+  DEBUG_PRINT("Servo zero init: M1=%.0f M3=%.0f\n",
+              (double)zeroPwmM1, (double)zeroPwmM3);
+
   DEBUG_PRINT("Log + param IDs ready. Target alt: %.2f m\n", (double)targetAltitudeM);
 
   // Initialize timing
@@ -578,6 +602,7 @@ void appMain(void) {
         hoverAltitudeM = targetAltitudeM;
         hoverXM = currentX;
         hoverYM = currentY;
+        hoverPwmSampleCount = 0;   // restart servo-zero measurement
         DEBUG_PRINT("Hover at (%.2f, %.2f, %.2f)\n",
                     (double)hoverXM, (double)hoverYM, (double)hoverAltitudeM);
 
@@ -599,8 +624,10 @@ void appMain(void) {
         hoverYM = currentY;
 
         enableMotorOverride(true);
-        DEBUG_PRINT("RL active at (%.2f, %.2f, %.2f)\n",
-                    (double)currentX, (double)currentY, (double)currentZ);
+        DEBUG_PRINT("RL active at (%.2f, %.2f, %.2f), zeroPwm M1=%.0f M3=%.0f (n=%lu samples)\n",
+                    (double)currentX, (double)currentY, (double)currentZ,
+                    (double)zeroPwmM1, (double)zeroPwmM3,
+                    (unsigned long)hoverPwmSampleCount);
 
       } else if (currentState == STATE_IDLE) {
         isLanding = false;
@@ -636,10 +663,23 @@ void appMain(void) {
         */
         break;
 
-      case STATE_HOVERING:
+      case STATE_HOVERING: {
         // [DEBUG] Commented out hovering commands
         // sendHoverCommand(hoverAltitudeM, hoverXM, hoverYM);
+
+        // Measure the stabilizer's servo PWM outputs and accumulate a running
+        // average so we know the neutral position for this specific Flapper.
+        float m1pwm = logGetFloat(idMotLogM1);
+        float m3pwm = logGetFloat(idMotLogM3);
+        hoverPwmSampleCount++;
+        // Cumulative moving average: avg_n = avg_{n-1} + (x - avg_{n-1}) / n
+        float inv_n = 1.0f / (float)hoverPwmSampleCount;
+        zeroPwmM1 = zeroPwmM1 + (m1pwm - zeroPwmM1) * inv_n;
+        zeroPwmM3 = zeroPwmM3 + (m3pwm - zeroPwmM3) * inv_n;
+        logZeroPwmM1 = zeroPwmM1;
+        logZeroPwmM3 = zeroPwmM3;
         break;
+      }
 
       case STATE_RL_CONTROL:
         rlControllerCompute();
@@ -682,4 +722,6 @@ LOG_GROUP_START(rlapp)
   LOG_ADD(LOG_UINT16, pwmM2,      &logPwmM2)
   LOG_ADD(LOG_UINT16, pwmM3,      &logPwmM3)
   LOG_ADD(LOG_UINT16, pwmM4,      &logPwmM4)
+  LOG_ADD(LOG_FLOAT,  zeroPwmM1,  &logZeroPwmM1)
+  LOG_ADD(LOG_FLOAT,  zeroPwmM3,  &logZeroPwmM3)
 LOG_GROUP_STOP(rlapp)
