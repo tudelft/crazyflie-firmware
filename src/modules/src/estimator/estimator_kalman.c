@@ -578,19 +578,19 @@ PARAM_GROUP_START(kalman)
   /**
  * @brief Initial X after reset [m]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialX, &coreParams.initialX)
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialX, &coreParams.initialX)
   /**
  * @brief Initial Y after reset [m]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialY, &coreParams.initialY)
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialY, &coreParams.initialY)
   /**
  * @brief Initial Z after reset [m]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialZ, &coreParams.initialZ)
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialZ, &coreParams.initialZ)
   /**
  * @brief Initial yaw after reset [rad]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialYaw, &coreParams.initialYaw)
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialYaw, &coreParams.initialYaw)
   /**
   * @brief Drag in x direction (in N*s/m)
   */
