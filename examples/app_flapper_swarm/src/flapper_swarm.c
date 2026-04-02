@@ -147,6 +147,9 @@ static logVarId_t idRangingAux2 = (logVarId_t)0xFFFF;  // UWB kill switch
 static logVarId_t idDistance1   = (logVarId_t)0xFFFF;  // distance to drone 1
 static logVarId_t idHeight1     = (logVarId_t)0xFFFF;  // height of drone 1
 
+// USD (micro SD) logging param
+static paramVarId_t usdLoggingId;
+
 // ============================================================================
 // State machine
 // ============================================================================
@@ -367,6 +370,28 @@ static StateContext ctx;
 static inline void ensureLogId(logVarId_t* id, const char* group, const char* name) {
   if (!logVarIdIsValid(*id)) {
     *id = logGetVarId(group, name);
+  }
+}
+
+// Try to resolve the USD logging param if not yet valid.
+// The USD deck may register its params after appMain() starts.
+static void ensureUsdLoggingId(void) {
+  if (!PARAM_VARID_IS_VALID(usdLoggingId)) {
+    usdLoggingId = paramGetVarId("usd", "logging");
+  }
+}
+
+static void enableUsdLogging(void) {
+  ensureUsdLoggingId();
+  if (PARAM_VARID_IS_VALID(usdLoggingId)) {
+    paramSetInt(usdLoggingId, 1);
+  }
+}
+
+static void disableUsdLogging(void) {
+  ensureUsdLoggingId();
+  if (PARAM_VARID_IS_VALID(usdLoggingId)) {
+    paramSetInt(usdLoggingId, 0);
   }
 }
 
@@ -1211,6 +1236,12 @@ static void runSequence(void) {
       break;
     }
 
+    // Check if trigger deactivated (aux switch turned off)
+    if (!isTriggerActive()) {
+      DEBUG_PRINT("[%.2f] Trigger off, ending sequence\n", (double)getTimestamp());
+      break;
+    }
+
     // Kill check (drone 2+ only)
     if (checkKillAndDisarm()) break;
 
@@ -1364,6 +1395,17 @@ void appMain(void) {
   ensureLogId(&idMotionDeltaY, "motion", "deltaY");
   ensureLogId(&idZrange,       "range", "zrange");
 
+  // USD logging param ID — deck drivers may not be initialized yet,
+  // so try a few times at startup, but don't block forever (the lazy
+  // resolver in setUsdLogging() will keep trying later if needed).
+  for (int i = 0; i < 20; i++) {
+    usdLoggingId = paramGetVarId("usd", "logging");
+    if (PARAM_VARID_IS_VALID(usdLoggingId)) break;
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+  DEBUG_PRINT("[%.2f] USD logging param %s\n", (double)getTimestamp(),
+              PARAM_VARID_IS_VALID(usdLoggingId) ? "found" : "NOT YET (will retry lazily)");
+
   // Drone-specific IDs
   if (droneId == 1) {
     // Drone 1: RC trigger and distance/height to drone 2
@@ -1375,6 +1417,14 @@ void appMain(void) {
     }
     DEBUG_PRINT("[%.2f] Drone 1: RC trigger (cppm.aux0<%d), avoid on distance2<=%u (CW)\n",
       (double)getTimestamp(), AUX_RC_ACTIVE_THRESH, peerCloseMm);
+  } else if (droneId == 0) {
+    // Drone 0 (beacon): only needs aux1 for USD logging trigger
+    while (!logVarIdIsValid(idRangingAux1)) {
+      ensureLogId(&idRangingAux1, "ranging", "aux1");
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    DEBUG_PRINT("[%.2f] Drone 0: beacon, UWB trigger (ranging.aux1) for USD logging\n",
+      (double)getTimestamp());
   } else {
     // Drone 2+: UWB trigger/kill and distance/height to drone 1
     while (!logVarIdIsValid(idRangingAux1) || !logVarIdIsValid(idRangingAux2) ||
@@ -1433,11 +1483,18 @@ void appMain(void) {
       // END EKF INTEGRATION — idle-loop update
       // ====================================================================
 
-      // On rising edge of trigger, run the sequence only if the middle beacon is on.
-      if ((logGetUint(idDistance0) > 0) && active && !wasActive) {
-        // Set velocity controller gains to ensure consistent behavior
-        setVelocityControllerGains();
-        runSequence();
+      // On rising edge of trigger, enable USD logging, wait 3s, then run sequence
+      if (active && !wasActive) {
+        enableUsdLogging();
+        vTaskDelay(pdMS_TO_TICKS(3000));
+
+        // Only fly if the middle beacon is visible and trigger is still on
+        if ((logGetUint(idDistance0) > 0) && isTriggerActive()) {
+          setVelocityControllerGains();
+          runSequence();
+        }
+
+        disableUsdLogging();
       }
       
       wasActive = active;
@@ -1445,11 +1502,12 @@ void appMain(void) {
     }
   } else {
     // ====================================================================
-    // Drone 0 (beacon/anchor): no flight, but still run EKF so you can
-    // monitor relative positions from the beacon's perspective in cfclient.
+    // Drone 0 (beacon/anchor): no flight, EKF + USD logging via same
+    // trigger that drone 2 uses (ranging.aux1 through isTriggerActive).
     // ====================================================================
-    DEBUG_PRINT("[%.2f] Drone 0: beacon mode, running EKF only (no flight)\n",
+    DEBUG_PRINT("[%.2f] Drone 0: beacon mode, EKF + USD logging (no flight)\n",
                 (double)getTimestamp());
+    bool beacon_wasActive = false;
     while (1) {
       if (ekfEnabled) {
         relativeLocalizationSetUseIndirect(ekfUseIndirect != 0);
@@ -1465,6 +1523,19 @@ void appMain(void) {
           }
         }
       }
+
+      // Same trigger as drone 2: isTriggerActive() checks ranging.aux1
+      const bool active = isTriggerActive();
+
+      if (active && !beacon_wasActive) {
+        // Rising edge — demo starting on flying drones
+        enableUsdLogging();
+      } else if (!active && beacon_wasActive) {
+        // Falling edge — demo ended on flying drones
+        disableUsdLogging();
+      }
+      beacon_wasActive = active;
+
       vTaskDelay(pdMS_TO_TICKS(20));
     }
   }
