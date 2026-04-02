@@ -227,6 +227,9 @@ static void uwbTxTask(void *parameters) {
       ASSERT(packetCache.header.type < UWB_MESSAGE_TYPE_COUNT);
       ASSERT(packetCache.header.length <= UWB_FRAME_LEN_MAX);
 
+      DEBUG_PRINT("uwbTxTask: Sending packet type=%d, dest=%d, len=%d\n",
+                  packetCache.header.type, packetCache.header.destAddress, packetCache.header.length);
+
       /* Reset DW3000 to idle state */
       dwt_forcetrxoff();
       dwt_writetxdata(packetCache.header.length, (uint8_t *) &packetCache, 0);

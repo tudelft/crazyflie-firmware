@@ -15,10 +15,10 @@ CONFIG_CROSS_COMPILE="arm-none-eabi-"
 #
 # Platform configuration
 #
-CONFIG_PLATFORM_CF2=y
+# CONFIG_PLATFORM_CF2=y
 # CONFIG_PLATFORM_BOLT is not set
 # CONFIG_PLATFORM_TAG is not set
-# CONFIG_PLATFORM_FLAPPER is not set
+CONFIG_PLATFORM_FLAPPER=y
 
 #
 # IMU configuration
