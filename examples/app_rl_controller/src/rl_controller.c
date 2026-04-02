@@ -603,6 +603,15 @@ void appMain(void) {
         hoverXM = currentX;
         hoverYM = currentY;
         hoverPwmSampleCount = 0;   // restart servo-zero measurement
+
+        // Initialize gates and RL state so observations are valid during hover
+        initGates();
+        currentTargetGate = 0;
+        logTargetGate     = 0;
+        memset(lastActions, 0, sizeof(lastActions));
+        prevSimX = currentX;
+        prevSimY = currentY;
+
         DEBUG_PRINT("Hover at (%.2f, %.2f, %.2f)\n",
                     (double)hoverXM, (double)hoverYM, (double)hoverAltitudeM);
 
@@ -664,8 +673,8 @@ void appMain(void) {
         break;
 
       case STATE_HOVERING: {
-        // [DEBUG] Commented out hovering commands
-        // sendHoverCommand(hoverAltitudeM, hoverXM, hoverYM);
+        // Keep the PID stabilizer in control
+        sendHoverCommand(hoverAltitudeM, hoverXM, hoverYM);
 
         // Measure the stabilizer's servo PWM outputs and accumulate a running
         // average so we know the neutral position for this specific Flapper.
@@ -678,6 +687,17 @@ void appMain(void) {
         zeroPwmM3 = zeroPwmM3 + (m3pwm - zeroPwmM3) * inv_n;
         logZeroPwmM1 = zeroPwmM1;
         logZeroPwmM3 = zeroPwmM3;
+
+        // Run RL pipeline for monitoring — motor writes in applyActions remain
+        // commented out, so the PID stays in full control.
+        checkGatePassing();
+        computeObservation();
+        forward(observation, rlActions);
+        logNnOut0 = rlActions[0];
+        logNnOut1 = rlActions[1];
+        logNnOut2 = rlActions[2];
+        logNnOut3 = rlActions[3];
+        applyActions(rlActions);  // logs pwmM1-M4 but does not write to motors
         break;
       }
 
