@@ -2,7 +2,7 @@
 #define NEURAL_NET_H
 
 /* Network dimensions */
-#define INPUT_DIM 20
+#define INPUT_DIM 16
 #define OUTPUT_DIM 4
 #define NUM_LAYERS 4
 

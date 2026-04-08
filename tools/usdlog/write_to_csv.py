@@ -11,7 +11,7 @@ import numpy as np
 from scipy import stats
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--filename", type=str, default="tools/usdlog/log07")
+parser.add_argument("--filename", type=str, default="tools/usdlog/log02")
 args = parser.parse_args()
 
 # decode binary log data

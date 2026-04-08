@@ -48,7 +48,7 @@
 // ============================================================================
 // Constants
 // ============================================================================
-#define APP_FREQUENCY  100.0f   // Hz — matches RL training dt=0.01s
+#define APP_FREQUENCY  250.0f   // Hz — matches RL training dt=0.01s
 #define LAND_VZ_MPS    0.4f     // Descent velocity (m/s)
 #define CUT_Z_M        0.14f    // Cut controllers below this altitude (m)
 
@@ -60,7 +60,7 @@
 #define PWM_MAX_M1     65535
 #define PWM_MIN_M2     0       // left flapping motor
 #define PWM_MAX_M2     60000
-#define PWM_MIN_M3     9830    // yaw servo
+#define PWM_MIN_M3     0       // yaw servo
 #define PWM_MAX_M3     65535
 #define PWM_MIN_M4     0       // right flapping motor
 #define PWM_MAX_M4     60000
@@ -84,6 +84,8 @@ typedef enum {
 // Runtime-configurable parameters
 // ============================================================================
 static float   targetAltitudeM = 1.3f;
+static float   targetXM        = 0.0f;
+static float   targetYM        = 0.0f;
 static uint8_t targetState     = STATE_IDLE;
 
 // Gate origin in world frame (figure-8 centred at this point)
@@ -278,26 +280,26 @@ static void computeObservation(void) {
   float sim_r     = -fw_gy * DEG2RAD;
 
   // ---- Gate-frame transform -----------------------------------------------
-  int gi   = currentTargetGate % NUM_GATES;
-  float gc = gateCos[gi];
-  float gs = gateSin[gi];
-  float dx = sim_x - gateX[gi];
-  float dy = sim_y - gateY[gi];
+  // int gi   = currentTargetGate % NUM_GATES;
+  // float gc = gateCos[gi];
+  // float gs = gateSin[gi];
+  // float dx = sim_x - gateX[gi];
+  // float dy = sim_y - gateY[gi];
 
   // Position in gate frame
-  observation[0] =  dx * gc + dy * gs;
-  observation[1] = -dx * gs + dy * gc;
-  observation[2] =  sim_z - gateZ[gi];
+  observation[0] = sim_x;
+  observation[1] = sim_y;
+  observation[2] = sim_z;
 
   // Velocity in gate frame
-  observation[3] =  sim_vx * gc + sim_vy * gs;
-  observation[4] = -sim_vx * gs + sim_vy * gc;
-  observation[5] =  sim_vz;
+  observation[3] = sim_vx;
+  observation[4] = sim_vy;
+  observation[5] = sim_vz;
 
   // Attitude (yaw relative to gate yaw)
   observation[6] = sim_phi;
   observation[7] = sim_theta;
-  observation[8] = wrapAngle(sim_psi - gateYaw[gi]);
+  observation[8] = sim_psi;
 
   // Angular rates (body frame)
   observation[9]  = sim_p;
@@ -311,11 +313,11 @@ static void computeObservation(void) {
   observation[15] = lastActions[3];
 
   // Next gate relative to current target gate
-  int next = (currentTargetGate + 1) % NUM_GATES;
-  observation[16] = gateRelX[next];
-  observation[17] = gateRelY[next];
-  observation[18] = gateRelZ[next];
-  observation[19] = gateRelYaw[next];
+  // int next = (currentTargetGate + 1) % NUM_GATES;
+  // observation[16] = gateRelX[next];
+  // observation[17] = gateRelY[next];
+  // observation[18] = gateRelZ[next];
+  // observation[19] = gateRelYaw[next];
 
   // Store position for gate-passing detection (before next step)
   prevSimX = sim_x;
@@ -602,6 +604,8 @@ void appMain(void) {
         hoverAltitudeM = targetAltitudeM;
         hoverXM = currentX;
         hoverYM = currentY;
+        targetXM = currentX;
+        targetYM = currentY;
         hoverPwmSampleCount = 0;   // restart servo-zero measurement
 
         // Initialize gates and RL state so observations are valid during hover
@@ -648,8 +652,6 @@ void appMain(void) {
     // ---- State machine -----------------------------------------------------
     switch (currentState) {
       case STATE_IDLE:
-        // [DEBUG] Commented out landing commands
-        /*
         if (!landingFinished) {
           if (!isLanding) {
             DEBUG_PRINT("Landing from z=%.2f\n", (double)currentZ);
@@ -669,12 +671,11 @@ void appMain(void) {
             landingFinished = true;
           }
         }
-        */
         break;
 
       case STATE_HOVERING: {
         // Keep the PID stabilizer in control
-        sendHoverCommand(hoverAltitudeM, hoverXM, hoverYM);
+        sendHoverCommand(targetAltitudeM, targetXM, targetYM);
 
         // Measure the stabilizer's servo PWM outputs and accumulate a running
         // average so we know the neutral position for this specific Flapper.
@@ -719,6 +720,8 @@ void appMain(void) {
 // ============================================================================
 PARAM_GROUP_START(rlapp)
   PARAM_ADD(PARAM_FLOAT  | PARAM_PERSISTENT, targetAlt,   &targetAltitudeM)
+  PARAM_ADD(PARAM_FLOAT,                     targetX,      &targetXM)
+  PARAM_ADD(PARAM_FLOAT,                     targetY,      &targetYM)
   PARAM_ADD(PARAM_UINT8,                     targetState,  &targetState)
   PARAM_ADD(PARAM_FLOAT,                     gateOriginX,  &gateOriginX)
   PARAM_ADD(PARAM_FLOAT,                     gateOriginY,  &gateOriginY)
