@@ -78,7 +78,6 @@
 #include "supervisor.h"
 #include "axis3fSubSampler.h"
 #include "deck.h"
-#include "math3d.h"
 
 #include "statsCnt.h"
 #include "rateSupervisor.h"
@@ -160,9 +159,6 @@ static OutlierFilterLhState_t sweepOutlierFilterState;
 // Indicates that the internal state is corrupt and should be reset
 bool resetEstimation = false;
 
-bool wasArmedLastCheck = true;
-poseMeasurement_t lastGroundPoseMeasurement;
-
 static kalmanCoreParams_t coreParams = {
   KALMAN_CORE_DEFAULT_PARAMS_INIT
 };
@@ -198,21 +194,6 @@ STATIC_MEM_TASK_ALLOC_STACK_NO_DMA_CCM_SAFE(kalmanTask, KALMAN_TASK_STACKSIZE);
 
 // Called one time during system startup
 void estimatorKalmanTaskInit() {
-  // kalmanCoreDefaultParams(&coreParams);
-
-  // paramLogicStorageInit(); // call the initializer of the param storage again. 
-  // // see issue https://github.com/bitcraze/crazyflie-firmware/issues/1517
-
-  lastGroundPoseMeasurement.x = coreParams.initialX;
-  lastGroundPoseMeasurement.y = coreParams.initialY;
-  lastGroundPoseMeasurement.z = coreParams.initialZ;
-  lastGroundPoseMeasurement.quat.w = coreData.initialQuaternion[0];
-  lastGroundPoseMeasurement.quat.x = coreData.initialQuaternion[1];
-  lastGroundPoseMeasurement.quat.y = coreData.initialQuaternion[2];
-  lastGroundPoseMeasurement.quat.z = coreData.initialQuaternion[3];
-  lastGroundPoseMeasurement.stdDevPos = 0.0f;
-  lastGroundPoseMeasurement.stdDevQuat = 0.0f;
-
   // It would be logical to set the params->attitudeReversion here, based on deck requirements, but the decks are
   // not initialized yet at this point so it is done in estimatorKalmanInit().
 
@@ -261,48 +242,6 @@ static void kalmanTask(void* parameters) {
 
     // Run the system dynamics to predict the state forward.
     if (nowMs >= nextPredictionMs) {
-
-      // if not flying, enqueue a pose measurement at last known position with zero attitude
-      if (!supervisorIsArmed()) {
-        if (wasArmedLastCheck) {
-          lastGroundPoseMeasurement.x = coreData.S[KC_STATE_X];
-          lastGroundPoseMeasurement.y = coreData.S[KC_STATE_Y];
-          lastGroundPoseMeasurement.z = coreData.S[KC_STATE_Z];
-
-          lastGroundPoseMeasurement.quat.w = coreData.q[0];
-          lastGroundPoseMeasurement.quat.x = coreData.q[1];
-          lastGroundPoseMeasurement.quat.y = coreData.q[2];
-          lastGroundPoseMeasurement.quat.z = coreData.q[3];
-
-          wasArmedLastCheck = false;
-          DEBUG_PRINT("Storing last ground pose measurement\n");
-          DEBUG_PRINT("  pos: %.2f, %.2f, %.2f\n", (double)lastGroundPoseMeasurement.x, (double)lastGroundPoseMeasurement.y, (double)lastGroundPoseMeasurement.z);
-          DEBUG_PRINT("  quat: %.2f, %.2f, %.2f, %.2f\n", (double)lastGroundPoseMeasurement.quat.w, (double)lastGroundPoseMeasurement.quat.x, (double)lastGroundPoseMeasurement.quat.y, (double)lastGroundPoseMeasurement.quat.z);
-        }
-        poseMeasurement_t poseMeas;
-        poseMeas.x = lastGroundPoseMeasurement.x;
-        poseMeas.y = lastGroundPoseMeasurement.y;
-        poseMeas.z = lastGroundPoseMeasurement.z;        
-        
-        // Create a new quaternion with only the yaw from the last ground pose
-        struct quat q_last_ground = mkquat(lastGroundPoseMeasurement.quat.x, lastGroundPoseMeasurement.quat.y, lastGroundPoseMeasurement.quat.z, lastGroundPoseMeasurement.quat.w);
-        struct vec rpy = quat2rpy(q_last_ground);
-        struct quat q_yaw_only = rpy2quat(mkvec(0, 0, rpy.z));
-        poseMeas.quat.w = q_yaw_only.w;
-        poseMeas.quat.x = q_yaw_only.x;
-        poseMeas.quat.y = q_yaw_only.y;
-        poseMeas.quat.z = q_yaw_only.z;
-        // poseMeas.quat.w = lastGroundPoseMeasurement.quat.w;
-        // poseMeas.quat.x = lastGroundPoseMeasurement.quat.x;
-        // poseMeas.quat.y = lastGroundPoseMeasurement.quat.y;
-        // poseMeas.quat.z = lastGroundPoseMeasurement.quat.z;
-        poseMeas.stdDevPos = 0.0f;
-        poseMeas.stdDevQuat = 0.01f;
-        estimatorEnqueuePose(&poseMeas);
-      } else {
-        wasArmedLastCheck = true;
-      }
-
       axis3fSubSamplerFinalize(&accSubSampler);
       axis3fSubSamplerFinalize(&gyroSubSampler);
 
@@ -394,13 +333,13 @@ static void updateQueuedMeasurements(const uint32_t nowMs, const bool quadIsFlyi
         }
         break;
       case MeasurementTypeTOF:
-        kalmanCoreUpdateWithTof(&coreData, &m.data.tof, quadIsFlying);
+        kalmanCoreUpdateWithTof(&coreData, &m.data.tof);
         break;
       case MeasurementTypeAbsoluteHeight:
         kalmanCoreUpdateWithAbsoluteHeight(&coreData, &m.data.height);
         break;
       case MeasurementTypeFlow:
-        kalmanCoreUpdateWithFlow(&coreData, &m.data.flow, &gyroLatest, quadIsFlying);
+        kalmanCoreUpdateWithFlow(&coreData, &m.data.flow, &gyroLatest);
         break;
       case MeasurementTypeYawError:
         kalmanCoreUpdateWithYawError(&coreData, &m.data.yawError);
@@ -411,8 +350,6 @@ static void updateQueuedMeasurements(const uint32_t nowMs, const bool quadIsFlyi
       case MeasurementTypeGyroscope:
         axis3fSubSamplerAccumulate(&gyroSubSampler, &m.data.gyroscope.gyro);
         gyroLatest = m.data.gyroscope.gyro;
-        // Add to gyro history for flow delay compensation
-        mmFlowAddGyroSample(&m.data.gyroscope.gyro, nowMs);
         break;
       case MeasurementTypeAcceleration:
         axis3fSubSamplerAccumulate(&accSubSampler, &m.data.acceleration.acc);
@@ -641,17 +578,42 @@ PARAM_GROUP_START(kalman)
   /**
  * @brief Initial X after reset [m]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialX, &coreParams.initialX)
+  PARAM_ADD_CORE(PARAM_FLOAT, initialX, &coreParams.initialX)
   /**
  * @brief Initial Y after reset [m]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialY, &coreParams.initialY)
+  PARAM_ADD_CORE(PARAM_FLOAT, initialY, &coreParams.initialY)
   /**
  * @brief Initial Z after reset [m]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialZ, &coreParams.initialZ)
+  PARAM_ADD_CORE(PARAM_FLOAT, initialZ, &coreParams.initialZ)
   /**
  * @brief Initial yaw after reset [rad]
  */
-  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, initialYaw, &coreParams.initialYaw)
-PARAM_GROUP_STOP(kalman)
+  PARAM_ADD_CORE(PARAM_FLOAT, initialYaw, &coreParams.initialYaw)
+  /**
+  * @brief Drag in x direction (in N*s/m)
+  */
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, dragB_x, &coreParams.dragB_x)
+  /**
+   * @brief Drag in y direction (in N*s/m)
+   */
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, dragB_y, &coreParams.dragB_y)
+  /**
+   * @brief Drag in z direction (in N*s/m)
+   */
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, dragB_z, &coreParams.dragB_z)
+  /**
+   * @brief Center of pressure X (in meters)
+   */
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, cop_x, &coreParams.cop_x)
+  /**
+   * @brief Center of pressure Y (in meters)
+   */
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, cop_y, &coreParams.cop_y)
+  /**
+   * @brief Center of pressure Z (in meters)
+   */
+  PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, cop_z, &coreParams.cop_z)
+ 
+ PARAM_GROUP_STOP(kalman)

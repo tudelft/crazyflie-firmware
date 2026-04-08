@@ -25,7 +25,7 @@
 
 #include "mm_tof.h"
 
-void kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof, const bool isFlying)
+void kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof)
 {
   // Updates the filter with a measured distance in the zb direction using the
   float h[KC_STATE_DIM] = {0};
@@ -55,13 +55,7 @@ void kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof, cons
 
     h[KC_STATE_Z] = 1 / cosf(angle); // This just acts like a gain for the sensor model. Further updates are done in the scalar update function below
 
-    if (!isFlying) {
-      // When not flying, we want to correct the height to zero
-      kalmanCoreScalarUpdate(this, &H, (0.02f-predictedDistance), 0.0f);
-    }
     // Scalar update
-    if (isFlying) {
-      kalmanCoreScalarUpdate(this, &H, measuredDistance-predictedDistance, tof->stdDev);
-    }
+    kalmanCoreScalarUpdate(this, &H, measuredDistance-predictedDistance, tof->stdDev);
   }
 }

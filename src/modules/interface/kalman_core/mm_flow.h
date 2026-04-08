@@ -28,8 +28,4 @@
 #include "kalman_core.h"
 
 // Measurements of flow (dnx, dny)
-void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *flow, const Axis3f *gyro, const bool isFlying);
-
-// Add gyro sample to history buffer for delay compensation
-// Call this for each gyro measurement to enable flow delay compensation
-void mmFlowAddGyroSample(const Axis3f *gyro, uint32_t timestampMs);
+void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *flow, const Axis3f *gyro);

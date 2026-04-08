@@ -149,31 +149,22 @@
 #define SUPERVISOR_TUMBLE_CHECK_ACCEPTED_TILT_ACCZ 0.0f
 #define SUPERVISOR_TUMBLE_CHECK_ACCEPTED_TILT_TIME 2000
 #define SUPERVISOR_TUMBLE_CHECK_ACCEPTED_UPSIDEDOWN_ACCZ -0.5f
-#define SUPERVISOR_TUMBLE_CHECK_ACCEPTED_UPSIDEDOWN_TIME 500
+#define SUPERVISOR_TUMBLE_CHECK_ACCEPTED_UPSIDEDOWN_TIME 200
 
 #define YAW_MAX_DELTA 30.0
 
+// Drag and center of pressure
+// NOTE: For X, these values are not constant but depends on dihedral angle. Influence seems to be negligible.
+#define DRAG_B_X 4.2f
+#define DRAG_B_Y 1.8f
+#define DRAG_B_Z 0.3f
+#define CENTER_OF_PRESSURE_X 0.0f
+#define CENTER_OF_PRESSURE_Y 0.0f
+#define CENTER_OF_PRESSURE_Z 0.03f
 
-// EKF defaults with drag
-#ifndef EKF_DRAG_BX
-    #define EKF_DRAG_BX 4.2f
-#endif
-#ifndef EKF_DRAG_BY
-    #define EKF_DRAG_BY 1.8f
-#endif
-#ifndef EKF_DRAG_BZ
-    #define EKF_DRAG_BZ 0.9f
-#endif
-#ifndef EKF_DRAG_RX
-    #define EKF_DRAG_RX 0.0f
-#endif
-#ifndef EKF_DRAG_RY
-    #define EKF_DRAG_RY 0.0f
-#endif
-#ifndef EKF_DRAG_RZ
-    #define EKF_DRAG_RZ 0.025f
-#endif
-
+// Flow deck position offset (in meters)
+// Note that this depends on flowdeck placement and might vary. These values assume placement directly under the legs with the STL provided here:
+// https://github.com/flapper-drones/3Dmodels/blob/main/Bitcraze_flowdeck_support%20v17.stl
 #define FLOWDECK_POS_X 0.0f 
 #define FLOWDECK_POS_Y 0.0f
 #define FLOWDECK_POS_Z -0.12f
