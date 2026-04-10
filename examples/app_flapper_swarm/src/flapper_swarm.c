@@ -31,7 +31,9 @@
 #include "supervisor.h"
 #include "configblock.h"
 #include "locodeck.h"
+#ifdef ENABLE_RELATIVE_EKF
 #include "estimator/relative_localization.h"
+#endif
 
 // ============================================================================
 // Timestamp helper
@@ -102,6 +104,7 @@ static uint32_t demoTimeMs = 60000U;         // time of the demo in ms
 #define FLIGHT_Z_OSC_PERIOD_DRONE1_S 3.0f
 #define FLIGHT_Z_OSC_PERIOD_DRONE2PLUS_S 4.0f
 
+#ifdef ENABLE_RELATIVE_EKF
 // ============================================================================
 // BEGIN EKF INTEGRATION — copy this block into any swarm app
 //
@@ -122,6 +125,7 @@ static float relDist[EKF_MAX_PEERS];// Euclidean distance to peer (m)
 static uint8_t ekfConnected = 0;    // 1 if any peer is tracked
 static uint8_t ekfNumConnected = 0; // Number of tracked peers
 // END EKF INTEGRATION — variables
+#endif
 
 // ============================================================================
 // Log variable IDs
@@ -1267,6 +1271,7 @@ static void runSequence(void) {
       DEBUG_PRINT("[%.2f] ARC cooldown cleared by inner re-entry (d0=%lu)\n", (double)getTimestamp(), (unsigned long)ctx.d0);
     }
 
+#ifdef ENABLE_RELATIVE_EKF
     // ========================================================================
     // BEGIN EKF INTEGRATION — in-flight update (copy this block)
     // Runs at the flight loop rate (100 Hz). Identical logic to idle-loop
@@ -1292,6 +1297,7 @@ static void runSequence(void) {
     }
     // END EKF INTEGRATION — in-flight update
     // ========================================================================
+#endif
 
     // ========================================================================
     // State machine: check transitions and execute current state
@@ -1439,6 +1445,7 @@ void appMain(void) {
       (double)getTimestamp(), droneId, AUX_UWB_ACTIVE_THRESHOLD, peerCloseMm);
   }
       
+#ifdef ENABLE_RELATIVE_EKF
   // ========================================================================
   // BEGIN EKF INTEGRATION — initialization (copy this block)
   // ========================================================================
@@ -1450,6 +1457,7 @@ void appMain(void) {
               (double)getTimestamp(), droneId, EKF_MAX_PEERS, ekfUseIndirect);
   // END EKF INTEGRATION — initialization
   // ========================================================================
+#endif
 
   bool wasActive = false;
 
@@ -1462,6 +1470,7 @@ void appMain(void) {
         landToZero();
       }
 
+#ifdef ENABLE_RELATIVE_EKF
       // ====================================================================
       // BEGIN EKF INTEGRATION — idle-loop update (runs even on the ground)
       // This lets you verify EKF convergence in cfclient before takeoff.
@@ -1482,6 +1491,7 @@ void appMain(void) {
       }
       // END EKF INTEGRATION — idle-loop update
       // ====================================================================
+#endif
 
       // On rising edge of trigger, enable USD logging, wait 3s, then run sequence
       if (active && !wasActive) {
@@ -1509,6 +1519,7 @@ void appMain(void) {
                 (double)getTimestamp());
     bool beacon_wasActive = false;
     while (1) {
+#ifdef ENABLE_RELATIVE_EKF
       if (ekfEnabled) {
         relativeLocalizationSetUseIndirect(ekfUseIndirect != 0);
         relativeLocalizationUpdate(0.02f, ekfUseIndirect != 0); // 50 Hz
@@ -1523,6 +1534,7 @@ void appMain(void) {
           }
         }
       }
+#endif
 
       // Same trigger as drone 2: isTriggerActive() checks ranging.aux1
       const bool active = isTriggerActive();
@@ -1568,6 +1580,7 @@ PARAM_GROUP_STOP(swarm)
 // ============================================================================
 LOG_GROUP_START(swarm)
   LOG_ADD(LOG_UINT8, state, &currentState)
+#ifdef ENABLE_RELATIVE_EKF
   // --- BEGIN EKF INTEGRATION — log variables (copy this block) ---
   LOG_ADD(LOG_UINT8, ekfConn, &ekfConnected)    // 1 if any peer tracked
   LOG_ADD(LOG_UINT8, ekfNConn, &ekfNumConnected) // Number of tracked peers
@@ -1590,8 +1603,10 @@ LOG_GROUP_START(swarm)
   LOG_ADD(LOG_FLOAT, relD2, &relDist[2])
   LOG_ADD(LOG_FLOAT, relPsi2, &relPsi[2])
   // --- END EKF INTEGRATION — log variables ---
+#endif
 LOG_GROUP_STOP(swarm)
 
+#ifdef ENABLE_RELATIVE_EKF
 // ============================================================================
 // BEGIN EKF INTEGRATION — parameters (copy this block)
 // Change at runtime in cfclient: ekf.enabled, ekf.useInd
@@ -1601,3 +1616,4 @@ PARAM_GROUP_START(ekf)
   PARAM_ADD(PARAM_UINT8, useInd, &ekfUseIndirect) // 1=direct+indirect, 0=direct only
 PARAM_GROUP_STOP(ekf)
 // END EKF INTEGRATION — parameters
+#endif

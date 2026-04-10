@@ -20,4 +20,7 @@ CRAZYFLIE_BASE := ../..
 #
 OOT_CONFIG := $(PWD)/app-config
 
+# Uncomment to enable the relative-localization EKF
+# EXTRA_CFLAGS += -DENABLE_RELATIVE_EKF
+
 include $(CRAZYFLIE_BASE)/tools/make/oot.mk
