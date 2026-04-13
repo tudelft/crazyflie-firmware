@@ -11,7 +11,7 @@ import numpy as np
 from scipy import stats
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--filename", type=str, default="tools/usdlog/log02")
+parser.add_argument("--filename", type=str, default="tools/usdlog/log03")
 args = parser.parse_args()
 
 # decode binary log data
@@ -22,7 +22,7 @@ logData = logData['fixedFrequency']
 
 # set window background to white
 plt.rcParams['figure.facecolor'] = 'w'
-    
+
 # number of columns and rows for suplot
 plotCols = 1
 plotRows = 1
