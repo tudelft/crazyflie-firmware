@@ -148,6 +148,11 @@ static paramVarId_t enLhMtchStmParamId;
 
 static float extPosStdDev = 0.01;
 static float extQuatStdDev = 4.5e-3;
+// Gate that controls whether incoming external position/pose packets are
+// enqueued to the state estimator. When 0, the locSrv.* log variables still
+// update on every packet but the EKF is not touched — used to record mocap
+// without fusing it.
+static uint8_t feedEstimator = 1;
 static bool isInit = false;
 static uint8_t my_id;
 static uint16_t tickOfLastPacket; // tick when last packet was received
@@ -210,7 +215,9 @@ static void extPositionHandler(CRTPPacket* pk) {
   ext_pos.source = MeasurementSourceLocationService;
   updateLogFromExtPos();
 
-  estimatorEnqueuePosition(&ext_pos);
+  if (feedEstimator) {
+    estimatorEnqueuePosition(&ext_pos);
+  }
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -227,7 +234,9 @@ static void extPoseHandler(const CRTPPacket* pk) {
   ext_pose.stdDevPos = extPosStdDev;
   ext_pose.stdDevQuat = extQuatStdDev;
 
-  estimatorEnqueuePose(&ext_pose);
+  if (feedEstimator) {
+    estimatorEnqueuePose(&ext_pose);
+  }
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -242,7 +251,9 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
       ext_pose.stdDevPos = extPosStdDev;
       ext_pose.stdDevQuat = extQuatStdDev;
-      estimatorEnqueuePose(&ext_pose);
+      if (feedEstimator) {
+        estimatorEnqueuePose(&ext_pose);
+      }
       tickOfLastPacket = xTaskGetTickCount();
     } else {
       ext_pos.x = item->x / 1000.0f;
@@ -358,7 +369,9 @@ static void extPositionPackedHandler(CRTPPacket* pk)
     ext_pos.source = MeasurementSourceLocationService;
     if (item->id == my_id) {
       updateLogFromExtPos();
-      estimatorEnqueuePosition(&ext_pos);
+      if (feedEstimator) {
+        estimatorEnqueuePosition(&ext_pos);
+      }
       tickOfLastPacket = xTaskGetTickCount();
     }
     else {
@@ -610,4 +623,11 @@ PARAM_GROUP_START(locSrv)
  * @brief Standard deviation of the quarternion data to kalman filter
  */
   PARAM_ADD_CORE(PARAM_FLOAT, extQuatStdDev, &extQuatStdDev)
+  /**
+   * @brief If non-zero (default), incoming external position/pose packets are
+   *        enqueued to the state estimator. If zero, the locSrv.* log
+   *        variables still update on every incoming packet but the estimator
+   *        is not touched — used to record mocap without fusing it.
+   */
+  PARAM_ADD_CORE(PARAM_UINT8, feedEstimator, &feedEstimator)
 PARAM_GROUP_STOP(locSrv)
