@@ -50,7 +50,7 @@
 // ============================================================================
 #define APP_FREQUENCY  250.0f   // Hz — matches RL training dt=0.01s
 #define LAND_VZ_MPS    0.4f     // Descent velocity (m/s)
-#define CUT_Z_M        0.14f    // Cut controllers below this altitude (m)
+#define CUT_Z_M        0.16f    // Cut controllers below this altitude (m)
 
 #define NUM_GATES      8
 #define GATE_R         1.5f     // Figure-8 radius (m)
@@ -356,7 +356,7 @@ static void applyActions(const float* act) {
   lastActions[0] = act[0];
   lastActions[1] = act[1];
   lastActions[2] = act[2];
-  lastActions[3] = act[3];
+  lastActions[3] = -act[3];
 
   // Scale [-1,1] → [0,1] for flapping motors
   // Action mapping: [0]=left flap, [1]=right flap, [2]=dihedral servo, [3]=yaw servo
@@ -377,7 +377,7 @@ static void applyActions(const float* act) {
   // Formula: pwm = zeroPwm + act * (PWM_MAX / 2)
   // (s_i is unused for servos — we use the raw act[] directly)
   int32_t raw_m1 = (int32_t)(zeroPwmM1 + act[2] * ((float)PWM_MAX_M1 * 0.5f));
-  int32_t raw_m3 = (int32_t)(zeroPwmM3 + act[3] * ((float)PWM_MAX_M3 * 0.5f));
+  int32_t raw_m3 = (int32_t)(zeroPwmM3 - act[3] * ((float)PWM_MAX_M3 * 0.5f));
 
   // Clip to per-motor [min, max] (matches _compute_control_states clamp)
   if (raw_m1 < PWM_MIN_M1) { raw_m1 = PWM_MIN_M1; } else if (raw_m1 > PWM_MAX_M1) { raw_m1 = PWM_MAX_M1; }
@@ -397,10 +397,10 @@ static void applyActions(const float* act) {
   logPwmM4 = pwm_m4;
 
   // Write to motorPowerSet params (overrides stabilizer output)
-  // paramSetInt(idMotorM1, pwm_m1);
-  // paramSetInt(idMotorM2, pwm_m2);
-  // paramSetInt(idMotorM3, pwm_m3);
-  // paramSetInt(idMotorM4, pwm_m4);
+  paramSetInt(idMotorM1, pwm_m1);
+  paramSetInt(idMotorM2, pwm_m2);
+  paramSetInt(idMotorM3, pwm_m3);
+  paramSetInt(idMotorM4, pwm_m4);
 }
 
 // ============================================================================
