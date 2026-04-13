@@ -329,16 +329,31 @@ static void stabilizerTask(void* param)
 
       stateEstimator(&state, stabilizerStep);
 
-      // Publish latest values for UWB swarm telemetry
-      swarmInfoUpdate(
-        state.position.x,   // [m]
-        state.position.y,   // [m]
-        sensorData.gyro.z,  // [deg/s]
-        state.position.z,   // [m]
-        state.velocity.x,   // [m/s]
-        state.velocity.y,   // [m/s]
-        state.velocity.z    // [m/s]
-      );
+      // Rotate global-frame velocity to body frame using R^T (quaternion)
+      // This is the exact inverse of kalmanCoreExternalizeState's R * v_body
+      {
+        float qw = state.attitudeQuaternion.w;
+        float qx = state.attitudeQuaternion.x;
+        float qy = state.attitudeQuaternion.y;
+        float qz = state.attitudeQuaternion.z;
+        float gvx = state.velocity.x;
+        float gvy = state.velocity.y;
+        float gvz = state.velocity.z;
+        float bodyVx = (1 - 2*(qy*qy + qz*qz))*gvx + (2*(qx*qy + qw*qz))*gvy + (2*(qx*qz - qw*qy))*gvz;
+        float bodyVy = (2*(qx*qy - qw*qz))*gvx + (1 - 2*(qx*qx + qz*qz))*gvy + (2*(qy*qz + qw*qx))*gvz;
+        float bodyVz = (2*(qx*qz + qw*qy))*gvx + (2*(qy*qz - qw*qx))*gvy + (1 - 2*(qx*qx + qy*qy))*gvz;
+
+        // Publish latest values for UWB swarm telemetry (body-frame velocities)
+        swarmInfoUpdate(
+          state.position.x,   // [m]
+          state.position.y,   // [m]
+          sensorData.gyro.z,  // [deg/s]
+          state.position.z,   // [m]
+          bodyVx,             // [m/s] body frame
+          bodyVy,             // [m/s] body frame
+          bodyVz              // [m/s] body frame
+        );
+      }
 
       const bool areMotorsAllowedToRun = supervisorAreMotorsAllowedToRun();
 
