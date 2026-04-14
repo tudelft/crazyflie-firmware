@@ -276,8 +276,8 @@ static void computeObservation(void) {
   float sim_theta = fw_pitch * DEG2RAD;
   float sim_psi   = -fw_yaw   * DEG2RAD;
   float sim_p     = fw_gx * DEG2RAD;
-  float sim_q     = -fw_gz * DEG2RAD;     // this is weird, but correct?
-  float sim_r     = -fw_gy * DEG2RAD;
+  float sim_q     = -fw_gy * DEG2RAD;
+  float sim_r     = -fw_gz * DEG2RAD;
 
   // ---- Gate-frame transform -----------------------------------------------
   // int gi   = currentTargetGate % NUM_GATES;
