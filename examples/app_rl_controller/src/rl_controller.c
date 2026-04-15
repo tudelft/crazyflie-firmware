@@ -356,7 +356,7 @@ static void applyActions(const float* act) {
   lastActions[0] = act[0];
   lastActions[1] = act[1];
   lastActions[2] = act[2];
-  lastActions[3] = -act[3];
+  lastActions[3] = act[3];
 
   // Scale [-1,1] → [0,1] for flapping motors
   // Action mapping: [0]=left flap, [1]=right flap, [2]=dihedral servo, [3]=yaw servo
@@ -377,7 +377,7 @@ static void applyActions(const float* act) {
   // Formula: pwm = zeroPwm + act * (PWM_MAX / 2)
   // (s_i is unused for servos — we use the raw act[] directly)
   int32_t raw_m1 = (int32_t)(zeroPwmM1 + act[2] * ((float)PWM_MAX_M1 * 0.5f));
-  int32_t raw_m3 = (int32_t)(zeroPwmM3 - act[3] * ((float)PWM_MAX_M3 * 0.5f));
+  int32_t raw_m3 = (int32_t)(zeroPwmM3 + act[3] * ((float)PWM_MAX_M3 * 0.5f));
 
   // Clip to per-motor [min, max] (matches _compute_control_states clamp)
   if (raw_m1 < PWM_MIN_M1) { raw_m1 = PWM_MIN_M1; } else if (raw_m1 > PWM_MAX_M1) { raw_m1 = PWM_MAX_M1; }
