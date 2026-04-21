@@ -35,6 +35,18 @@ make flash_dfu          # Via USB DFU (auto-bootloader entry)
 
 Output artifacts go to `build/` (cf2.bin, cf2.elf, cf2.hex, cf2.dfu).
 
+**Docker build (matches CI):**
+```bash
+docker run --rm -v ${PWD}:/module bitcraze/builder bash -c "make cf2_defconfig && ./tools/build/build"
+```
+`tools/build/build` runs unit tests + Python tests + firmware build + ELF checks (same as CI).
+
+**Out-of-tree app build:**
+```bash
+cd examples/app_hello_world && make -j$(nproc)
+```
+App examples have their own `Makefile` that includes `tools/make/oot.mk` and sets `OOT_CONFIG` for app-layer Kconfig options. Each app directory needs a `Kbuild`, `app-config`, and `Makefile` pointing back to `CRAZYFLIE_BASE`.
+
 ## Testing
 
 ```bash
@@ -75,7 +87,7 @@ Sensors → Estimator → Commander → Controller → Power Distribution → Mo
 ### Communication Stack
 - **CRTP** (Crazyflie Real-Time Protocol): the main host↔drone protocol, multiplexed over radio (Crazyradio), BLE, USB, or UART.
 - `src/modules/src/comm.c` initializes all CRTP links.
-- **Logging** (`src/modules/src/log.c`) and **Parameters** (`src/modules/src/param.c`) are exposed via CRTP and use macros (`LOG_ADD`, `PARAM_ADD`) for automatic registration.
+- **Logging** (`src/modules/src/log.c`) and **Parameters** (`src/modules/src/param.c`) are exposed via CRTP and use macros for automatic registration. Pattern: `LOG_GROUP_START(name)` / `LOG_ADD(type, name, &var)` / `LOG_GROUP_STOP(name)`, and similarly `PARAM_GROUP_START` / `PARAM_ADD` / `PARAM_GROUP_STOP`. The `_CORE` variants mark variables as essential (always streamed).
 
 ### Expansion Deck System
 `src/deck/` implements a plugin architecture for hardware expansions (Flow deck, Lighthouse, Loco positioning, BigQuad, etc.). Each deck driver registers itself with metadata (GPIO usage, init/test functions) and is auto-detected at runtime via I2C memory.
