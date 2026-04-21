@@ -154,22 +154,11 @@
 #define YAW_MAX_DELTA 30.0
 
 
-// EKF defaults with drag
-#ifndef EKF_DRAG_BX
-    #define EKF_DRAG_BX 4.2f
-#endif
-#ifndef EKF_DRAG_BY
-    #define EKF_DRAG_BY 1.8f
-#endif
-#ifndef EKF_DRAG_BZ
-    #define EKF_DRAG_BZ 0.9f
-#endif
-#ifndef EKF_DRAG_RX
-    #define EKF_DRAG_RX 0.0f
-#endif
-#ifndef EKF_DRAG_RY
-    #define EKF_DRAG_RY 0.0f
-#endif
-#ifndef EKF_DRAG_RZ
-    #define EKF_DRAG_RZ 0.11f
-#endif
+// Drag and center of pressure
+// NOTE: For X, these values are not constant but depends on dihedral angle. Influence seems to be negligible.
+#define DRAG_B_X 4.39f
+#define DRAG_B_Y 2.89f
+#define DRAG_B_Z 0.06f
+#define CENTER_OF_PRESSURE_X 0.0f
+#define CENTER_OF_PRESSURE_Y 0.0f
+#define CENTER_OF_PRESSURE_Z 0.03f

@@ -154,23 +154,3 @@
 #define PID_POS_VEL_X_MAX 1.0f
 #define PID_POS_VEL_Y_MAX 1.0f
 #define PID_POS_VEL_Z_MAX 1.0f
-
-// EKF defaults with drag
-#ifndef EKF_DRAG_BX
-    #define EKF_DRAG_BX 4.2f
-#endif
-#ifndef EKF_DRAG_BY
-    #define EKF_DRAG_BY 1.8f
-#endif
-#ifndef EKF_DRAG_BZ
-    #define EKF_DRAG_BZ 0.9f
-#endif
-#ifndef EKF_DRAG_RX
-    #define EKF_DRAG_RX 0.0f
-#endif
-#ifndef EKF_DRAG_RY
-    #define EKF_DRAG_RY 0.0f
-#endif
-#ifndef EKF_DRAG_RZ
-    #define EKF_DRAG_RZ 0.11f
-#endif
