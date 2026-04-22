@@ -6,13 +6,14 @@
  * - STATE_HOVERING (1):   PID hover at target altitude
  * - STATE_RL_CONTROL (2): Neural-network direct motor control
  *
- * Observation vector (20 elements, matching Python flapper_env):
- *   [0-2]   position in gate frame (x, y, z)
- *   [3-5]   velocity in gate frame (vx, vy, vz)
- *   [6-8]   attitude (phi, theta, psi_relative)
- *   [9-11]  angular rates (p, q, r)  — body frame, rad/s
- *   [12-15] previous NN actions (in [-1, 1])
- *   [16-19] next-gate relative to current gate (x, y, z, yaw)
+ * Observation vector (21 elements, matching jax_rl/env.py racing mode):
+ *   [0-2]   gate-relative position in world NED (gate_pos − drone_pos)
+ *   [3-5]   body-frame velocity (u, v, w) from Kalman filter
+ *   [6-9]   gate-relative quaternion (qw, qx, qy, qz)
+ *   [10-12] angular rates (p, q, r) — body frame, rad/s
+ *   [13-16] previous NN actions (in [-1, 1])
+ *   [17-19] next-gate relative position in world NED (next_gate_pos − drone_pos)
+ *   [20]    next-gate relative yaw (next_gate_yaw − drone_yaw, wrapped)
  *
  * Action vector (4 elements in [-1, 1]):
  *   [0]=left flap, [1]=right flap, [2]=dihedral/pitch, [3]=yaw
@@ -48,9 +49,9 @@
 // ============================================================================
 // Constants
 // ============================================================================
-#define APP_FREQUENCY  250.0f   // Hz — matches RL training dt=0.01s
+#define APP_FREQUENCY  200.0f   // Hz — matches RL training dt_rl=0.005s
 #define LAND_VZ_MPS    0.4f     // Descent velocity (m/s)
-#define CUT_Z_M        0.16f    // Cut controllers below this altitude (m)
+#define CUT_Z_M        0.18f    // Cut controllers below this altitude (m)
 
 #define NUM_GATES      8
 #define GATE_R         1.5f     // Figure-8 radius (m)
@@ -159,20 +160,22 @@ static float observation[INPUT_DIM];
 static float rlActions[OUTPUT_DIM];
 
 // ============================================================================
-// Log variable IDs (state estimation + gyro)
+// Log variable IDs (state estimation + gyro + Kalman body velocity)
 // ============================================================================
 static logVarId_t idX     = (logVarId_t)0xFFFF;
 static logVarId_t idY     = (logVarId_t)0xFFFF;
 static logVarId_t idZ     = (logVarId_t)0xFFFF;
-static logVarId_t idVx    = (logVarId_t)0xFFFF;
-static logVarId_t idVy    = (logVarId_t)0xFFFF;
-static logVarId_t idVz    = (logVarId_t)0xFFFF;
 static logVarId_t idRoll  = (logVarId_t)0xFFFF;
 static logVarId_t idPitch = (logVarId_t)0xFFFF;
 static logVarId_t idYawSe = (logVarId_t)0xFFFF;   // stateEstimate yaw
 static logVarId_t idGyroX = (logVarId_t)0xFFFF;
 static logVarId_t idGyroY = (logVarId_t)0xFFFF;
 static logVarId_t idGyroZ = (logVarId_t)0xFFFF;
+
+// Body-frame velocity from Kalman filter (kalman.statePX/PY/PZ)
+static logVarId_t idBodyVx = (logVarId_t)0xFFFF;
+static logVarId_t idBodyVy = (logVarId_t)0xFFFF;
+static logVarId_t idBodyVz = (logVarId_t)0xFFFF;
 
 // Motor PWM log IDs — read stabilizer output before switching to RL override
 static logVarId_t idMotLogM1 = (logVarId_t)0xFFFF;
@@ -201,6 +204,21 @@ static float wrapAngle(float a) {
   while (a >  M_PI_F) a -= 2.0f * M_PI_F;
   while (a < -M_PI_F) a += 2.0f * M_PI_F;
   return a;
+}
+
+// ============================================================================
+// ZYX Euler angles → quaternion (matches flapper_model euler_to_quat)
+// ============================================================================
+static void eulerToQuat(float phi, float theta, float psi,
+                        float *qw, float *qx, float *qy, float *qz) {
+  float cp = cosf(phi   * 0.5f), sp = sinf(phi   * 0.5f);
+  float ct = cosf(theta * 0.5f), st = sinf(theta * 0.5f);
+  float cy = cosf(psi   * 0.5f), sy = sinf(psi   * 0.5f);
+
+  *qw = cp * ct * cy + sp * st * sy;
+  *qx = sp * ct * cy - cp * st * sy;
+  *qy = cp * st * cy + sp * ct * sy;
+  *qz = cp * ct * sy - sp * st * cy;
 }
 
 // ============================================================================
@@ -245,17 +263,14 @@ static void initGates(void) {
 }
 
 // ============================================================================
-// Compute the 20-element observation vector
-// (matches Python flapper_env.update_states_gate)
+// Compute the 21-element observation vector for racing mode.
+// Matches jax_rl/env.py::_observe() racing branch.
 // ============================================================================
 static void computeObservation(void) {
   // ---- Read firmware state ------------------------------------------------
   float fw_x     = logGetFloat(idX);
   float fw_y     = logGetFloat(idY);
   float fw_z     = logGetFloat(idZ);
-  float fw_vx    = logGetFloat(idVx);
-  float fw_vy    = logGetFloat(idVy);
-  float fw_vz    = logGetFloat(idVz);
   float fw_roll  = logGetFloat(idRoll);   // degrees
   float fw_pitch = logGetFloat(idPitch);  // degrees
   float fw_yaw   = logGetFloat(idYawSe);  // degrees
@@ -263,63 +278,96 @@ static void computeObservation(void) {
   float fw_gy    = logGetFloat(idGyroY);  // deg/s
   float fw_gz    = logGetFloat(idGyroZ);  // deg/s
 
-  // ---- Convert to simulation convention -----------------------------------
-  // Sim uses z-negative-up (NED-like altitude).  Firmware uses z-positive-up.
-  // Horizontal axes (x, y) share the same convention.
-  float sim_x  =  fw_x;
-  float sim_y  =  -fw_y;
-  float sim_z  = -fw_z;                   // flip z
-  float sim_vx =  fw_vx;
-  float sim_vy =  -fw_vy;
-  float sim_vz = -fw_vz;                  // flip vz
-  float sim_phi   = fw_roll  * DEG2RAD;
-  float sim_theta = fw_pitch * DEG2RAD;
+  // Body-frame velocity from Kalman filter (CF body: x fwd, y left, z up)
+  float fw_bvx   = logGetFloat(idBodyVx); // PX — forward
+  float fw_bvy   = logGetFloat(idBodyVy); // PY — leftward
+  float fw_bvz   = logGetFloat(idBodyVz); // PZ — upward
+
+  // ---- Convert to simulation convention (NED-like) ------------------------
+  // World position: sim x = fw x, sim y = -fw y, sim z = -fw z
+  float sim_x =  fw_x;
+  float sim_y = -fw_y;
+  float sim_z = -fw_z;
+
+  // Euler angles: phi/theta same sign, psi flipped (CW vs CCW yaw)
+  float sim_phi   =  fw_roll  * DEG2RAD;
+  float sim_theta =  fw_pitch * DEG2RAD;
   float sim_psi   = -fw_yaw   * DEG2RAD;
-  float sim_p     = fw_gx * DEG2RAD;
-  float sim_q     = -fw_gy * DEG2RAD;
-  float sim_r     = -fw_gz * DEG2RAD;
 
-  // ---- Gate-frame transform -----------------------------------------------
-  // int gi   = currentTargetGate % NUM_GATES;
-  // float gc = gateCos[gi];
-  // float gs = gateSin[gi];
-  // float dx = sim_x - gateX[gi];
-  // float dy = sim_y - gateY[gi];
+  // Body velocity: CF (fwd, left, up) → sim NED body (fwd, right, down)
+  float u_body =  fw_bvx;
+  float v_body = -fw_bvy;
+  float w_body = -fw_bvz;
 
-  // Position in gate frame
-  observation[0] = sim_x;
-  observation[1] = sim_y;
-  observation[2] = sim_z;
+  // Angular rates: p same, q/r flipped (y/z axis flip)
+  float sim_p =  fw_gx * DEG2RAD;
+  float sim_q = -fw_gy * DEG2RAD;
+  float sim_r = -fw_gz * DEG2RAD;
 
-  // Velocity in gate frame
-  observation[3] = sim_vx;
-  observation[4] = sim_vy;
-  observation[5] = sim_vz;
+  // ---- Drone quaternion from Euler angles ---------------------------------
+  float qw, qx, qy, qz;
+  eulerToQuat(sim_phi, sim_theta, sim_psi, &qw, &qx, &qy, &qz);
 
-  // Attitude (yaw relative to gate yaw)
-  observation[6] = sim_phi;
-  observation[7] = sim_theta;
-  observation[8] = sim_psi;
+  // ---- Gate indices -------------------------------------------------------
+  int gi   = currentTargetGate % NUM_GATES;
+  int next = (currentTargetGate + 1) % NUM_GATES;
 
-  // Angular rates (body frame)
-  observation[9]  = sim_p;
-  observation[10] = sim_q;
-  observation[11] = sim_r;
+  // ---- [0-2] Position: gate_pos − drone_pos in world NED ------------------
+  observation[0] = gateX[gi] - sim_x;
+  observation[1] = gateY[gi] - sim_y;
+  observation[2] = gateZ[gi] - sim_z;
 
-  // Previous actions (NN outputs from last step)
-  observation[12] = lastActions[0];
-  observation[13] = lastActions[1];
-  observation[14] = lastActions[2];
-  observation[15] = lastActions[3];
+  // ---- [3-5] Body-frame velocity ------------------------------------------
+  observation[3] = u_body;
+  observation[4] = v_body;
+  observation[5] = w_body;
 
-  // Next gate relative to current target gate
-  // int next = (currentTargetGate + 1) % NUM_GATES;
-  // observation[16] = gateRelX[next];
-  // observation[17] = gateRelY[next];
-  // observation[18] = gateRelZ[next];
-  // observation[19] = gateRelYaw[next];
+  // ---- [6-9] Gate-relative quaternion (matches env.py lines 212-228) ------
+  // Multiply drone quat by conjugate of gate-yaw-only quat:
+  //   q_gate = (cos(gy/2), 0, 0, sin(gy/2))
+  //   q_rel  = conj(q_gate) ⊗ q_drone
+  float cg = cosf(gateYaw[gi] * 0.5f);
+  float sg = sinf(gateYaw[gi] * 0.5f);
+  float qw_rel = cg * qw + sg * qz;
+  float qx_rel = cg * qx + sg * qy;
+  float qy_rel = cg * qy - sg * qx;
+  float qz_rel = cg * qz - sg * qw;
 
-  // Store position for gate-passing detection (before next step)
+  // Normalise (guard against drift)
+  float norm = sqrtf(qw_rel*qw_rel + qx_rel*qx_rel + qy_rel*qy_rel + qz_rel*qz_rel);
+  if (norm < 1e-8f) { norm = 1e-8f; }
+  float inv_norm = 1.0f / norm;
+  observation[6] = qw_rel * inv_norm;
+  observation[7] = qx_rel * inv_norm;
+  observation[8] = qy_rel * inv_norm;
+  observation[9] = qz_rel * inv_norm;
+
+  // ---- [10-12] Angular rates (body frame) ---------------------------------
+  observation[10] = sim_p;
+  observation[11] = sim_q;
+  observation[12] = sim_r;
+
+  // ---- [13-16] Previous actions -------------------------------------------
+  observation[13] = lastActions[0];
+  observation[14] = lastActions[1];
+  observation[15] = lastActions[2];
+  observation[16] = lastActions[3];
+
+  // ---- [17-19] Next gate position: next_gate_pos − drone_pos (world NED) --
+  observation[17] = gateX[next] - sim_x;
+  observation[18] = gateY[next] - sim_y;
+  observation[19] = gateZ[next] - sim_z;
+
+  // ---- [20] Next gate relative yaw: wrap(next_gate_yaw − drone_yaw) ------
+  // Extract drone yaw from quaternion (same formula as env.py)
+  float drone_yaw = atan2f(2.0f * (qw * qz + qx * qy),
+                           1.0f - 2.0f * (qy * qy + qz * qz));
+  float raw = gateYaw[next] - drone_yaw + M_PI_F;
+  // fmodf can return negative values, so add 2π and take fmod again
+  observation[20] = fmodf(fmodf(raw, 2.0f * M_PI_F) + 2.0f * M_PI_F,
+                          2.0f * M_PI_F) - M_PI_F;
+
+  // Store sim-frame position for gate-passing detection
   prevSimX = sim_x;
   prevSimY = sim_y;
 }
@@ -328,9 +376,9 @@ static void computeObservation(void) {
 // Gate-passing detection (plane-crossing check, matches Python step_wait)
 // ============================================================================
 static void checkGatePassing(void) {
-  // Current sim-frame position
-  float sim_x = logGetFloat(idX);        // same as sim_x (no flip needed for x)
-  float sim_y = logGetFloat(idY);
+  // Current sim-frame position (NED convention: y flipped from firmware ENU)
+  float sim_x =  logGetFloat(idX);
+  float sim_y = -logGetFloat(idY);
 
   int gi   = currentTargetGate % NUM_GATES;
   float nx = cosf(gateYaw[gi]);          // gate normal direction
@@ -441,7 +489,7 @@ static void enableMotorOverride(bool enable) {
 }
 
 // ============================================================================
-// RL controller — one step (called at 100 Hz)
+// RL controller — one step (called at APP_FREQUENCY Hz)
 // ============================================================================
 static void rlControllerCompute(void) {
   // Measure and periodically print actual update rate
@@ -460,7 +508,7 @@ static void rlControllerCompute(void) {
   // Detect gate crossing (uses prev position stored last step)
   checkGatePassing();
 
-  // Build the 20-element observation (gate-frame state + actions + next gate)
+  // Build the 21-element observation (gate-frame state + actions + next gate)
   computeObservation();
 
   // Neural-network forward pass
@@ -533,24 +581,24 @@ void appMain(void) {
     ensureLogId(&idX,     "stateEstimate", "x");
     ensureLogId(&idY,     "stateEstimate", "y");
     ensureLogId(&idZ,     "stateEstimate", "z");
-    ensureLogId(&idVx,    "stateEstimate", "vx");
-    ensureLogId(&idVy,    "stateEstimate", "vy");
-    ensureLogId(&idVz,    "stateEstimate", "vz");
     ensureLogId(&idRoll,  "stateEstimate", "roll");
     ensureLogId(&idPitch, "stateEstimate", "pitch");
     ensureLogId(&idYawSe, "stateEstimate", "yaw");
     ensureLogId(&idGyroX,    "gyro",  "x");
     ensureLogId(&idGyroY,    "gyro",  "y");
     ensureLogId(&idGyroZ,    "gyro",  "z");
+    ensureLogId(&idBodyVx,   "kalman", "statePX");
+    ensureLogId(&idBodyVy,   "kalman", "statePY");
+    ensureLogId(&idBodyVz,   "kalman", "statePZ");
     ensureLogId(&idMotLogM1, "motor", "m1");
     ensureLogId(&idMotLogM2, "motor", "m2");
     ensureLogId(&idMotLogM3, "motor", "m3");
     ensureLogId(&idMotLogM4, "motor", "m4");
 
     allFound = logVarIdIsValid(idX)  && logVarIdIsValid(idY)  && logVarIdIsValid(idZ)
-            && logVarIdIsValid(idVx) && logVarIdIsValid(idVy) && logVarIdIsValid(idVz)
             && logVarIdIsValid(idRoll) && logVarIdIsValid(idPitch) && logVarIdIsValid(idYawSe)
             && logVarIdIsValid(idGyroX) && logVarIdIsValid(idGyroY) && logVarIdIsValid(idGyroZ)
+            && logVarIdIsValid(idBodyVx) && logVarIdIsValid(idBodyVy) && logVarIdIsValid(idBodyVz)
             && logVarIdIsValid(idMotLogM1) && logVarIdIsValid(idMotLogM2)
             && logVarIdIsValid(idMotLogM3) && logVarIdIsValid(idMotLogM4);
 
@@ -582,7 +630,7 @@ void appMain(void) {
   // Initialize timing
   lastWakeTime = xTaskGetTickCount();
 
-  // ---- Main control loop at 100 Hz ----------------------------------------
+  // ---- Main control loop at APP_FREQUENCY Hz -------------------------------
   while (1) {
     float currentX = logGetFloat(idX);
     float currentY = logGetFloat(idY);
@@ -613,8 +661,8 @@ void appMain(void) {
         currentTargetGate = 0;
         logTargetGate     = 0;
         memset(lastActions, 0, sizeof(lastActions));
-        prevSimX = currentX;
-        prevSimY = currentY;
+        prevSimX =  currentX;    // sim x = fw x
+        prevSimY = -currentY;    // sim y = -fw y (NED convention)
 
         DEBUG_PRINT("Hover at (%.2f, %.2f, %.2f)\n",
                     (double)hoverXM, (double)hoverYM, (double)hoverAltitudeM);
@@ -628,8 +676,8 @@ void appMain(void) {
         currentTargetGate = 0;
         logTargetGate     = 0;
         memset(lastActions, 0, sizeof(lastActions));
-        prevSimX = currentX;
-        prevSimY = currentY;
+        prevSimX =  currentX;    // sim x = fw x
+        prevSimY = -currentY;    // sim y = -fw y (NED convention)
 
         // Save hover-return position
         hoverAltitudeM = currentZ;

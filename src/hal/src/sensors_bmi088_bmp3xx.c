@@ -138,7 +138,7 @@ static bool accScaleFound = false;
 static uint32_t accScaleSumCount = 0;
 
 // Low Pass filtering
-#define GYRO_LPF_CUTOFF_FREQ  60
+#define GYRO_LPF_CUTOFF_FREQ  80
 #define ACCEL_LPF_CUTOFF_FREQ 30
 static lpf2pData accLpf[3];
 static lpf2pData gyroLpf[3];
