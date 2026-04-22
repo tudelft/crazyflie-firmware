@@ -390,7 +390,8 @@ static void checkGatePassing(void) {
   if (old_proj < 0.0f && new_proj >= 0.0f) {
     // Crossed the gate plane — advance target
     int nextGate = (currentTargetGate + 1) % NUM_GATES;
-    DEBUG_PRINT("Gate %d passed → next %d\n", gi, nextGate);
+    // DEBUG_PRINT("Gate %d passed → next %d\n", gi, nextGate);
+    DEBUG_PRINT("Gate %d passed -> next %d\n", gi, nextGate);
     currentTargetGate = nextGate;
     logTargetGate = (uint8_t)nextGate;
   }
@@ -646,7 +647,8 @@ void appMain(void) {
       }
 
       currentState = newState;
-      DEBUG_PRINT("State → %u\n", (unsigned)currentState);
+      // State → %u  →  State -> %u
+      DEBUG_PRINT("State -> %u\n", (unsigned)currentState);
 
       if (currentState == STATE_HOVERING) {
         hoverAltitudeM = targetAltitudeM;
@@ -693,7 +695,7 @@ void appMain(void) {
       } else if (currentState == STATE_IDLE) {
         isLanding = false;
         landingFinished = false;
-        DEBUG_PRINT("Idle — landing\n");
+        DEBUG_PRINT("Idle - landing\n");
       }
     }
 
