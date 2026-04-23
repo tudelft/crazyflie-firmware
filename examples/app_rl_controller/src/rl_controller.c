@@ -426,7 +426,7 @@ static void applyActions(const float* act) {
   // Formula: pwm = zeroPwm + act * (PWM_MAX / 2)
   // (s_i is unused for servos — we use the raw act[] directly)
   int32_t raw_m1 = (int32_t)(zeroPwmM1 + act[2] * ((float)PWM_MAX_M1 * 0.5f));
-  int32_t raw_m3 = (int32_t)(zeroPwmM3 + act[3] * ((float)PWM_MAX_M3 * 0.5f));
+  int32_t raw_m3 = (int32_t)(zeroPwmM3 - act[3] * ((float)PWM_MAX_M3 * 0.5f));
 
   // Clip to per-motor [min, max] (matches _compute_control_states clamp)
   if (raw_m1 < PWM_MIN_M1) { raw_m1 = PWM_MIN_M1; } else if (raw_m1 > PWM_MAX_M1) { raw_m1 = PWM_MAX_M1; }

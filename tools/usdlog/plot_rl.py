@@ -106,6 +106,36 @@ def infer_gate_crossings(data, origin_x=0.0, origin_y=0.0):
     return tgt
 
 
+def body_velocity(data):
+    """Return (vx_body, vy_body, vz_body, source) in firmware body frame
+    (x forward, y left, z up).
+
+    Prefers kalman.statePX/PY/PZ (logged directly from the EKF body-frame
+    velocity state). Falls back to rotating stateEstimate.v{x,y,z} (world
+    ENU) into the body frame using stateEstimate.{roll,pitch,yaw}.
+    """
+    if {'kalman.statePX', 'kalman.statePY', 'kalman.statePZ'}.issubset(data.columns):
+        return (data['kalman.statePX'].to_numpy(),
+                data['kalman.statePY'].to_numpy(),
+                data['kalman.statePZ'].to_numpy(),
+                'kalman.stateP')
+
+    roll = np.deg2rad(data['stateEstimate.roll'].to_numpy())
+    pitch = np.deg2rad(data['stateEstimate.pitch'].to_numpy())
+    yaw = np.deg2rad(data['stateEstimate.yaw'].to_numpy())
+    cr, sr = np.cos(roll), np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    vx = data['stateEstimate.vx'].to_numpy()
+    vy = data['stateEstimate.vy'].to_numpy()
+    vz = data['stateEstimate.vz'].to_numpy()
+    # body = R_wb^T @ world, with R_wb = Rz(yaw) Ry(pitch) Rx(roll)
+    bx = cy*cp*vx + sy*cp*vy - sp*vz
+    by = (cy*sp*sr - sy*cr)*vx + (sy*sp*sr + cy*cr)*vy + cp*sr*vz
+    bz = (cy*sp*cr + sy*sr)*vx + (sy*sp*cr - cy*sr)*vy + cp*cr*vz
+    return bx, by, bz, 'rotated stateEstimate.v'
+
+
 def plot_gates(ax, origin_x=0.0, origin_y=0.0, half_width=0.75):
     """Overlay the figure-8 gates on a top-view (X, -Y) trajectory plot."""
     gx = BASE_GATE_X + origin_x
@@ -138,6 +168,9 @@ def plot_rl_log(csv_file):
         tgt = infer_gate_crossings(data)
     crossings = np.where(np.diff(tgt) != 0)[0] + 1
     nn_start_idx, nn_end_idx = infer_nn_window(data, t)
+
+    # Body-frame velocity (kalman.statePX/PY/PZ if logged, else rotated)
+    bvx, bvy, bvz, vel_src = body_velocity(data)
 
     # Set up figure with white background
     plt.rcParams['figure.facecolor'] = 'w'
@@ -173,15 +206,15 @@ def plot_rl_log(csv_file):
     ax2.legend(loc='best')
     ax2.grid(True, alpha=0.3)
 
-    # 3. Velocity vs Time
+    # 3. Body velocity vs Time
     ax3 = plt.subplot(3, 3, 3, sharex=ax2)
-    ax3.plot(t, data['stateEstimate.vx'], label='Vx', linewidth=1)
-    ax3.plot(t, -data['stateEstimate.vy'], label='Vy', linewidth=1)
-    ax3.plot(t, -data['stateEstimate.vz'], label='Vz', linewidth=1)
+    ax3.plot(t, bvx, label='Vx (fwd)', linewidth=1)
+    ax3.plot(t, bvy, label='Vy (left)', linewidth=1)
+    ax3.plot(t, bvz, label='Vz (up)', linewidth=1)
     mark_events(ax3, t, crossings, tgt, nn_start_idx, nn_end_idx)
     ax3.set_xlabel('Time [s]')
     ax3.set_ylabel('Velocity [m/s]')
-    ax3.set_title('Velocity vs Time')
+    ax3.set_title(f'Body velocity ({vel_src})')
     ax3.legend(loc='best')
     ax3.grid(True, alpha=0.3)
 
@@ -252,15 +285,15 @@ def plot_rl_log(csv_file):
     ax8.set_title('Altitude vs Time')
     ax8.grid(True, alpha=0.3)
 
-    # 9. Speed (magnitude of velocity)
+    # 9. Speed (magnitude of body velocity)
     ax9 = plt.subplot(3, 3, 9, sharex=ax2)
-    speed = np.sqrt(data['stateEstimate.vx']**2 + data['stateEstimate.vy']**2 + data['stateEstimate.vz']**2)
+    speed = np.sqrt(bvx**2 + bvy**2 + bvz**2)
     ax9.plot(t, speed, 'purple', linewidth=1)
     ax9.fill_between(t, 0, speed, alpha=0.3, color='purple')
     mark_events(ax9, t, crossings, tgt, nn_start_idx, nn_end_idx)
     ax9.set_xlabel('Time [s]')
     ax9.set_ylabel('Speed [m/s]')
-    ax9.set_title('Total Speed')
+    ax9.set_title(f'Total speed ({vel_src})')
     ax9.grid(True, alpha=0.3)
 
     plt.tight_layout()
