@@ -1,0 +1,25 @@
+scenario,use_flow,csv,vel_total,att_yaw
+full | flow,True,flight_diag_lr_mtf,0.16345325505715422,6.5249754629790235
+full | flow,True,flight_sine_mtf,0.1063747859259268,6.869547117029069
+full | flow,True,flight_y_mtf,0.15000501906949867,1.8284919096737142
+full | flow,True,flight_z_mtf,0.09326345834959843,1.8833233019945994
+full | flow,True,square_60cm_mtf,0.10139702971651447,5.045731994775048
+full | flow,True,square_120cm_mtf,0.1072087835346772,6.1285676746871705
+no-model | flow,True,flight_diag_lr_mtf,3.084700153314408,20.325382950555476
+no-model | flow,True,flight_sine_mtf,0.681603546942231,11.074352511678988
+no-model | flow,True,flight_y_mtf,3.153004431949869,5.528962246768781
+no-model | flow,True,flight_z_mtf,0.22825268190888126,1.759369481749452
+no-model | flow,True,square_60cm_mtf,1.0445979112539348,12.887326008812504
+no-model | flow,True,square_120cm_mtf,1.8578599070338688,9.013547068614127
+full | no-flow,False,flight_diag_lr_mtf,0.1733206032332904,5.793224430143112
+full | no-flow,False,flight_sine_mtf,0.20778218605573,7.273493082559437
+full | no-flow,False,flight_y_mtf,0.1689000724956361,3.82701919000839
+full | no-flow,False,flight_z_mtf,0.09714269004150607,1.9377867069560837
+full | no-flow,False,square_60cm_mtf,0.12173335738502272,2.7814144839184376
+full | no-flow,False,square_120cm_mtf,0.12441615114222705,6.190208494101818
+no-model | no-flow,False,flight_diag_lr_mtf,61.76912860338094,34.18352216036151
+no-model | no-flow,False,flight_sine_mtf,122.13314976032207,11.477081874019662
+no-model | no-flow,False,flight_y_mtf,28.872729947634966,6.412804751589203
+no-model | no-flow,False,flight_z_mtf,19.638964007744892,1.1535953434324178
+no-model | no-flow,False,square_60cm_mtf,41.18754705912285,5.488328314249864
+no-model | no-flow,False,square_120cm_mtf,32.933303569412125,1.7339435898044786

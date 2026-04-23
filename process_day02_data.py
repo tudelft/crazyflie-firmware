@@ -29,6 +29,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pynumdiff import smooth_finite_difference as pnd_sfd
 from scipy.signal import correlate, savgol_filter
 from scipy.spatial.transform import Rotation
 
@@ -179,7 +180,7 @@ def parse_mocap():
             mocap[dname]["qz"][i] = ot_qy   # cf_qz = ot_qy
             mocap[dname]["qw"][i] = ot_qw   # cf_qw = ot_qw
 
-    # Interpolate NaN gaps from tracking dropouts
+    # Interpolate NaN gaps from tracking dropouts, but track which regions were interpolated
     for dname in mocap:
         m = mocap[dname]
         valid = ~np.isnan(m["x"])
@@ -188,6 +189,31 @@ def parse_mocap():
             print(f"  {dname}: interpolating {n_bad} dropout frames")
             for key in ["x", "y", "z", "qx", "qy", "qz", "qw"]:
                 m[key] = np.interp(time, time[valid], m[key][valid])
+            # Track interpolated regions (where original data was NaN)
+            m["valid_orig"] = valid
+
+    # Fix time discontinuities (jumps backward in time) by interpolating time linearly
+    # This happens when mocap software restarts between test runs
+    for dname in mocap:
+        m = mocap[dname]
+        t = m["time"]
+        dt = np.diff(t)
+        # Check for backward jumps (discontinuities)
+        bad_jumps = dt < -0.01  # threshold: backward jump > 10ms
+        if bad_jumps.any():
+            print(f"  {dname}: detected {bad_jumps.sum()} time discontinuities, fixing...")
+            # Create evenly-spaced time by using frame indices
+            # Expected timebase: 1.0 / 180.0 Hz
+            expected_dt = 1.0 / frame_rate
+            t_linear = np.arange(len(t)) * expected_dt
+            # Preserve the original time offset at the start
+            t_linear = t_linear + t[0]
+            print(f"    Original time: [{t[0]:.2f}, {t[-1]:.2f}]")
+            print(f"    Fixed time:    [{t_linear[0]:.2f}, {t_linear[-1]:.2f}]")
+            m["time"] = t_linear
+            m["time_original"] = t  # keep original for debugging
+        else:
+            m["time"] = t
 
     # Compute roll, pitch, yaw from quaternions
     for dname in mocap:
@@ -246,6 +272,25 @@ def sync_time_offset(signal_a_time, signal_a, signal_b_time, signal_b):
 
     print(f"    Cross-corr lag: {lag:.3f}s (peak corr: {corr[best]:.1f})")
     return lag
+
+
+def _enforce_monotonic_time(t, data):
+    """Keep only samples where time is strictly increasing.
+
+    Parameters
+    ----------
+    t    : 1-D array of timestamps
+    data : dict of 1-D arrays (same length as t)
+
+    Returns
+    -------
+    t_mono    : monotonically increasing time array
+    data_mono : dict with same keys, filtered to matching indices
+    """
+    keep = np.concatenate(([True], np.diff(t) > 0))
+    t_mono = t[keep]
+    data_mono = {k: v[keep] for k, v in data.items()}
+    return t_mono, data_mono
 
 
 def _find_takeoff_time(signal, time, threshold=0.5):
@@ -428,6 +473,68 @@ def sync_all(dfs, mocap):
             elif len(offsets_measured) == 1:
                 per_drone_affine[STATIC_DRONE] = (1.0, offsets_measured[0])
 
+    # Outlier rejection: all drones share the same crystal hardware, so their
+    # clock drift rates (scale) should agree within ~2000 ppm.  If one drone's
+    # fitted scale is a clear outlier (e.g. due to mocap dropouts corrupting
+    # the height signal), pin it to the consensus scale and refit only the
+    # constant offset from the measured offset samples.
+    if len(per_drone_affine) >= 2:
+        scales = np.array([s for s, _ in per_drone_affine.values()])
+        median_scale = float(np.median(scales))
+        SCALE_OUTLIER_PPM = 5000  # tolerance: 5000 ppm ≈ 0.5%
+        for did in list(per_drone_affine.keys()):
+            s, b = per_drone_affine[did]
+            deviation_ppm = abs(s - median_scale) * 1e6
+            if deviation_ppm > SCALE_OUTLIER_PPM:
+                # Refit offset with scale fixed to consensus
+                # Model: t_mocap = median_scale * t_drone + const_offset
+                # off_measured(t) = t_mocap - t_drone = (median_scale-1)*t + const_offset
+                # So const_offset = mean(off_arr - (median_scale-1)*t_arr)
+                # We need off_arr and t_arr for this drone — recompute from the
+                # same windows used above, stored as an attribute isn't available
+                # so we re-run the window loop with scale fixed.
+                df = dfs[did]
+                ts = df["timestamp"].values / 1000.0
+                if did == STATIC_DRONE:
+                    ref_did = flying_ids[0]
+                    h = dfs[STATIC_DRONE][f"ranging.height{ref_did}"].values
+                    mc_mid = mapping[ref_did]
+                else:
+                    h = df["kalman.stateZ"].values
+                    mc_mid = mapping[did]
+                m = mocap[mc_mid]
+                t_takeoff_d = _find_takeoff_time(h, ts, threshold=0.5)
+                t_landing_d = _find_landing_time(h, ts, threshold=0.5)
+                t_takeoff_mc = _find_takeoff_time(m["z"], m["time"], threshold=0.5)
+                if t_takeoff_d is None or t_landing_d is None or t_takeoff_mc is None:
+                    per_drone_affine[did] = (median_scale, b)
+                    print(f"  Drone {did}: scale outlier ({deviation_ppm:.0f} ppm) "
+                          f"→ pinned scale to {median_scale:.8f}, kept offset={b:.3f}s")
+                    continue
+                rough_offset = t_takeoff_mc - t_takeoff_d
+                t_centers = np.linspace(t_takeoff_d + 5.0, t_landing_d - 5.0, 6)
+                off_list, t_list = [], []
+                for tc in t_centers:
+                    off = _xcorr_offset_in_window(ts, h, m["time"], m["z"],
+                                                  tc, rough_offset,
+                                                  window=8.0, search_margin=1.5)
+                    if off is not None:
+                        off_list.append(off)
+                        t_list.append(tc)
+                if off_list:
+                    t_arr = np.array(t_list)
+                    off_arr = np.array(off_list)
+                    const_offset = float(np.mean(off_arr - (median_scale - 1.0) * t_arr))
+                    residuals = off_arr - ((median_scale - 1.0) * t_arr + const_offset)
+                    print(f"  Drone {did}: scale outlier ({deviation_ppm:.0f} ppm) "
+                          f"→ pinned scale={median_scale:.8f}, "
+                          f"refitted offset={const_offset:.3f}s, "
+                          f"residual_std={residuals.std()*1000:.1f}ms")
+                    per_drone_affine[did] = (median_scale, const_offset)
+                else:
+                    per_drone_affine[did] = (median_scale, b)
+                    print(f"  Drone {did}: scale outlier → pinned scale, kept offset={b:.3f}s")
+
     offsets = {
         "_mapping": mapping,
         "_affine": per_drone_affine,
@@ -445,31 +552,65 @@ def drone_to_mocap_time(t_drone_boot_s, offsets, drone_id):
 # 5. Compute mocap body-frame velocities (full rotation)
 # ──────────────────────────────────────────────────────────────────────
 
+def _differentiate_signal_butter(t, x, cutoff_freq=0.06, filter_order=2):
+    """Differentiate a signal using pynumdiff Butterworth smoothing.
+
+    Returns derivative on the original time grid, handling duplicate timestamps
+    by operating on unique times and interpolating back.
+    """
+    unique_idx = np.concatenate(([True], np.diff(t) > 1e-9))
+    t_u = t[unique_idx]
+    x_u = x[unique_idx]
+
+    if len(t_u) < 5:
+        dx_u = np.gradient(x_u, t_u)
+        return np.interp(t, t_u, dx_u)
+
+    dt_u = float(np.median(np.diff(t_u)))
+    dt_u = max(dt_u, 1e-6)
+
+    try:
+        # Preferred API in recent pynumdiff versions.
+        _, dx_u = pnd_sfd.butterdiff(
+            x_u,
+            dt_u,
+            filter_order=filter_order,
+            cutoff_freq=cutoff_freq,
+        )
+    except TypeError:
+        # Fallback for API variants that require params=[order, cutoff].
+        _, dx_u = pnd_sfd.butterdiff(x_u, dt_u, params=[filter_order, cutoff_freq])
+
+    return np.interp(t, t_u, dx_u)
+
 def mocap_body_frame_velocity(mocap_drone):
     """Compute body-frame velocity from mocap using full rotation.
 
-    Smooths positions before differentiation, then rotates world-frame
-    velocity into body frame using the stored quaternions directly.
+    Differentiates position with a Butterworth smoother (pynumdiff), then
+    rotates world-frame velocity into body frame using stored quaternions.
     """
     t = mocap_drone["time"]
     x = mocap_drone["x"]
     y = mocap_drone["y"]
     z = mocap_drone["z"]
+    valid_orig = mocap_drone.get("valid_orig", np.ones(len(t), dtype=bool))
 
-    # Smooth positions before differentiation to remove mocap jitter.
-    # Window ~100ms at 180 Hz ≈ 19 samples (must be odd).
-    win = min(19, len(t) // 2 * 2 - 1)  # ensure valid window
-    if win >= 5:
-        x_s = savgol_filter(x, win, 3)
-        y_s = savgol_filter(y, win, 3)
-        z_s = savgol_filter(z, win, 3)
-    else:
-        x_s, y_s, z_s = x, y, z
-
-    # World-frame velocity via numerical differentiation
-    vx_w = np.gradient(x_s, t)
-    vy_w = np.gradient(y_s, t)
-    vz_w = np.gradient(z_s, t)
+    vx_w = _differentiate_signal_butter(t, x)
+    vy_w = _differentiate_signal_butter(t, y)
+    vz_w = _differentiate_signal_butter(t, z)
+    
+    # Mask velocity as NaN where data was interpolated (dropout regions)
+    # and a margin around those regions to avoid derivative spikes
+    if valid_orig is not None:
+        interp_regions = ~valid_orig
+        if interp_regions.any():
+            # Dilate interpolated regions by 1-2 samples to catch edge effects
+            dilated = interp_regions.copy()
+            dilated[:-1] |= interp_regions[1:]
+            dilated[1:] |= interp_regions[:-1]
+            vx_w[dilated] = np.nan
+            vy_w[dilated] = np.nan
+            vz_w[dilated] = np.nan
 
     # Use quaternions directly (already in CF frame from parse_mocap)
     quats = np.column_stack([
@@ -486,6 +627,33 @@ def mocap_body_frame_velocity(mocap_drone):
     v_body = rotations.inv().apply(v_world)
 
     return v_body[:, 0], v_body[:, 1], v_body[:, 2]
+
+
+def mocap_global_velocity(mocap_drone):
+    """Compute world/global-frame velocity from mocap position."""
+    t = mocap_drone["time"]
+    x = mocap_drone["x"]
+    y = mocap_drone["y"]
+    z = mocap_drone["z"]
+    valid_orig = mocap_drone.get("valid_orig", np.ones(len(t), dtype=bool))
+
+    vx_w = _differentiate_signal_butter(t, x)
+    vy_w = _differentiate_signal_butter(t, y)
+    vz_w = _differentiate_signal_butter(t, z)
+    
+    # Mask velocity as NaN where data was interpolated (dropout regions)
+    if valid_orig is not None:
+        interp_regions = ~valid_orig
+        if interp_regions.any():
+            # Dilate interpolated regions by 1-2 samples to catch edge effects
+            dilated = interp_regions.copy()
+            dilated[:-1] |= interp_regions[1:]
+            dilated[1:] |= interp_regions[:-1]
+            vx_w[dilated] = np.nan
+            vy_w[dilated] = np.nan
+            vz_w[dilated] = np.nan
+    
+    return vx_w, vy_w, vz_w
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -702,10 +870,111 @@ def plot_velocity_comparison(dfs, mocap, offsets, out_dir):
         print(f"  Saved day02_velocities_drone{did}.png")
 
 
+def plot_velocity_alignment_debug(dfs, mocap, offsets, out_dir, title_prefix="Day 02", file_prefix="day02"):
+    """Debug plot: compare drone velocity to mocap global and body-frame velocity."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mapping = offsets["_mapping"]
+
+    axis_meta = [
+        ("X", "kalman.statePX"),
+        ("Y", "kalman.statePY"),
+        ("Z", "kalman.statePZ"),
+    ]
+
+    for did in sorted(dfs.keys()):
+        if did == STATIC_DRONE:
+            continue
+        if did not in mapping:
+            continue
+
+        df = dfs[did]
+        ts = df["timestamp"].values / 1000.0
+        ts_mc = drone_to_mocap_time(ts, offsets, did)
+
+        m = mocap[mapping[did]]
+        mt = m["time"]
+        
+        # Check for mocap time discontinuities and fix
+        mt_check = np.diff(mt)
+        if (mt_check < -0.1).any():
+            print(f"  Plot drone {did}: detected mocap time discontinuities, fixing...")
+            # Extract all mocap data into dict for fixing
+            mocap_data = {
+                "x": m["x"],
+                "y": m["y"],
+                "z": m["z"],
+                "qx": m["qx"],
+                "qy": m["qy"],
+                "qz": m["qz"],
+                "qw": m["qw"],
+                "yaw": m["yaw"],
+                "pitch": m["pitch"],
+                "roll": m["roll"],
+            }
+            if "valid_orig" in m:
+                mocap_data["valid_orig"] = m["valid_orig"]
+            mt_fixed, mocap_data_fixed = _enforce_monotonic_time(mt, mocap_data)
+            # Update mocap dict with fixed data
+            for key in mocap_data_fixed:
+                m[key] = mocap_data_fixed[key]
+            m["time"] = mt_fixed
+            mt = mt_fixed
+        
+        # Recompute velocities with fixed (monotonic) time
+        vx_w, vy_w, vz_w = mocap_global_velocity(m)
+        vx_b, vy_b, vz_b = mocap_body_frame_velocity(m)
+        mocap_world = [vx_w, vy_w, vz_w]
+        mocap_body = [vx_b, vy_b, vz_b]
+
+        fig, axes = plt.subplots(3, 2, figsize=(16, 10), sharex="col")
+        fig.suptitle(
+            f"{title_prefix} Velocity Debug Drone {did}: Global vs Body Frame",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+        for row, (axis_name, kalman_col) in enumerate(axis_meta):
+            drone_v = df[kalman_col].values
+            # Resample drone velocity onto mocap time grid to avoid visual artifacts
+            # from mixing different sampling rates (500 Hz drone vs 180 Hz mocap)
+            drone_v_resampled = np.interp(mt, ts_mc, drone_v)
+
+            ax = axes[row, 0]
+            ax.plot(mt, mocap_world[row], color="tab:red", lw=1.1, alpha=0.8,
+                    label=f"mocap global v{axis_name.lower()}")
+            ax.plot(mt, drone_v_resampled, color="tab:blue", lw=0.8, alpha=0.6,
+                    label=f"drone {kalman_col} (body, resampled)")
+            ax.set_ylabel(f"v{axis_name.lower()} [m/s]")
+            ax.set_ylim(-1.3, 1.3)
+            ax.grid(True, alpha=0.3)
+            if row == 0:
+                ax.set_title("Mocap global velocity vs drone body velocity")
+            ax.legend(fontsize=8)
+
+            ax = axes[row, 1]
+            ax.plot(mt, mocap_body[row], color="tab:green", lw=1.1, alpha=0.8,
+                    label=f"mocap body v{axis_name.lower()}")
+            ax.plot(mt, drone_v_resampled, color="tab:blue", lw=0.8, alpha=0.6,
+                    label=f"drone {kalman_col} (resampled)")
+            ax.set_ylim(-1.3, 1.3)
+            ax.grid(True, alpha=0.3)
+            if row == 0:
+                ax.set_title("Mocap velocity rotated to body (roll+pitch+yaw)")
+            ax.legend(fontsize=8)
+
+        axes[-1, 0].set_xlabel("Mocap time [s]")
+        axes[-1, 1].set_xlabel("Mocap time [s]")
+        plt.tight_layout()
+        fig.savefig(out_dir / f"{file_prefix}_velocity_debug_drone{did}.png", dpi=150)
+        plt.close(fig)
+        print(f"  Saved {file_prefix}_velocity_debug_drone{did}.png")
+
+
 def mocap_yaw_rate(mocap_drone):
     """Compute yaw rate [deg/s] from mocap yaw angle via smoothed differentiation."""
     t = mocap_drone["time"]
     yaw = np.unwrap(mocap_drone["yaw"])  # radians, unwrapped
+    valid_orig = mocap_drone.get("valid_orig", np.ones(len(t), dtype=bool))
 
     # Smooth before differentiation (same window as body-frame velocity)
     win = min(19, len(t) // 2 * 2 - 1)
@@ -714,23 +983,39 @@ def mocap_yaw_rate(mocap_drone):
     else:
         yaw_s = yaw
 
-    yaw_rate_rad = np.gradient(yaw_s, t)  # rad/s
+    unique_idx = np.concatenate(([True], np.diff(t) > 1e-9))
+    t_u = t[unique_idx]
+    yaw_u = yaw_s[unique_idx]
+    yaw_rate_u = np.gradient(yaw_u, t_u)  # rad/s
+    yaw_rate_rad = np.interp(t, t_u, yaw_rate_u)
+
+    # Mask yaw rate as NaN where data was interpolated (dropout regions)
+    if valid_orig is not None:
+        interp_regions = ~valid_orig
+        if interp_regions.any():
+            dilated = interp_regions.copy()
+            dilated[:-1] |= interp_regions[1:]
+            dilated[1:] |= interp_regions[:-1]
+            yaw_rate_rad[dilated] = np.nan
 
     # Reject outlier spikes from marker tracking glitches:
     # replace samples > 5*median(|rate|) with interpolated neighbors
     yr_deg = np.degrees(yaw_rate_rad)
-    med = np.median(np.abs(yr_deg[np.abs(yr_deg) > 0.1]))  # avoid zero floor
-    if med > 0:
-        thresh = max(5 * med, 200.0)  # at least 200 deg/s
-        bad = np.abs(yr_deg) > thresh
-        if bad.any():
-            good = ~bad
-            yr_deg[bad] = np.interp(t[bad], t[good], yr_deg[good])
+    valid_yr = ~np.isnan(yr_deg)
+    if valid_yr.sum() > 0:
+        med = np.median(np.abs(yr_deg[valid_yr][np.abs(yr_deg[valid_yr]) > 0.1]))  # avoid zero floor
+        if med > 0:
+            thresh = max(5 * med, 200.0)  # at least 200 deg/s
+            bad = np.abs(yr_deg) > thresh
+            if bad.any():
+                good = ~bad & valid_yr
+                if good.sum() > 0:
+                    yr_deg[bad] = np.interp(t[bad], t[good], yr_deg[good])
 
     return yr_deg
 
 
-def plot_yawrate_comparison(dfs, mocap, offsets, out_dir):
+def plot_yawrate_comparison(dfs, mocap, offsets, out_dir, title_prefix="Day 02", file_prefix="day02"):
     """Plot drone yaw rate vs mocap-derived yaw rate for flying drones."""
     out_dir.mkdir(parents=True, exist_ok=True)
     mapping = offsets["_mapping"]
@@ -769,7 +1054,7 @@ def plot_yawrate_comparison(dfs, mocap, offsets, out_dir):
             mc_smooth = mc_yawrate
 
         fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
-        fig.suptitle(f"Day 02: Drone {did} Yaw Rate Comparison",
+        fig.suptitle(f"{title_prefix}: Drone {did} Yaw Rate Comparison",
                      fontsize=14, fontweight="bold")
 
         # Top: raw (resampled)
@@ -796,9 +1081,9 @@ def plot_yawrate_comparison(dfs, mocap, offsets, out_dir):
         ax.set_title("Smoothed (~0.5 s window)")
 
         plt.tight_layout()
-        fig.savefig(out_dir / f"day02_yawrate_drone{did}.png", dpi=150)
+        fig.savefig(out_dir / f"{file_prefix}_yawrate_drone{did}.png", dpi=150)
         plt.close(fig)
-        print(f"  Saved day02_yawrate_drone{did}.png")
+        print(f"  Saved {file_prefix}_yawrate_drone{did}.png")
 
 
 def plot_overview(mocap, offsets, out_dir):
@@ -857,6 +1142,100 @@ def plot_overview(mocap, offsets, out_dir):
     print(f"  Saved day02_overview.png")
 
 
+def plot_pairwise_component_distances_global(mocap, offsets, out_dir):
+    """Plot pairwise dx, dy, dz in global frame for all drone pairs."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mapping = offsets["_mapping"]
+    pairs = [(0, 1), (0, 2), (1, 2)]
+    pair_colors = {
+        (0, 1): "tab:blue",
+        (0, 2): "tab:orange",
+        (1, 2): "tab:green",
+    }
+
+    fig, axes = plt.subplots(3, 1, figsize=(15, 10), sharex=True)
+    fig.suptitle("Day 02: Pairwise Relative Components in Global Frame",
+                 fontsize=14, fontweight="bold")
+
+    axis_names = ["x", "y", "z"]
+    for (i, j) in pairs:
+        if i not in mapping or j not in mapping:
+            continue
+        mi = mocap[mapping[i]]
+        mj = mocap[mapping[j]]
+        t = mi["time"]
+        deltas = {
+            "x": mj["x"] - mi["x"],
+            "y": mj["y"] - mi["y"],
+            "z": mj["z"] - mi["z"],
+        }
+        for idx, comp in enumerate(axis_names):
+            axes[idx].plot(t, deltas[comp], color=pair_colors[(i, j)], lw=1.2,
+                           alpha=0.8, label=f"d{comp}({i}->{j})")
+
+    for idx, comp in enumerate(axis_names):
+        axes[idx].set_ylabel(f"d{comp} [m]")
+        axes[idx].grid(True, alpha=0.3)
+        axes[idx].legend(fontsize=9, loc="upper right")
+    axes[-1].set_xlabel("Mocap time [s]")
+
+    plt.tight_layout()
+    fig.savefig(out_dir / "day02_pairwise_components_global.png", dpi=150)
+    plt.close(fig)
+    print("  Saved day02_pairwise_components_global.png")
+
+
+def plot_relative_components_in_drone0_body(mocap, offsets, out_dir):
+    """Plot drone 1 and 2 position relative to drone 0 in drone 0 body frame."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mapping = offsets["_mapping"]
+    if 0 not in mapping or 1 not in mapping or 2 not in mapping:
+        print("  Skipping drone 0 body-frame relative plot: missing mapping")
+        return
+
+    m0 = mocap[mapping[0]]
+    m1 = mocap[mapping[1]]
+    m2 = mocap[mapping[2]]
+    t = m0["time"]
+
+    q0 = np.column_stack([m0["qx"], m0["qy"], m0["qz"], m0["qw"]])
+    q0 /= np.clip(np.linalg.norm(q0, axis=1, keepdims=True), 1e-12, None)
+    r0 = Rotation.from_quat(q0)
+
+    rel01_world = np.column_stack([
+        m1["x"] - m0["x"],
+        m1["y"] - m0["y"],
+        m1["z"] - m0["z"],
+    ])
+    rel02_world = np.column_stack([
+        m2["x"] - m0["x"],
+        m2["y"] - m0["y"],
+        m2["z"] - m0["z"],
+    ])
+
+    rel01_body = r0.inv().apply(rel01_world)
+    rel02_body = r0.inv().apply(rel02_world)
+
+    fig, axes = plt.subplots(3, 1, figsize=(15, 10), sharex=True)
+    fig.suptitle("Day 02: Relative Components in Drone 0 Body Frame",
+                 fontsize=14, fontweight="bold")
+
+    for idx, axis_name in enumerate(["x", "y", "z"]):
+        axes[idx].plot(t, rel01_body[:, idx], color="tab:blue", lw=1.2,
+                       alpha=0.8, label=f"d{axis_name}(0->1) in body0")
+        axes[idx].plot(t, rel02_body[:, idx], color="tab:orange", lw=1.2,
+                       alpha=0.8, label=f"d{axis_name}(0->2) in body0")
+        axes[idx].set_ylabel(f"d{axis_name} [m]")
+        axes[idx].grid(True, alpha=0.3)
+        axes[idx].legend(fontsize=9, loc="upper right")
+
+    axes[-1].set_xlabel("Mocap time [s]")
+    plt.tight_layout()
+    fig.savefig(out_dir / "day02_relative_components_body0.png", dpi=150)
+    plt.close(fig)
+    print("  Saved day02_relative_components_body0.png")
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────────────
@@ -907,8 +1286,11 @@ def main():
     print("=" * 60)
     plot_height_sync(dfs, mocap, offsets, OUTPUT_DIR)
     plot_velocity_comparison(dfs, mocap, offsets, OUTPUT_DIR)
+    plot_velocity_alignment_debug(dfs, mocap, offsets, OUTPUT_DIR)
     plot_yawrate_comparison(dfs, mocap, offsets, OUTPUT_DIR)
     plot_overview(mocap, offsets, OUTPUT_DIR)
+    plot_pairwise_component_distances_global(mocap, offsets, OUTPUT_DIR)
+    plot_relative_components_in_drone0_body(mocap, offsets, OUTPUT_DIR)
 
     print(f"\nDone! Outputs in {DATA_DIR}/ and {OUTPUT_DIR}/")
 

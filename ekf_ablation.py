@@ -105,12 +105,56 @@ def _make_params(**overrides) -> EKFParams:
     return EKFParams(**merged)
 
 
-def _run_silent(csv_path: str, params: EKFParams) -> pd.DataFrame:
+def _run_silent(
+    csv_path: str,
+    params: EKFParams,
+    use_flow: bool = True,
+    use_tof: bool = True,
+) -> pd.DataFrame:
     """Run EKF with stdout suppressed."""
     with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return run_ekf(csv_path, params=params)
+            return run_ekf(csv_path, params=params, use_flow=use_flow, use_tof=use_tof)
+
+
+def run_velocity_measurement_comparison(csv_files: list[str]) -> pd.DataFrame:
+    """
+    Compare two full-model scenarios on velocity RMSE:
+      1) full measurements (ToF + optical flow)
+      2) no flow-sensor measurements (no ToF + no optical flow)
+    """
+    scenarios = [
+        ("full measurements", True, True),
+        ("no flow-sensor measurements", False, False),
+    ]
+
+    rows = []
+    params = _make_params()
+    for scenario_name, use_flow, use_tof in scenarios:
+        for csv_path in csv_files:
+            if not Path(csv_path).exists():
+                continue
+            print(f"  Scenario [{scenario_name}] on {Path(csv_path).name} ...")
+            try:
+                results = _run_silent(csv_path, params, use_flow=use_flow, use_tof=use_tof)
+                rmses = _compute_rmse(results)
+            except Exception as e:
+                print(f"    ⚠ failed: {e}")
+                continue
+
+            rows.append({
+                "scenario": scenario_name,
+                "use_flow": use_flow,
+                "use_tof": use_tof,
+                "csv": Path(csv_path).stem,
+                "vel_total": rmses.get("vel_total", np.nan),
+                "vel_x": rmses.get("vel_x", np.nan),
+                "vel_y": rmses.get("vel_y", np.nan),
+                "vel_z": rmses.get("vel_z", np.nan),
+            })
+
+    return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +362,13 @@ def plot_ablation(df: pd.DataFrame, save_dir: str | None = None):
         ("vel_total", "Body-frame velocity total RMSE (m/s)"),
     ]
 
-    for metric, ylabel in vel_metrics:
+    att_metrics = [
+        ("att_roll",  "Roll RMSE (deg)"),
+        ("att_pitch", "Pitch RMSE (deg)"),
+        ("att_yaw",   "Yaw RMSE (deg)"),
+    ]
+
+    for metric, ylabel in vel_metrics + att_metrics:
         if metric not in df.columns:
             continue
 
@@ -383,6 +433,12 @@ def plot_ablation_by_trajectory(df: pd.DataFrame, save_dir: str | None = None):
         ("vel_total", "Body-frame velocity total RMSE (m/s)"),
     ]
 
+    att_metrics = [
+        ("att_roll",  "Roll RMSE (deg)"),
+        ("att_pitch", "Pitch RMSE (deg)"),
+        ("att_yaw",   "Yaw RMSE (deg)"),
+    ]
+
     n_cases = len(cases)
     spread = 0.6
     if n_cases > 1:
@@ -391,7 +447,7 @@ def plot_ablation_by_trajectory(df: pd.DataFrame, save_dir: str | None = None):
         case_offsets = np.array([0.0])
     case_offset = {c: case_offsets[j] for j, c in enumerate(cases)}
 
-    for metric, ylabel in vel_metrics:
+    for metric, ylabel in vel_metrics + att_metrics:
         if metric not in df.columns:
             continue
 
@@ -453,6 +509,12 @@ def plot_sensitivity(df: pd.DataFrame, save_dir: str | None = None):
         ("vel_total", "Body-frame velocity total RMSE (m/s)"),
     ]
 
+    att_metrics = [
+        ("att_roll",  "Roll RMSE (deg)"),
+        ("att_pitch", "Pitch RMSE (deg)"),
+        ("att_yaw",   "Yaw RMSE (deg)"),
+    ]
+
     for feat in features:
         feat_df = df[df["feature"] == feat].copy()
         feat_df["scale_label"] = feat_df["scale_pct"].apply(lambda p: f"{p:+d}%")
@@ -463,7 +525,7 @@ def plot_sensitivity(df: pd.DataFrame, save_dir: str | None = None):
         feat_df["scale_label"] = pd.Categorical(
             feat_df["scale_label"], categories=sorted_labels, ordered=True)
 
-        for metric, ylabel in vel_metrics:
+        for metric, ylabel in vel_metrics + att_metrics:
             if metric not in feat_df.columns:
                 continue
 
@@ -515,6 +577,12 @@ def plot_sensitivity_by_trajectory(df: pd.DataFrame, save_dir: str | None = None
         ("vel_total", "Body-frame velocity total RMSE (m/s)"),
     ]
 
+    att_metrics = [
+        ("att_roll",  "Roll RMSE (deg)"),
+        ("att_pitch", "Pitch RMSE (deg)"),
+        ("att_yaw",   "Yaw RMSE (deg)"),
+    ]
+
     for feat in features:
         feat_df = df[df["feature"] == feat].copy()
         pcts = sorted(feat_df["scale_pct"].unique())
@@ -534,7 +602,7 @@ def plot_sensitivity_by_trajectory(df: pd.DataFrame, save_dir: str | None = None
             pct_offsets = np.array([0.0])
         pct_offset = {p: pct_offsets[j] for j, p in enumerate(pcts)}
 
-        for metric, ylabel in vel_metrics:
+        for metric, ylabel in vel_metrics + att_metrics:
             if metric not in feat_df.columns:
                 continue
 
@@ -576,6 +644,45 @@ def plot_sensitivity_by_trajectory(df: pd.DataFrame, save_dir: str | None = None
                 plt.close(fig)
 
 
+def plot_velocity_measurement_comparison(df: pd.DataFrame, save_dir: str | None = None):
+    """Create two clear velocity RMSE plots for the requested measurement scenarios."""
+    if df.empty:
+        return
+
+    scenarios = [
+        ("full measurements", "velocity_rmse_full_model_full_measurements.png"),
+        ("no flow-sensor measurements", "velocity_rmse_full_model_no_flow_sensor.png"),
+    ]
+
+    for scenario_name, file_name in scenarios:
+        sub = df[df["scenario"] == scenario_name].copy()
+        if sub.empty:
+            continue
+        sub = sub.sort_values("csv")
+
+        fig, ax = plt.subplots(figsize=(11, 5.5), constrained_layout=True)
+        fig.suptitle(f"Velocity RMSE — Full Model, {scenario_name.title()}", fontsize=13)
+
+        x = np.arange(len(sub))
+        y = sub["vel_total"].to_numpy()
+        ax.bar(x, y, width=0.65, color="#4C78A8", edgecolor="black", linewidth=0.6)
+
+        mean_val = float(np.nanmean(y))
+        ax.axhline(mean_val, color="#F58518", linestyle="--", linewidth=1.6,
+                   label=f"mean = {mean_val:.3f} m/s")
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(sub["csv"].tolist(), rotation=25, ha="right", fontsize=9)
+        ax.set_ylabel("Velocity total RMSE (m/s)")
+        ax.set_xlabel("Trajectory")
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(loc="upper right", framealpha=0.9)
+
+        if save_dir:
+            fig.savefig(f"{save_dir}/{file_name}", dpi=150, bbox_inches="tight")
+            plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # Plotting – feature importance (kept for quick summary)
 # ---------------------------------------------------------------------------
@@ -591,7 +698,7 @@ def plot_feature_importance(ablation_df: pd.DataFrame, save_dir: str | None = No
     if base.empty:
         return
 
-    metrics = [m for m in ["vel_total", "pos_total"] if m in agg.columns]
+    metrics = [m for m in ["vel_total", "pos_total", "att_roll", "att_pitch", "att_yaw"] if m in agg.columns]
     if not metrics:
         return
 
@@ -620,10 +727,15 @@ def plot_feature_importance(ablation_df: pd.DataFrame, save_dir: str | None = No
                 deltas[m].append(delta)
 
     x = np.arange(len(labels))
-    width = 0.35
+    width = 0.35 if len(metrics) <= 2 else 0.25
     for j, metric in enumerate(metrics):
-        mlabel = "Position ΔRMSE (m)" if "pos" in metric else "Velocity ΔRMSE (m/s)"
-        bars = ax.bar(x + j * width - width / 2, deltas[metric], width,
+        if "pos" in metric:
+            mlabel = "Position ΔRMSE (m)"
+        elif "vel" in metric:
+            mlabel = "Velocity ΔRMSE (m/s)"
+        else:
+            mlabel = "Attitude ΔRMSE (deg)"
+        bars = ax.bar(x + j * width - (len(metrics) - 1) * width / 2, deltas[metric], width,
                       label=mlabel, edgecolor="white", linewidth=0.5)
         for bar, val in zip(bars, deltas[metric]):
             ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
@@ -683,6 +795,7 @@ def main():
 
     ablation_df = None
     sensitivity_df = None
+    vel_meas_df = None
 
     # --- Ablation ---
     if not args.no_ablation:
@@ -696,6 +809,19 @@ def main():
             path = f"{args.save}_{size_tag}_ablation.csv"
             ablation_df.to_csv(path, index=False)
             print(f"Saved ablation results to {path}")
+
+    # --- Small-set velocity comparison for requested measurement cases ---
+    if size_tag == "small":
+        print("=" * 60)
+        print("  VELOCITY COMPARISON (full model; full vs no flow-sensor data)")
+        print("=" * 60)
+        vel_meas_df = run_velocity_measurement_comparison(csv_files)
+        print(f"\nVelocity measurement comparison complete: {len(vel_meas_df)} rows\n")
+
+        if args.save:
+            path = f"{args.save}_{size_tag}_velocity_measurement_compare.csv"
+            vel_meas_df.to_csv(path, index=False)
+            print(f"Saved velocity measurement comparison to {path}")
 
     # --- Sensitivity ---
     if not args.no_sensitivity:
@@ -717,7 +843,8 @@ def main():
         print("=" * 80)
         summary_cols = ["case"]
         for c in ["pos_x", "pos_y", "pos_z", "pos_total",
-                   "vel_x", "vel_y", "vel_z", "vel_total"]:
+                   "vel_x", "vel_y", "vel_z", "vel_total",
+                   "att_roll", "att_pitch", "att_yaw"]:
             if c in ablation_df.columns:
                 summary_cols.append(c)
         summary = ablation_df.groupby("case", sort=False)[summary_cols[1:]].mean()
@@ -741,6 +868,9 @@ def main():
     if sensitivity_df is not None and not sensitivity_df.empty:
         plot_sensitivity(sensitivity_df, save_dir=save_dir)
         plot_sensitivity_by_trajectory(sensitivity_df, save_dir=save_dir)
+
+    if vel_meas_df is not None and not vel_meas_df.empty:
+        plot_velocity_measurement_comparison(vel_meas_df, save_dir=save_dir)
 
     if save_dir:
         print(f"\nPlots saved to {save_dir}/")

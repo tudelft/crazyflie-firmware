@@ -522,6 +522,8 @@ def run_ekf(
     imu_rate: float = 500.0,
     flying_height_threshold_m: float = 0.15,
     params: EKFParams | None = None,
+    use_flow: bool = True,
+    use_tof: bool = True,
 ) -> pd.DataFrame:
     """
     Load a CSV flight log and replay the Crazyflie EKF.
@@ -537,6 +539,10 @@ def run_ekf(
         This switches between the flying and non-flying prediction models.
     params
         EKF parameters; uses firmware defaults if not provided.
+    use_flow
+        If False, skip all optical-flow measurement updates.
+    use_tof
+        If False, skip all ToF/range measurement updates.
 
     Returns
     -------
@@ -690,10 +696,10 @@ def run_ekf(
         # --- Process noise every row (firmware calls addProcessNoise every EKF loop) ---
         ekf.add_process_noise(step_dt)
 
-        if new_tof[i]:
+        if use_tof and new_tof[i]:
             ekf.update_tof(tof_reading)
 
-        if new_flow[i]:
+        if use_flow and new_flow[i]:
             # Outlier filter: matches `if (abs(accpx) < OULIER_LIMIT && abs(accpy) < OULIER_LIMIT)`
             # in flowdeck_v1v2.c. Note: accpx = -deltaY, accpy = -deltaX, but abs() is sign-invariant.
             # lastTime is only updated for non-outlier reads (firmware behaviour).
