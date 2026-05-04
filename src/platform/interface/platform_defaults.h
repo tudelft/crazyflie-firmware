@@ -230,6 +230,17 @@
     #define IS_ANCHOR 0
 #endif
 
+// Flow deck position relative to center of mass, in body frame (in meters)
+#ifndef FLOWDECK_POS_X
+    #define FLOWDECK_POS_X 0.0f
+#endif
+#ifndef FLOWDECK_POS_Y
+    #define FLOWDECK_POS_Y 0.0f
+#endif
+#ifndef FLOWDECK_POS_Z
+    #define FLOWDECK_POS_Z 0.0f
+#endif
+
 // Drag coefficients (in N*s/m)
 #ifndef DRAG_B_X
     #define DRAG_B_X 0.0f

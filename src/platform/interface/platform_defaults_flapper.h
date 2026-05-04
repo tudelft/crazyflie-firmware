@@ -162,3 +162,9 @@
 #define CENTER_OF_PRESSURE_X 0.0f
 #define CENTER_OF_PRESSURE_Y 0.0f
 #define CENTER_OF_PRESSURE_Z 0.03f
+
+// Flow deck position offset (in meters) — flapper-specific: flowdeck mounted below the legs
+// Assumes placement per https://github.com/flapper-drones/3Dmodels/blob/main/Bitcraze_flowdeck_support%20v17.stl
+#define FLOWDECK_POS_X 0.0f
+#define FLOWDECK_POS_Y 0.0f
+#define FLOWDECK_POS_Z -0.12f
