@@ -165,9 +165,10 @@ static float rlActions[OUTPUT_DIM];
 static logVarId_t idX     = (logVarId_t)0xFFFF;
 static logVarId_t idY     = (logVarId_t)0xFFFF;
 static logVarId_t idZ     = (logVarId_t)0xFFFF;
-static logVarId_t idRoll  = (logVarId_t)0xFFFF;
-static logVarId_t idPitch = (logVarId_t)0xFFFF;
-static logVarId_t idYawSe = (logVarId_t)0xFFFF;   // stateEstimate yaw
+static logVarId_t idQw    = (logVarId_t)0xFFFF;
+static logVarId_t idQx    = (logVarId_t)0xFFFF;
+static logVarId_t idQy    = (logVarId_t)0xFFFF;
+static logVarId_t idQz    = (logVarId_t)0xFFFF;
 static logVarId_t idGyroX = (logVarId_t)0xFFFF;
 static logVarId_t idGyroY = (logVarId_t)0xFFFF;
 static logVarId_t idGyroZ = (logVarId_t)0xFFFF;
@@ -204,21 +205,6 @@ static float wrapAngle(float a) {
   while (a >  M_PI_F) a -= 2.0f * M_PI_F;
   while (a < -M_PI_F) a += 2.0f * M_PI_F;
   return a;
-}
-
-// ============================================================================
-// ZYX Euler angles → quaternion (matches flapper_model euler_to_quat)
-// ============================================================================
-static void eulerToQuat(float phi, float theta, float psi,
-                        float *qw, float *qx, float *qy, float *qz) {
-  float cp = cosf(phi   * 0.5f), sp = sinf(phi   * 0.5f);
-  float ct = cosf(theta * 0.5f), st = sinf(theta * 0.5f);
-  float cy = cosf(psi   * 0.5f), sy = sinf(psi   * 0.5f);
-
-  *qw = cp * ct * cy + sp * st * sy;
-  *qx = sp * ct * cy - cp * st * sy;
-  *qy = cp * st * cy + sp * ct * sy;
-  *qz = cp * ct * sy - sp * st * cy;
 }
 
 // ============================================================================
@@ -271,9 +257,6 @@ static void computeObservation(void) {
   float fw_x     = logGetFloat(idX);
   float fw_y     = logGetFloat(idY);
   float fw_z     = logGetFloat(idZ);
-  float fw_roll  = logGetFloat(idRoll);   // degrees
-  float fw_pitch = logGetFloat(idPitch);  // degrees
-  float fw_yaw   = logGetFloat(idYawSe);  // degrees
   float fw_gx    = logGetFloat(idGyroX);  // deg/s
   float fw_gy    = logGetFloat(idGyroY);  // deg/s
   float fw_gz    = logGetFloat(idGyroZ);  // deg/s
@@ -289,11 +272,6 @@ static void computeObservation(void) {
   float sim_y = -fw_y;
   float sim_z = -fw_z;
 
-  // Euler angles: phi/theta same sign, psi flipped (CW vs CCW yaw)
-  float sim_phi   =  fw_roll  * DEG2RAD;
-  float sim_theta =  fw_pitch * DEG2RAD;
-  float sim_psi   = -fw_yaw   * DEG2RAD;
-
   // Body velocity: CF (fwd, left, up) → sim NED body (fwd, right, down)
   float u_body =  fw_bvx;
   float v_body = -fw_bvy;
@@ -304,9 +282,13 @@ static void computeObservation(void) {
   float sim_q = -fw_gy * DEG2RAD;
   float sim_r = -fw_gz * DEG2RAD;
 
-  // ---- Drone quaternion from Euler angles ---------------------------------
-  float qw, qx, qy, qz;
-  eulerToQuat(sim_phi, sim_theta, sim_psi, &qw, &qx, &qy, &qz);
+  // ---- Drone quaternion: firmware NWU body→world quat → sim NED.
+  // Transform is conj-by-180°-about-x (q_swap ⊗ q_cf ⊗ q_swap⁻¹), which
+  // simplifies to flipping the y and z components.
+  float qw =  logGetFloat(idQw);
+  float qx =  logGetFloat(idQx);
+  float qy = -logGetFloat(idQy);
+  float qz = -logGetFloat(idQz);
 
   // ---- Gate indices -------------------------------------------------------
   int gi   = currentTargetGate % NUM_GATES;
@@ -582,9 +564,10 @@ void appMain(void) {
     ensureLogId(&idX,     "stateEstimate", "x");
     ensureLogId(&idY,     "stateEstimate", "y");
     ensureLogId(&idZ,     "stateEstimate", "z");
-    ensureLogId(&idRoll,  "stateEstimate", "roll");
-    ensureLogId(&idPitch, "stateEstimate", "pitch");
-    ensureLogId(&idYawSe, "stateEstimate", "yaw");
+    ensureLogId(&idQw,    "stateEstimate", "qw");
+    ensureLogId(&idQx,    "stateEstimate", "qx");
+    ensureLogId(&idQy,    "stateEstimate", "qy");
+    ensureLogId(&idQz,    "stateEstimate", "qz");
     ensureLogId(&idGyroX,    "gyro",  "x");
     ensureLogId(&idGyroY,    "gyro",  "y");
     ensureLogId(&idGyroZ,    "gyro",  "z");
@@ -597,7 +580,8 @@ void appMain(void) {
     ensureLogId(&idMotLogM4, "motor", "m4");
 
     allFound = logVarIdIsValid(idX)  && logVarIdIsValid(idY)  && logVarIdIsValid(idZ)
-            && logVarIdIsValid(idRoll) && logVarIdIsValid(idPitch) && logVarIdIsValid(idYawSe)
+            && logVarIdIsValid(idQw) && logVarIdIsValid(idQx)
+            && logVarIdIsValid(idQy) && logVarIdIsValid(idQz)
             && logVarIdIsValid(idGyroX) && logVarIdIsValid(idGyroY) && logVarIdIsValid(idGyroZ)
             && logVarIdIsValid(idBodyVx) && logVarIdIsValid(idBodyVy) && logVarIdIsValid(idBodyVz)
             && logVarIdIsValid(idMotLogM1) && logVarIdIsValid(idMotLogM2)
