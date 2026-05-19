@@ -136,7 +136,7 @@ def body_velocity(data):
     return bx, by, bz, 'rotated stateEstimate.v'
 
 
-def plot_gates(ax, origin_x=0.0, origin_y=0.0, half_width=0.75):
+def plot_gates(ax, origin_x=0.0, origin_y=0.0, half_width=1.0):
     """Overlay the figure-8 gates on a top-view (X, -Y) trajectory plot."""
     gx = BASE_GATE_X + origin_x
     gy = BASE_GATE_Y + origin_y
