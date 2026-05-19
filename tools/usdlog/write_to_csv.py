@@ -3,38 +3,40 @@
 code to write usd logged crazyflie data to csv in format used for the snn pid
 """
 import cfusdlog
-import matplotlib.pyplot as plt
-import re
 import argparse
 import pandas as pd
-import numpy as np
-from scipy import stats
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--filename", type=str, default="tools/usdlog/log03")
+parser.add_argument("--filename", type=str, default="data/bin/rlearning01")
+parser.add_argument("--all", action="store_true", help="process all binary files in data/bin/")
+parser.add_argument("--outdir", type=str, default="data/new/", help="output directory for csv files (default: same as input)")
 args = parser.parse_args()
 
-# decode binary log data
-logData = cfusdlog.decode(args.filename)
+if args.all:
+    bin_dir = Path("data/bin")
+    filenames = [str(p) for p in sorted(bin_dir.iterdir()) if p.is_file() and p.suffix == ""]
+else:
+    filenames = [args.filename]
 
-#only focus on regular logging
-logData = logData['fixedFrequency']
 
-# set window background to white
-plt.rcParams['figure.facecolor'] = 'w'
+outdir = Path(args.outdir) if args.outdir else None
+if outdir:
+    outdir.mkdir(parents=True, exist_ok=True)
 
-# number of columns and rows for suplot
-plotCols = 1
-plotRows = 1
 
-# let's see which keys exists in current data set
-keys = []
-for k, v in logData.items():
-    keys.append(k)
+def process_file(filename):
+    p = Path(filename)
+    out = (outdir / p.name).with_suffix('.csv') if outdir else p.with_suffix('.csv')
+    if out.exists():
+        print(f"skipping {filename} (csv already exists)")
+        return
+    logData = cfusdlog.decode(filename)
+    logData = logData['fixedFrequency']
+    data = pd.DataFrame({key: logData[key] for key in logData})
+    data.to_csv(out, index=False)
+    print(f"wrote {out}")
 
-# first simply store in dataframe
-data = pd.DataFrame()
-for key in keys:
-    data[key] = logData[key]
 
-data.to_csv(f'{args.filename}.csv', index=False)
+for filename in filenames:
+    process_file(filename)
