@@ -262,3 +262,22 @@
 #ifndef CENTER_OF_PRESSURE_Z
     #define CENTER_OF_PRESSURE_Z 0.0f
 #endif
+
+// EKF process / measurement noise (platform-tunable). Fallbacks preserve the
+// previous hard-coded defaults; the GENERAL_PURPOSE config keeps its lower Z.
+#ifndef PROC_NOISE_ACC_XY
+    #define PROC_NOISE_ACC_XY 0.5f
+#endif
+#ifndef PROC_NOISE_ACC_Z
+    #ifdef CONFIG_ESTIMATOR_KALMAN_GENERAL_PURPOSE
+        #define PROC_NOISE_ACC_Z 0.5f
+    #else
+        #define PROC_NOISE_ACC_Z 1.0f
+    #endif
+#endif
+#ifndef MEAS_NOISE_GYRO_ROLLPITCH
+    #define MEAS_NOISE_GYRO_ROLLPITCH 0.1f
+#endif
+#ifndef MEAS_NOISE_GYRO_YAW
+    #define MEAS_NOISE_GYRO_YAW 0.1f
+#endif

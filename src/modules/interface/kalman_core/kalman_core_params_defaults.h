@@ -37,16 +37,11 @@
 
 #include "platform_defaults.h"
 
-// Process noise defaults depend on configuration
-#ifdef CONFIG_ESTIMATOR_KALMAN_GENERAL_PURPOSE
+// Process noise defaults (platform-tunable; fallbacks in platform_defaults.h,
+// which also honors the GENERAL_PURPOSE config for procNoiseAcc_z)
 #define KALMAN_CORE_PROC_NOISE_DEFAULTS \
-  .procNoiseAcc_xy = 0.5f, \
-  .procNoiseAcc_z = 0.5f
-#else
-#define KALMAN_CORE_PROC_NOISE_DEFAULTS \
-  .procNoiseAcc_xy = 0.5f, \
-  .procNoiseAcc_z = 1.0f
-#endif
+  .procNoiseAcc_xy = PROC_NOISE_ACC_XY, \
+  .procNoiseAcc_z = PROC_NOISE_ACC_Z
 
 #ifdef CONFIG_STIMATOR_KALMAN_INITIAL_YAW_STD
 #define KALMAN_INITIAL_YAW_STD (CONFIG_STIMATOR_KALMAN_INITIAL_YAW_STD / 1000.0f)
@@ -73,8 +68,8 @@
   .procNoisePos = 0, \
   .procNoiseAtt = 0, \
   .measNoiseBaro = 2.0f,           /* meters */ \
-  .measNoiseGyro_rollpitch = 0.1f, /* radians per second */ \
-  .measNoiseGyro_yaw = 0.1f,       /* radians per second */ \
+  .measNoiseGyro_rollpitch = MEAS_NOISE_GYRO_ROLLPITCH, /* radians per second */ \
+  .measNoiseGyro_yaw = MEAS_NOISE_GYRO_YAW,             /* radians per second */ \
   \
   .initialX = 0.0, \
   .initialY = 0.0, \

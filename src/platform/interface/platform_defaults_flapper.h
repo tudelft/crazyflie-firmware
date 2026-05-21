@@ -156,12 +156,24 @@
 
 // Drag and center of pressure
 // NOTE: For X, these values are not constant but depends on dihedral angle. Influence seems to be negligible.
-#define DRAG_B_X 4.39f
-#define DRAG_B_Y 2.89f
-#define DRAG_B_Z 0.06f
+// Values from offline EKF replay tuning (ekf_data branch: "Tuned with cop and flowdeck lever arm").
+#define DRAG_B_X 4.39468f
+#define DRAG_B_Y 2.88896f
+#define DRAG_B_Z 0.0611769f
 #define CENTER_OF_PRESSURE_X 0.0f
 #define CENTER_OF_PRESSURE_Y 0.0f
 #define CENTER_OF_PRESSURE_Z 0.03f
+
+// EKF process / measurement noise — offline replay tuning (ekf_data branch)
+#define PROC_NOISE_ACC_XY 1.05006f
+#define PROC_NOISE_ACC_Z 0.604273f
+#define MEAS_NOISE_GYRO_ROLLPITCH 0.0521776f
+#define MEAS_NOISE_GYRO_YAW 0.116742f
+
+// NOTE: the replay's flow tuning (flow_std_fixed_x/y, flow_resolution) was fit
+// on MTF-02 logs, so it is applied in mtf02deck.c (flowScale + per-axis std),
+// not here. The shared mm_flow.c FLOW_RESOLUTION stays at 0.10 for the PMW3901
+// standard flow deck.
 
 // Flow deck position offset (in meters) — flapper-specific: flowdeck mounted below the legs
 // Assumes placement per https://github.com/flapper-drones/3Dmodels/blob/main/Bitcraze_flowdeck_support%20v17.stl

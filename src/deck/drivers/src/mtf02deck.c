@@ -96,8 +96,16 @@ static uint32_t validFlowCount = 0;
 // Settings
 static bool useFlowDisabled = false;
 static bool useRangeDisabled = false;
-static float flowStdFixed = 1.5f;
-static float flowScale = 1.0f;  // Scaling factor for flow measurements (tune if drift occurs)
+// Per-axis fixed flow std and pixel scale, from offline EKF replay tuning on
+// MTF-02 logs (ekf_data branch: "Tuned with cop and flowdeck lever arm",
+// flow_std_fixed_x=1.07615, flow_std_fixed_y=5.41112, flow_resolution=0.22987).
+// mm_flow.c applies a fixed FLOW_RESOLUTION=0.10, so the replay values are
+// pre-scaled by 0.22987/0.10 = 2.2987 here:
+//   stdDev{X,Y} = flow_std_fixed_{x,y} * 0.22987 / 0.10
+//   flowScale   = 0.22987 / 0.10   (assumes logs were gathered at flowScale=1.0)
+static float flowStdFixedX = 2.47375f;
+static float flowStdFixedY = 12.43854f;
+static float flowScale = 2.2987f;
 
 /**
  * CRC8 DVB-S2 calculation for MSPv2
@@ -261,8 +269,8 @@ static void processOpticalFlowMessage(msp_msg_t* msg, uint64_t* lastTime)
             abs(payload.motion_y) < FLOW_OUTLIER_LIMIT) {
             
             flowMeasurement_t flowData;
-            flowData.stdDevX = flowStdFixed;
-            flowData.stdDevY = flowStdFixed * 2;
+            flowData.stdDevX = flowStdFixedX;
+            flowData.stdDevY = flowStdFixedY;
             flowData.dt = (float)(usecTimestamp() - *lastTime) / 1000000.0f;
             *lastTime = usecTimestamp();
 
@@ -379,6 +387,7 @@ LOG_GROUP_STOP(mtf02)
 PARAM_GROUP_START(mtf02)
   PARAM_ADD(PARAM_UINT8, flowDisable, &useFlowDisabled)
   PARAM_ADD(PARAM_UINT8, rangeDisable, &useRangeDisabled)
-  PARAM_ADD(PARAM_FLOAT, flowStd, &flowStdFixed)
-  PARAM_ADD(PARAM_FLOAT, flowScale, &flowScale)  // Scaling factor for flow (default 1.0)
+  PARAM_ADD(PARAM_FLOAT, flowStdX, &flowStdFixedX)
+  PARAM_ADD(PARAM_FLOAT, flowStdY, &flowStdFixedY)
+  PARAM_ADD(PARAM_FLOAT, flowScale, &flowScale)  // Scaling factor for flow (tuned: 2.2987)
 PARAM_GROUP_STOP(mtf02)
