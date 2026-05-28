@@ -54,7 +54,15 @@ bool vl53l8cxInit(VL53L8CX_Configuration *pdev, I2C_Dev *I2Cx)
   status = vl53l8cx_is_alive(pdev, &isAlive);
   if (status != VL53L8CX_STATUS_OK || !isAlive)
   {
-    DEBUG_PRINT("VL53L8CX: not alive at 0x%02X (%u)\n", VL53L8CX_DEFAULT_I2C_ADDRESS, status);
+    /* TEMP DIAGNOSTIC: read the raw ID registers so we can tell apart
+     * "no device on bus" from "wrong device" (e.g. VL53L5CX rev 0x02). */
+    uint8_t dbgStatus = 0, devId = 0, revId = 0;
+    dbgStatus |= VL53L8CX_WrByte(&(pdev->platform), 0x7fff, 0x00);
+    dbgStatus |= VL53L8CX_RdByte(&(pdev->platform), 0, &devId);
+    dbgStatus |= VL53L8CX_RdByte(&(pdev->platform), 1, &revId);
+    dbgStatus |= VL53L8CX_WrByte(&(pdev->platform), 0x7fff, 0x02);
+    DEBUG_PRINT("VL53L8CX: not alive at 0x%02X (st=%u) device_id=0x%02X revision_id=0x%02X i2c_st=%u\n",
+                VL53L8CX_DEFAULT_I2C_ADDRESS, status, devId, revId, dbgStatus);
     return false;
   }
 

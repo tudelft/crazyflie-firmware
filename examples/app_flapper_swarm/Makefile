@@ -20,4 +20,32 @@ CRAZYFLIE_BASE := ../..
 #
 OOT_CONFIG := $(PWD)/app-config
 
+#
+# Prompt for the drone role on every build (e.g. after 'make clean').
+# This replaces the default 'all' goal so a plain 'make' asks first.
+#
+.DEFAULT_GOAL := build
+
 include $(CRAZYFLIE_BASE)/tools/make/oot.mk
+
+.PHONY: build
+
+# Interactive role selection. Loads a curated defconfig so the deck set is
+# deterministic instead of relying on the long Kconfig question list.
+#   anchor  -> configs/anchor_defconfig   (microSD + Loco/UWB only)
+#   flapper -> configs/flapper_defconfig  (full sweep: MTF02 + microSD + 4x4 ToF)
+build:
+	@printf '\n=== Which drone are you building for? ===\n'; \
+	printf '  [a] anchor  - microSD + Loco/UWB only (no 4x4)\n'; \
+	printf '  [f] flapper - full sweep: MTF02 + microSD + 4x4 ToF\n'; \
+	printf 'Choice [a/f]: '; \
+	read role; \
+	case "$$role" in \
+	  a|A|anchor)  preset=anchor;;  \
+	  f|F|flapper) preset=flapper;; \
+	  *) echo "Unknown choice '$$role' - run 'make' again and type a or f."; exit 1;; \
+	esac; \
+	echo ">>> Loading $${preset}_defconfig ..."; \
+	$(MAKE) $${preset}_defconfig && \
+	echo ">>> Building $$preset firmware ..." && \
+	$(MAKE) all

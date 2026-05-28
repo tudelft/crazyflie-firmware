@@ -105,6 +105,15 @@ static uint8_t obstEnterConfirmCount = 2U;   // Confirmation samples to enter OB
 #define UTURN_YAW_TOLERANCE 5.0f            // Degrees tolerance for completing turn
 #define UTURN_COOLDOWN_MS 2000U             // Cooldown before another UTURN can be triggered
 
+// In-flight Z oscillation (relative height excitation), ported from the
+// relative_localization branch. Only applied while making forward progress
+// (STRAIGHT/TURN/AVOID/RECOVER/UTURN_FLY); OBSTACLE/UTURN/DANCE hold a steady
+// height so the drone is stable while backing up or turning in place.
+// Amplitude is +/- 0.25m around targetHeightM (0.5m peak-to-peak).
+#define FLIGHT_Z_OSC_AMPLITUDE_M 0.25f
+#define FLIGHT_Z_OSC_PERIOD_DRONE1_S 3.0f
+#define FLIGHT_Z_OSC_PERIOD_DRONE2PLUS_S 4.0f
+
 // ============================================================================
 // Log variable IDs
 // ============================================================================
@@ -372,6 +381,20 @@ static inline float normalizeAngle(float a) {
   while (a <= -180) a += 360;
   while (a > 180) a -= 360;
   return a;
+}
+
+// --- In-flight Z oscillation (relative height excitation) ---
+static inline float getFlightOscillationPeriodS(void) {
+  return (droneId == 1) ? FLIGHT_Z_OSC_PERIOD_DRONE1_S : FLIGHT_Z_OSC_PERIOD_DRONE2PLUS_S;
+}
+
+static inline float getOscillatingFlightHeight(void) {
+  const float t = getTimestamp();
+  const float period = getFlightOscillationPeriodS();
+  const float omega = (2.0f * 3.14159265358979323846f) / period;
+  // Small per-drone phase offset (plus different period) to avoid synchronization
+  const float phaseOffset = (droneId == 1) ? 0.0f : 1.0471975512f; // 60 deg
+  return targetHeightM + FLIGHT_Z_OSC_AMPLITUDE_M * sinf(omega * t + phaseOffset);
 }
 
 // ============================================================================
@@ -713,7 +736,7 @@ static FlightState checkTransitionStraight(void) {
 }
 
 static void executeStraight(void) {
-  sendHover(fwdSpeedMps, 0.0f, targetHeightM, 0.0f);
+  sendHover(fwdSpeedMps, 0.0f, getOscillatingFlightHeight(), 0.0f);
 }
 
 // --- TURN state ---
@@ -795,7 +818,7 @@ static void executeTurn(void) {
     yawRateCmd *= 0.5f;
   }
   DEBUG_PRINT("[%.2f] TURN: d0Deriv=%.2f, yawRateCmd=%.2f\n", (double)getTimestamp(), (double)ctx.d0Deriv, (double)yawRateCmd);
-  sendHover(fwdSpeedMps, 0.0f*fwdSpeedMps, targetHeightM, yawRateCmd);
+  sendHover(fwdSpeedMps, 0.0f*fwdSpeedMps, getOscillatingFlightHeight(), yawRateCmd);
 }
 
 // --- AVOID state ---
@@ -853,7 +876,7 @@ static void executeAvoid(void) {
   if (ctx.peerDistDeriv > 50.0f) {
     yawRate *= 0.5f;
   }
-  sendHover(fwdSpeedMps * avoidSpeedFactor, 0.0f, targetHeightM, yawRate);
+  sendHover(fwdSpeedMps * avoidSpeedFactor, 0.0f, getOscillatingFlightHeight(), yawRate);
 }
 
 // --- RECOVER state ---
@@ -926,7 +949,7 @@ static void executeRecover(void) {
                 ctx.rotationDirection);
   }
   
-  sendHover(fwdSpeedMps, 0.0f, targetHeightM, yawCommandFinal);
+  sendHover(fwdSpeedMps, 0.0f, getOscillatingFlightHeight(), yawCommandFinal);
 }
 
 // --- DANCE state ---
@@ -1228,7 +1251,7 @@ static FlightState checkTransitionUturnFly(void) {
 
 static void executeUturnFly(void) {
   // Fly straight forward at normal speed
-  sendHover(fwdSpeedMps, 0.0f, targetHeightM, 0.0f);
+  sendHover(fwdSpeedMps, 0.0f, getOscillatingFlightHeight(), 0.0f);
 }
 
 // ============================================================================
