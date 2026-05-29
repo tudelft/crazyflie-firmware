@@ -109,6 +109,12 @@ static bool landingFinished = false;
 // Gate configuration (figure-8 track from Python training)
 // ============================================================================
 // Base gate positions relative to origin (x, y in world frame)
+
+//notes
+// 0.0 yaw is towards positive x
+
+
+
 static const float baseGateX[NUM_GATES] = {
    GATE_R,  0.0f, -GATE_R,  0.0f,
    GATE_R,  0.0f, -GATE_R,  0.0f
@@ -254,17 +260,26 @@ static void initGates(void) {
 // ============================================================================
 static void computeObservation(void) {
   // ---- Read firmware state ------------------------------------------------
+  // World position (CF ENU: x fwd, y left, z up), rates follow right-hand rule for body axes
   float fw_x     = logGetFloat(idX);
   float fw_y     = logGetFloat(idY);
   float fw_z     = logGetFloat(idZ);
-  float fw_gx    = logGetFloat(idGyroX);  // deg/s
-  float fw_gy    = logGetFloat(idGyroY);  // deg/s
-  float fw_gz    = logGetFloat(idGyroZ);  // deg/s
 
-  // Body-frame velocity from Kalman filter (CF body: x fwd, y left, z up)
+  // Angular rates (deg/s, CF body axes)
+  float fw_gx    = logGetFloat(idGyroX);
+  float fw_gy    = logGetFloat(idGyroY);
+  float fw_gz    = logGetFloat(idGyroZ);
+
+  // Body-frame velocity from Kalman filter
   float fw_bvx   = logGetFloat(idBodyVx); // PX — forward
   float fw_bvy   = logGetFloat(idBodyVy); // PY — leftward
   float fw_bvz   = logGetFloat(idBodyVz); // PZ — upward
+
+  // Body→world attitude quaternion (firmware NWU)
+  float fw_qw    = logGetFloat(idQw);
+  float fw_qx    = logGetFloat(idQx);
+  float fw_qy    = logGetFloat(idQy);
+  float fw_qz    = logGetFloat(idQz);
 
   // ---- Convert to simulation convention (NED-like) ------------------------
   // World position: sim x = fw x, sim y = -fw y, sim z = -fw z
@@ -277,18 +292,18 @@ static void computeObservation(void) {
   float v_body = -fw_bvy;
   float w_body = -fw_bvz;
 
-  // Angular rates: p same, q/r flipped (y/z axis flip)
+  // Angular rates: p same, q/r flipped (y/z axis flip), deg/s → rad/s
   float sim_p =  fw_gx * DEG2RAD;
   float sim_q = -fw_gy * DEG2RAD;
   float sim_r = -fw_gz * DEG2RAD;
 
-  // ---- Drone quaternion: firmware NWU body→world quat → sim NED.
+  // Drone quaternion: firmware NWU body→world quat → sim NED.
   // Transform is conj-by-180°-about-x (q_swap ⊗ q_cf ⊗ q_swap⁻¹), which
   // simplifies to flipping the y and z components.
-  float qw =  logGetFloat(idQw);
-  float qx =  logGetFloat(idQx);
-  float qy = -logGetFloat(idQy);
-  float qz = -logGetFloat(idQz);
+  float sim_qw =  fw_qw;
+  float sim_qx =  fw_qx;
+  float sim_qy = -fw_qy;
+  float sim_qz = -fw_qz;
 
   // ---- Gate indices -------------------------------------------------------
   int gi   = currentTargetGate % NUM_GATES;
@@ -310,10 +325,10 @@ static void computeObservation(void) {
   //   q_rel  = conj(q_gate) ⊗ q_drone
   float cg = cosf(gateYaw[gi] * 0.5f);
   float sg = sinf(gateYaw[gi] * 0.5f);
-  float qw_rel = cg * qw + sg * qz;
-  float qx_rel = cg * qx + sg * qy;
-  float qy_rel = cg * qy - sg * qx;
-  float qz_rel = cg * qz - sg * qw;
+  float qw_rel = cg * sim_qw + sg * sim_qz;
+  float qx_rel = cg * sim_qx + sg * sim_qy;
+  float qy_rel = cg * sim_qy - sg * sim_qx;
+  float qz_rel = cg * sim_qz - sg * sim_qw;
 
   // Normalise (guard against drift)
   float norm = sqrtf(qw_rel*qw_rel + qx_rel*qx_rel + qy_rel*qy_rel + qz_rel*qz_rel);
@@ -340,10 +355,12 @@ static void computeObservation(void) {
   observation[18] = gateY[next] - sim_y;
   observation[19] = gateZ[next] - sim_z;
 
+  // yaw -pi to pi
+  // todo! check what the current yaw quaternion spits, would the euler angles be also from -2pi to 2pi or what?
   // ---- [20] Next gate relative yaw: wrap(next_gate_yaw − drone_yaw) ------
   // Extract drone yaw from quaternion (same formula as env.py)
-  float drone_yaw = atan2f(2.0f * (qw * qz + qx * qy),
-                           1.0f - 2.0f * (qy * qy + qz * qz));
+  float drone_yaw = atan2f(2.0f * (sim_qw * sim_qz + sim_qx * sim_qy),
+                           1.0f - 2.0f * (sim_qy * sim_qy + sim_qz * sim_qz));
   float raw = gateYaw[next] - drone_yaw + M_PI_F;
   // fmodf can return negative values, so add 2π and take fmod again
   observation[20] = fmodf(fmodf(raw, 2.0f * M_PI_F) + 2.0f * M_PI_F,
