@@ -7,9 +7,8 @@ CONFIG_MOTORS_ESC_PROTOCOL_STANDARD_PWM=y
 
 CONFIG_CONTROLLER_PID_FILTER_ALL=y
 
-# Anchor drone hardware: microSD + Loco (UWB) deck only.
-# No optical-flow (MTF02) and no 4x4 ToF (ZRanger3 V3).
-CONFIG_DECK_USD=y
+# Anchor drone hardware: Loco (UWB) deck only.
+# No microSD, no optical-flow (MTF02), no 4x4 ToF (ZRanger3 V3).
 CONFIG_DECK_LOCO=y
 CONFIG_DECK_LOCODECK_USE_ALT_PINS=y
 CONFIG_DECK_LOCO_FULL_TX_POWER=y
@@ -22,5 +21,6 @@ CONFIG_DECK_CPPM_USE_PA3=y
 CONFIG_DECK_FORCE=""
 
 # Explicitly disabled on the anchor:
+# CONFIG_DECK_USD is not set
 # CONFIG_DECK_ZRANGER3 is not set
 # CONFIG_DECK_MTF02 is not set

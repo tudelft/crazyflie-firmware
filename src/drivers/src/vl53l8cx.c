@@ -50,19 +50,34 @@ bool vl53l8cxInit(VL53L8CX_Configuration *pdev, I2C_Dev *I2Cx)
   pdev->platform.I2Cx = I2Cx;
   pdev->platform.address = VL53L8CX_DEFAULT_I2C_ADDRESS;  /* 0x52 (8-bit) */
 
-  /* Check sensor is alive at the default address */
-  status = vl53l8cx_is_alive(pdev, &isAlive);
+  /* The first I2C transaction to the VL53L8CX is unreliable after power-up
+   * (the page-select / ID read can return garbage on the first try, then
+   * succeeds immediately after). Retry a few times with a short delay before
+   * declaring the sensor missing. */
+  const int kMaxAliveAttempts = 5;
+  for (int attempt = 0; attempt < kMaxAliveAttempts; attempt++)
+  {
+    status = vl53l8cx_is_alive(pdev, &isAlive);
+    if (status == VL53L8CX_STATUS_OK && isAlive)
+    {
+      if (attempt > 0) {
+        DEBUG_PRINT("VL53L8CX: alive on attempt %d\n", attempt + 1);
+      }
+      break;
+    }
+    vTaskDelay(M2T(10));
+  }
   if (status != VL53L8CX_STATUS_OK || !isAlive)
   {
-    /* TEMP DIAGNOSTIC: read the raw ID registers so we can tell apart
+    /* Diagnostic: read the raw ID registers one more time so we can tell apart
      * "no device on bus" from "wrong device" (e.g. VL53L5CX rev 0x02). */
     uint8_t dbgStatus = 0, devId = 0, revId = 0;
     dbgStatus |= VL53L8CX_WrByte(&(pdev->platform), 0x7fff, 0x00);
     dbgStatus |= VL53L8CX_RdByte(&(pdev->platform), 0, &devId);
     dbgStatus |= VL53L8CX_RdByte(&(pdev->platform), 1, &revId);
     dbgStatus |= VL53L8CX_WrByte(&(pdev->platform), 0x7fff, 0x02);
-    DEBUG_PRINT("VL53L8CX: not alive at 0x%02X (st=%u) device_id=0x%02X revision_id=0x%02X i2c_st=%u\n",
-                VL53L8CX_DEFAULT_I2C_ADDRESS, status, devId, revId, dbgStatus);
+    DEBUG_PRINT("VL53L8CX: not alive at 0x%02X after %d tries (st=%u) device_id=0x%02X revision_id=0x%02X i2c_st=%u\n",
+                VL53L8CX_DEFAULT_I2C_ADDRESS, kMaxAliveAttempts, status, devId, revId, dbgStatus);
     return false;
   }
 

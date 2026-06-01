@@ -48,3 +48,4 @@ build/
 *.elf
 
 tools/dependency/web/data.js
+ekf_compare_square_100cm.mp4

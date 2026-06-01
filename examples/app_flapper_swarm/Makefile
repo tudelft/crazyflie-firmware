@@ -32,12 +32,12 @@ include $(CRAZYFLIE_BASE)/tools/make/oot.mk
 
 # Interactive role selection. Loads a curated defconfig so the deck set is
 # deterministic instead of relying on the long Kconfig question list.
-#   anchor  -> configs/anchor_defconfig   (microSD + Loco/UWB only)
-#   flapper -> configs/flapper_defconfig  (full sweep: MTF02 + microSD + 4x4 ToF)
+#   anchor  -> configs/anchor_defconfig   (Loco/UWB only)
+#   flapper -> configs/flapper_defconfig  (Loco + MTF02 + 4x4 ToF)
 build:
 	@printf '\n=== Which drone are you building for? ===\n'; \
-	printf '  [a] anchor  - microSD + Loco/UWB only (no 4x4)\n'; \
-	printf '  [f] flapper - full sweep: MTF02 + microSD + 4x4 ToF\n'; \
+	printf '  [a] anchor  - Loco/UWB only (no 4x4)\n'; \
+	printf '  [f] flapper - Loco + MTF02 + 4x4 ToF\n'; \
 	printf 'Choice [a/f]: '; \
 	read role; \
 	case "$$role" in \
