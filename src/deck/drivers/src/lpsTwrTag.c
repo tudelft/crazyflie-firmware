@@ -83,8 +83,11 @@ static locoAddress_t selfAddress;
 // Capacity stays compile-time, behavior bounded at runtime by swarmSize
 #define MAX_SWARM_SIZE (LOCODECK_NR_OF_TWR_ANCHORS + 1)
 
-// Swarm size: total number of crazyflies in the swarm (including self)
-static uint8_t swarmSize = 3;
+// Swarm size: total number of crazyflies in the swarm (including self).
+// 4 = beacon (ID 0) + 3 flappers (IDs 1, 2, 3). Tunable at runtime via
+// swarm.size param; PARAM_PERSISTENT, so a previously-set value will
+// override this default on already-deployed drones.
+static uint8_t swarmSize = 4;
 
 // Only this drone ID is allowed to publish AUX (default: 1)
 static uint8_t auxPublisherId = 1;

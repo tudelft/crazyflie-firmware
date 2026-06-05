@@ -105,15 +105,6 @@ static uint8_t obstEnterConfirmCount = 2U;   // Confirmation samples to enter OB
 #define UTURN_YAW_TOLERANCE 5.0f            // Degrees tolerance for completing turn
 #define UTURN_COOLDOWN_MS 2000U             // Cooldown before another UTURN can be triggered
 
-// In-flight Z oscillation (relative height excitation), ported from the
-// relative_localization branch. Only applied while making forward progress
-// (STRAIGHT/TURN/AVOID/RECOVER/UTURN_FLY); OBSTACLE/UTURN/DANCE hold a steady
-// height so the drone is stable while backing up or turning in place.
-// Amplitude is +/- 0.25m around targetHeightM (0.5m peak-to-peak).
-#define FLIGHT_Z_OSC_AMPLITUDE_M 0.25f
-#define FLIGHT_Z_OSC_PERIOD_DRONE1_S 3.0f
-#define FLIGHT_Z_OSC_PERIOD_DRONE2PLUS_S 4.0f
-
 // ============================================================================
 // Log variable IDs
 // ============================================================================
@@ -135,14 +126,19 @@ static logVarId_t idObstColR     = (logVarId_t)0xFFFF;  // right column avg (mm)
 
 // Drone 1 specific
 static logVarId_t idCppmAux0    = (logVarId_t)0xFFFF;  // RC trigger
-static logVarId_t idDistance2   = (logVarId_t)0xFFFF;  // distance to drone 2
-static logVarId_t idHeight2     = (logVarId_t)0xFFFF;  // height of drone 2
 
-// Drone 2+ specific (triggered via UWB)
+// Drone 2+ specific (triggered via UWB on aux1, killed via aux2)
 static logVarId_t idRangingAux1 = (logVarId_t)0xFFFF;  // UWB trigger
 static logVarId_t idRangingAux2 = (logVarId_t)0xFFFF;  // UWB kill switch
+
+// Peer distance/height logs (resolved at startup for whichever peers != droneId).
+// Up to 3 drones; each drone reads the distance/height to the OTHER two.
 static logVarId_t idDistance1   = (logVarId_t)0xFFFF;  // distance to drone 1
 static logVarId_t idHeight1     = (logVarId_t)0xFFFF;  // height of drone 1
+static logVarId_t idDistance2   = (logVarId_t)0xFFFF;  // distance to drone 2
+static logVarId_t idHeight2     = (logVarId_t)0xFFFF;  // height of drone 2
+static logVarId_t idDistance3   = (logVarId_t)0xFFFF;  // distance to drone 3
+static logVarId_t idHeight3     = (logVarId_t)0xFFFF;  // height of drone 3
 
 // ============================================================================
 // State machine
@@ -173,12 +169,23 @@ static uint8_t approachCount = 0;
 static uint8_t departCount = 0;
 
 // Dance state counters
-static uint8_t peerLandedCount = 0;
 static uint8_t rejoinCount = 0;
 
 // Dance state tracking
-static bool danceHasLanded = false;  // Drone 1: tracks if we've completed landing
-static bool danceHasTakenOff = false; // Drone 1: tracks if we've completed takeoff
+static bool danceHasLanded = false;   // any drone: tracks if we've completed landing
+static bool danceHasTakenOff = false; // any drone: tracks if we've completed takeoff
+
+// Dance role: chosen on entry so two drones don't land simultaneously and drift
+// into each other on the way down. PRIMARY descends; SECONDARY hovers until the
+// PRIMARY has touched down, then promotes itself to PRIMARY and lands too.
+typedef enum {
+  DANCE_ROLE_NONE      = 0,
+  DANCE_ROLE_SANDWICH  = 1,  // 3-drone case: I'm the middle, I land
+  DANCE_ROLE_PRIMARY   = 2,  // 2-drone safety: tie-breaker says I land first
+  DANCE_ROLE_SECONDARY = 3,  // 2-drone safety: I hover, land after PRIMARY is down
+} DanceRole;
+static DanceRole danceRole = DANCE_ROLE_NONE;
+static uint8_t   danceCriticalPeer = 0; // for SECONDARY: which peer is landing first
 
 // UTURN state variables
 static uint8_t middleBoundOverCount = 0;    // Confirmation counter for middle bound
@@ -383,19 +390,6 @@ static inline float normalizeAngle(float a) {
   return a;
 }
 
-// --- In-flight Z oscillation (relative height excitation) ---
-static inline float getFlightOscillationPeriodS(void) {
-  return (droneId == 1) ? FLIGHT_Z_OSC_PERIOD_DRONE1_S : FLIGHT_Z_OSC_PERIOD_DRONE2PLUS_S;
-}
-
-static inline float getOscillatingFlightHeight(void) {
-  const float t = getTimestamp();
-  const float period = getFlightOscillationPeriodS();
-  const float omega = (2.0f * 3.14159265358979323846f) / period;
-  // Small per-drone phase offset (plus different period) to avoid synchronization
-  const float phaseOffset = (droneId == 1) ? 0.0f : 1.0471975512f; // 60 deg
-  return targetHeightM + FLIGHT_Z_OSC_AMPLITUDE_M * sinf(omega * t + phaseOffset);
-}
 
 // ============================================================================
 // Drone-specific behavior (runtime selection based on droneId)
@@ -426,28 +420,74 @@ static inline bool isKillActive(void) {
   }
 }
 
-// Get the distance to the peer drone (for avoidance)
-static inline uint32_t getPeerDistance(void) {
-  if (droneId == 1) {
-    return logGetUint(idDistance2);  // Drone 1 watches drone 2
-  } else {
-    return logGetUint(idDistance1);  // Drone 2 watches drone 1
-  }
+// --- Multi-peer accessors (up to 3 drones) ---
+// Read distance/height log for a specific peer ID (1, 2, or 3).
+static inline uint32_t peerDistanceById(uint8_t peerId) {
+  logVarId_t id = (peerId == 1) ? idDistance1
+                : (peerId == 2) ? idDistance2
+                : (peerId == 3) ? idDistance3
+                : (logVarId_t)0xFFFF;
+  return logVarIdIsValid(id) ? logGetUint(id) : 0U;
 }
 
-// Get the height of the peer drone (for avoidance)
-static inline float getPeerHeight(void) {
-  if (droneId == 1) {
-    return logGetFloat(idHeight2);  // Drone 1 watches drone 2
-  } else {
-    return logGetFloat(idHeight1);  // Drone 2 watches drone 1
-  }
+static inline float peerHeightById(uint8_t peerId) {
+  logVarId_t id = (peerId == 1) ? idHeight1
+                : (peerId == 2) ? idHeight2
+                : (peerId == 3) ? idHeight3
+                : (logVarId_t)0xFFFF;
+  return logVarIdIsValid(id) ? logGetFloat(id) : -1.0f;
 }
 
-// Check if the peer drone has landed (z < threshold)
+static inline bool isPeerLandedById(uint8_t peerId) {
+  float h = peerHeightById(peerId);
+  return (h >= 0.0f && h < PEER_LANDED_HEIGHT_M);
+}
+
+// Return the minimum distance to any non-landed peer (0 if no valid flying peer).
+static uint32_t getPeerDistance(void) {
+  uint32_t minD = 0U;
+  for (uint8_t i = 1; i <= 3; i++) {
+    if (i == droneId) continue;
+    if (isPeerLandedById(i)) continue;
+    uint32_t d = peerDistanceById(i);
+    if (d == 0U) continue;
+    if (minD == 0U || d < minD) minD = d;
+  }
+  return minD;
+}
+
+// Count non-landed peers whose distance is <= threshold.
+static uint8_t countFlyingPeersWithin(uint32_t threshold) {
+  uint8_t count = 0;
+  for (uint8_t i = 1; i <= 3; i++) {
+    if (i == droneId) continue;
+    if (isPeerLandedById(i)) continue;
+    uint32_t d = peerDistanceById(i);
+    if (d > 0U && d <= threshold) count++;
+  }
+  return count;
+}
+
+// True if every non-landed peer is at least `threshold` away
+// (used for take-off rejoin: don't lift off while any peer is still near).
+static bool areAllFlyingPeersFar(uint32_t threshold) {
+  for (uint8_t i = 1; i <= 3; i++) {
+    if (i == droneId) continue;
+    if (isPeerLandedById(i)) continue;
+    uint32_t d = peerDistanceById(i);
+    if (d == 0U || d < threshold) return false;
+  }
+  return true;
+}
+
+// Legacy "is the (any) peer landed?" check, retained for the DANCE-takeoff
+// branch where we just want to know "is at least one peer down".
 static inline bool isPeerLanded(void) {
-  float peerHeight = getPeerHeight();
-  return (peerHeight >= 0.0f && peerHeight < PEER_LANDED_HEIGHT_M);
+  for (uint8_t i = 1; i <= 3; i++) {
+    if (i == droneId) continue;
+    if (isPeerLandedById(i)) return true;
+  }
+  return false;
 }
 
 // Get the avoidance yaw rate (sign depends on drone)
@@ -514,18 +554,18 @@ static bool checkAndMaybeEmergencyLand(void) {
   return trigger;
 }
 
-// Check if peer is too close and we should enter AVOID state
-// Returns true if should enter AVOID (with confirmation)
+// Check if any flying peer is too close and we should enter AVOID.
+// (getPeerDistance() returns the min over non-landed peers, or 0 if none.)
 static bool shouldEnterAvoid(void) {
   const uint32_t peerDist = getPeerDistance();
-  
-  // Don't enter avoid if peer has landed (z < threshold)
-  if (isPeerLanded()) {
-    approachCount = 0;  // Reset counter since we're not tracking
+
+  if (peerDist == 0U) {
+    // No flying peer to avoid (all peers landed or out of range).
+    approachCount = 0;
     return false;
   }
-  
-  if (peerDist > 0 && peerDist <= peerCloseMm) {
+
+  if (peerDist <= peerCloseMm) {
     if (++approachCount >= avoidEnterConfirmCount) {
       approachCount = 0;
       departCount = 0;
@@ -537,18 +577,17 @@ static bool shouldEnterAvoid(void) {
   return false;
 }
 
-// Check if peer is far enough and we should exit AVOID state
-// Returns true if should exit AVOID (with confirmation)
+// Check if all flying peers are far enough and we should exit AVOID.
 static bool shouldExitAvoid(void) {
   const uint32_t peerDist = getPeerDistance();
-  
-  // Exit avoid immediately if peer has landed (no collision risk)
-  if (isPeerLanded()) {
+
+  // No flying peer → nothing to avoid, exit immediately.
+  if (peerDist == 0U) {
     departCount = 0;
     approachCount = 0;
     return true;
   }
-  
+
   if (peerDist >= peerCloseMm) {
     if (++departCount >= avoidExitConfirmCount) {
       departCount = 0;
@@ -561,11 +600,63 @@ static bool shouldExitAvoid(void) {
   return false;
 }
 
-// Check if we should enter DANCE state (peer dangerously close during AVOID)
-// This replaces the old checkAvoidEmergencyLand() behavior
+// Compute the DANCE role for the *current* moment (does not mutate state).
+// Returns DANCE_ROLE_NONE if there's no reason to enter / stay in DANCE.
+// On non-NONE return, also writes the partner peer's id into *outCriticalPeer.
+//
+// Tie-breaker for "who lands first" is lower droneId — matches the original
+// drone-1-lands-first behavior, generalized to 3 drones.
+//
+//   SANDWICH:  >= 2 flying peers in peerCloseMm AND I have the lowest droneId
+//              among us → I land first.
+//   SECONDARY: >= 2 flying peers close but I'm NOT the lowest → hover until
+//              the lowest-id close peer is down, then land too.
+//              (Also: safety-override case where my droneId > critical peer.)
+//   PRIMARY:   exactly one peer within avoidMinLandMm and my droneId < peer's
+//              → I land first.
+static DanceRole computeDanceRole(uint8_t *outCriticalPeer) {
+  if (currentState != STATE_AVOID && currentState != STATE_DANCE) {
+    return DANCE_ROLE_NONE;
+  }
+
+  // Find close flying peers and the danger-zone peer (if any).
+  uint8_t closeCount = 0;
+  uint8_t lowestClose = 0xFF;
+  uint8_t safetyPeer = 0;
+  for (uint8_t i = 1; i <= 3; i++) {
+    if (i == droneId) continue;
+    if (isPeerLandedById(i)) continue;
+    uint32_t d = peerDistanceById(i);
+    if (d == 0U) continue;
+    if (d <= peerCloseMm) {
+      closeCount++;
+      if (i < lowestClose) lowestClose = i;
+    }
+    if (d <= avoidMinLandMm && safetyPeer == 0) {
+      safetyPeer = i;
+    }
+  }
+
+  // SANDWICH: at least 2 flying peers in close range.
+  if (closeCount >= 2) {
+    if (droneId < lowestClose) {
+      // I have the lowest droneId among the close cluster → I'm the lander.
+      if (outCriticalPeer) *outCriticalPeer = lowestClose;
+      return DANCE_ROLE_SANDWICH;
+    }
+    // Someone with a lower droneId is in the cluster — wait for them to land.
+    if (outCriticalPeer) *outCriticalPeer = lowestClose;
+    return DANCE_ROLE_SECONDARY;
+  }
+
+  // SAFETY: a single peer in the danger zone.
+  if (safetyPeer == 0) return DANCE_ROLE_NONE;
+  if (outCriticalPeer) *outCriticalPeer = safetyPeer;
+  return (droneId < safetyPeer) ? DANCE_ROLE_PRIMARY : DANCE_ROLE_SECONDARY;
+}
+
 static bool shouldEnterDance(void) {
-  const uint32_t peerDist = getPeerDistance();
-  return (currentState == STATE_AVOID && peerDist > 0 && peerDist <= avoidMinLandMm);
+  return computeDanceRole(NULL) != DANCE_ROLE_NONE;
 }
 
 // ============================================================================
@@ -736,7 +827,7 @@ static FlightState checkTransitionStraight(void) {
 }
 
 static void executeStraight(void) {
-  sendHover(fwdSpeedMps, 0.0f, getOscillatingFlightHeight(), 0.0f);
+  sendHover(fwdSpeedMps, 0.0f, targetHeightM, 0.0f);
 }
 
 // --- TURN state ---
@@ -818,19 +909,17 @@ static void executeTurn(void) {
     yawRateCmd *= 0.5f;
   }
   DEBUG_PRINT("[%.2f] TURN: d0Deriv=%.2f, yawRateCmd=%.2f\n", (double)getTimestamp(), (double)ctx.d0Deriv, (double)yawRateCmd);
-  sendHover(fwdSpeedMps, 0.0f*fwdSpeedMps, getOscillatingFlightHeight(), yawRateCmd);
+  sendHover(fwdSpeedMps, 0.0f*fwdSpeedMps, targetHeightM, yawRateCmd);
 }
 
 // --- AVOID state ---
 static void onEnterAvoid(void) {
   DEBUG_PRINT("[%.2f] Enter AVOID\n", (double)getTimestamp());
-  peerLandedCount = 0;
 }
 
 static void onExitAvoid(void) {
   approachCount = 0;
   departCount = 0;
-  peerLandedCount = 0;
 }
 
 static FlightState checkTransitionAvoid(void) {
@@ -876,7 +965,7 @@ static void executeAvoid(void) {
   if (ctx.peerDistDeriv > 50.0f) {
     yawRate *= 0.5f;
   }
-  sendHover(fwdSpeedMps * avoidSpeedFactor, 0.0f, getOscillatingFlightHeight(), yawRate);
+  sendHover(fwdSpeedMps * avoidSpeedFactor, 0.0f, targetHeightM, yawRate);
 }
 
 // --- RECOVER state ---
@@ -949,13 +1038,19 @@ static void executeRecover(void) {
                 ctx.rotationDirection);
   }
   
-  sendHover(fwdSpeedMps, 0.0f, getOscillatingFlightHeight(), yawCommandFinal);
+  sendHover(fwdSpeedMps, 0.0f, targetHeightM, yawCommandFinal);
 }
 
 // --- DANCE state ---
 static void onEnterDance(void) {
-  DEBUG_PRINT("[%.2f] Enter DANCE (drone %u)\n", (double)getTimestamp(), droneId);
-  peerLandedCount = 0;
+  danceCriticalPeer = 0;
+  danceRole = computeDanceRole(&danceCriticalPeer);
+  const char *roleName =
+      (danceRole == DANCE_ROLE_SANDWICH)  ? "SANDWICH" :
+      (danceRole == DANCE_ROLE_PRIMARY)   ? "PRIMARY"  :
+      (danceRole == DANCE_ROLE_SECONDARY) ? "SECONDARY": "NONE";
+  DEBUG_PRINT("[%.2f] Enter DANCE (drone %u, role=%s, peer=%u)\n",
+              (double)getTimestamp(), droneId, roleName, danceCriticalPeer);
   rejoinCount = 0;
   danceHasLanded = false;
   danceHasTakenOff = false;
@@ -963,99 +1058,105 @@ static void onEnterDance(void) {
 
 static void onExitDance(void) {
   DEBUG_PRINT("[%.2f] Exit DANCE (drone %u)\n", (double)getTimestamp(), droneId);
-  peerLandedCount = 0;
   rejoinCount = 0;
   danceHasLanded = false;
   danceHasTakenOff = false;
+  danceRole = DANCE_ROLE_NONE;
+  danceCriticalPeer = 0;
 }
 
 static FlightState checkTransitionDance(void) {
-  if (droneId == 1) {
-    // Drone 1: Exit after we've landed AND taken off again
-    if (danceHasTakenOff) {
-      // Choose state based on current position
-      if (ctx.d0 < innerBoundMm) {
-        DEBUG_PRINT("[%.2f] DANCE -> STRAIGHT: drone 1 rejoining (d0=%lu)\n", (double)getTimestamp(), (unsigned long)ctx.d0);
-        return STATE_STRAIGHT;
-      } else {
-        DEBUG_PRINT("[%.2f] DANCE -> RECOVER: drone 1 rejoining outside bound (d0=%lu)\n", (double)getTimestamp(), (unsigned long)ctx.d0);
-        return STATE_RECOVER;
-      }
-    }
-  } else {
-    // Drone 2+: Exit once peer (drone 1) has landed
-    if (isPeerLanded()) {
-      if (peerLandedCount < 0xFF) peerLandedCount++;
-    } else {
-      peerLandedCount = 0;
-    }
-    
-    if (peerLandedCount >= PEER_LANDED_CONFIRM_COUNT) {
-      // Choose state based on current position
-      if (ctx.d0 < innerBoundMm) {
-        DEBUG_PRINT("[%.2f] DANCE -> STRAIGHT: drone %u exiting, peer landed (d0=%lu)\n", (double)getTimestamp(), droneId, (unsigned long)ctx.d0);
-        return STATE_STRAIGHT;
-      } else {
-        DEBUG_PRINT("[%.2f] DANCE -> RECOVER: drone %u exiting, peer landed (d0=%lu)\n", (double)getTimestamp(), droneId, (unsigned long)ctx.d0);
-        return STATE_RECOVER;
+  // Early exit for SECONDARY: while still hovering (haven't landed), if the
+  // critical peer has moved well clear AND hasn't landed itself, the danger
+  // is over — go straight back to normal flight instead of also landing.
+  if (danceRole == DANCE_ROLE_SECONDARY && !danceHasLanded) {
+    if (!isPeerLandedById(danceCriticalPeer)) {
+      uint32_t d = peerDistanceById(danceCriticalPeer);
+      if (d == 0U || d > peerCloseMm) {
+        DEBUG_PRINT("[%.2f] DANCE -> %s: drone %u SECONDARY clear (peer %u dist=%lu)\n",
+                    (double)getTimestamp(),
+                    (ctx.d0 < innerBoundMm) ? "STRAIGHT" : "RECOVER",
+                    droneId, danceCriticalPeer, (unsigned long)d);
+        return (ctx.d0 < innerBoundMm) ? STATE_STRAIGHT : STATE_RECOVER;
       }
     }
   }
-  
-  return STATE_DANCE;  // No transition yet
+
+  if (!danceHasTakenOff) {
+    return STATE_DANCE;  // still hovering / landing / waiting
+  }
+
+  // Take-off complete; rejoin via STRAIGHT or RECOVER based on d0.
+  if (ctx.d0 < innerBoundMm) {
+    DEBUG_PRINT("[%.2f] DANCE -> STRAIGHT: drone %u rejoining (d0=%lu)\n",
+                (double)getTimestamp(), droneId, (unsigned long)ctx.d0);
+    return STATE_STRAIGHT;
+  } else {
+    DEBUG_PRINT("[%.2f] DANCE -> RECOVER: drone %u rejoining outside bound (d0=%lu)\n",
+                (double)getTimestamp(), droneId, (unsigned long)ctx.d0);
+    return STATE_RECOVER;
+  }
 }
 
 static void executeDance(void) {
-  if (droneId == 1) {
-    // Drone 1: Land, wait for peer to be far enough, then take off
-    
-    if (!danceHasLanded) {
-      // Phase 1: Freeze and land
-      // First send freeze command, then perform landing
-      sendHover(0.0f, 0.0f, targetHeightM, 0.0f);  // Freeze momentarily
-      
-      DEBUG_PRINT("[%.2f] DANCE: drone 1 landing\n", (double)getTimestamp());
-      landToZero();
-      danceHasLanded = true;
-      DEBUG_PRINT("[%.2f] DANCE: drone 1 landed, waiting for peer to move away\n", (double)getTimestamp());
-      
-    } else if (!danceHasTakenOff) {
-      // Phase 2: Wait for peer - KEEP SENDING SETPOINTS TO PREVENT WDT TIMEOUT
-      // Send a "do nothing" setpoint to keep the commander watchdog happy
-      setpoint_t idle;
-      memset(&idle, 0, sizeof(idle));
-      idle.mode.x = modeDisable;
-      idle.mode.y = modeDisable;
-      idle.mode.z = modeDisable;
-      idle.mode.yaw = modeDisable;
-      idle.thrust = 0;
-      commanderSetSetpoint(&idle, 3);
-      
-      // Check if peer is far enough to take off
-      const uint32_t peerDist = getPeerDistance();
-      const uint32_t rejoinThresh = peerCloseMm + REJOIN_EXTRA_MM;
-      
-      if (peerDist >= rejoinThresh) {
-        if (rejoinCount < 0xFF) rejoinCount++;
-      } else {
-        rejoinCount = 0;
-      }
-      
-      if (rejoinCount >= REJOIN_CONFIRM_COUNT) {
-        DEBUG_PRINT("[%.2f] DANCE: drone 1 taking off (peer dist=%lu >= %lu)\n",
-                    (double)getTimestamp(), (unsigned long)peerDist, (unsigned long)rejoinThresh);
-        rampToHeight(targetHeightM, RAMP_TIME_MS);
-        danceHasTakenOff = true;
-        DEBUG_PRINT("[%.2f] DANCE: drone 1 airborne, rejoining swarm\n", (double)getTimestamp());
-      }
-      // While waiting, do nothing (motors are off from landToZero)
-    }
-    // If danceHasTakenOff is true, checkTransitionDance will handle exit
-    
-  } else {
-    // Drone 2+: Just freeze and wait for peer to land
-    // checkTransitionDance handles the exit condition
+  // Behavior by role:
+  //   SANDWICH / PRIMARY: land immediately, wait for peers far, take off.
+  //   SECONDARY: hover in place (no forward, no yaw) until the PRIMARY (the
+  //              critical peer) is detected on the ground; then promote myself
+  //              to PRIMARY and land. Sequencing the two landings prevents the
+  //              mutual-drift collision seen when both descend together.
+  //
+  //   Phase 1: land  |  Phase 2: wait until ALL flying peers far  |  Phase 3: take off
+  if (danceRole == DANCE_ROLE_SECONDARY && !danceHasLanded) {
+    // Hold high and motionless while the PRIMARY descends.
     sendHover(0.0f, 0.0f, targetHeightM, 0.0f);
+
+    if (isPeerLandedById(danceCriticalPeer)) {
+      DEBUG_PRINT("[%.2f] DANCE: drone %u SECONDARY -> PRIMARY (peer %u is down)\n",
+                  (double)getTimestamp(), droneId, danceCriticalPeer);
+      danceRole = DANCE_ROLE_PRIMARY;  // fall through next iteration into landing
+    }
+    return;
+  }
+
+  if (!danceHasLanded) {
+    sendHover(0.0f, 0.0f, targetHeightM, 0.0f);  // momentary freeze
+    DEBUG_PRINT("[%.2f] DANCE: drone %u landing (role=%d, peers close=%u)\n",
+                (double)getTimestamp(), droneId, (int)danceRole,
+                countFlyingPeersWithin(peerCloseMm));
+    landToZero();
+    danceHasLanded = true;
+    DEBUG_PRINT("[%.2f] DANCE: drone %u landed, waiting for peers to clear\n",
+                (double)getTimestamp(), droneId);
+    return;
+  }
+
+  if (!danceHasTakenOff) {
+    // Keep the commander watchdog happy with a no-op setpoint while motors are off.
+    setpoint_t idle;
+    memset(&idle, 0, sizeof(idle));
+    idle.mode.x = modeDisable;
+    idle.mode.y = modeDisable;
+    idle.mode.z = modeDisable;
+    idle.mode.yaw = modeDisable;
+    idle.thrust = 0;
+    commanderSetSetpoint(&idle, 3);
+
+    const uint32_t rejoinThresh = peerCloseMm + REJOIN_EXTRA_MM;
+    if (areAllFlyingPeersFar(rejoinThresh)) {
+      if (rejoinCount < 0xFF) rejoinCount++;
+    } else {
+      rejoinCount = 0;
+    }
+
+    if (rejoinCount >= REJOIN_CONFIRM_COUNT) {
+      DEBUG_PRINT("[%.2f] DANCE: drone %u taking off (all peers >= %lu mm)\n",
+                  (double)getTimestamp(), droneId, (unsigned long)rejoinThresh);
+      rampToHeight(targetHeightM, RAMP_TIME_MS);
+      danceHasTakenOff = true;
+      DEBUG_PRINT("[%.2f] DANCE: drone %u airborne, rejoining swarm\n",
+                  (double)getTimestamp(), droneId);
+    }
   }
 }
 
@@ -1251,7 +1352,7 @@ static FlightState checkTransitionUturnFly(void) {
 
 static void executeUturnFly(void) {
   // Fly straight forward at normal speed
-  sendHover(fwdSpeedMps, 0.0f, getOscillatingFlightHeight(), 0.0f);
+  sendHover(fwdSpeedMps, 0.0f, targetHeightM, 0.0f);
 }
 
 // ============================================================================
@@ -1318,8 +1419,9 @@ static void runSequence(void) {
   seqAbort = false;
   innerOverCount = innerUnderCount = 0;
   approachCount = departCount = 0;
-  peerLandedCount = 0;
   rejoinCount = 0;
+  danceRole = DANCE_ROLE_NONE;
+  danceCriticalPeer = 0;
   middleBoundOverCount = 0;
   uturnCooldownEndTime = 0;   // Reset cooldown for new sequence
   uturnActive = false;
@@ -1488,28 +1590,54 @@ void appMain(void) {
   ensureLogId(&idObstColR,  "range8", "colR");
 
   // Drone-specific IDs
+  // Trigger/kill source:
+  //   - Drone 1: RC via cppm.aux0 (active low), no kill
+  //   - Drone 2+: UWB via ranging.aux1 (trigger) + ranging.aux2 (kill)
+  // Peer logs: each drone resolves distance/height for the OTHER two drones
+  // so the avoidance logic can see both peers (used by sandwich-lands rule).
   if (droneId == 1) {
-    // Drone 1: RC trigger and distance/height to drone 2
-    while (!logVarIdIsValid(idCppmAux0) || !logVarIdIsValid(idDistance2) || !logVarIdIsValid(idHeight2)) {
-      ensureLogId(&idCppmAux0,   "cppm", "aux0");
+    while (!logVarIdIsValid(idCppmAux0) ||
+           !logVarIdIsValid(idDistance2) || !logVarIdIsValid(idHeight2) ||
+           !logVarIdIsValid(idDistance3) || !logVarIdIsValid(idHeight3)) {
+      ensureLogId(&idCppmAux0,   "cppm",    "aux0");
       ensureLogId(&idDistance2,  "ranging", "distance2");
       ensureLogId(&idHeight2,    "ranging", "height2");
+      ensureLogId(&idDistance3,  "ranging", "distance3");
+      ensureLogId(&idHeight3,    "ranging", "height3");
       vTaskDelay(pdMS_TO_TICKS(100));
     }
-    DEBUG_PRINT("[%.2f] Drone 1: RC trigger (cppm.aux0<%d), avoid on distance2<=%u (CW)\n",
-      (double)getTimestamp(), AUX_RC_ACTIVE_THRESH, peerCloseMm);
-  } else {
-    // Drone 2+: UWB trigger/kill and distance/height to drone 1
+    DEBUG_PRINT("[%.2f] Drone 1: RC trigger (cppm.aux0<%d), avoid peers 2/3, CW yaw\n",
+      (double)getTimestamp(), AUX_RC_ACTIVE_THRESH);
+  } else if (droneId == 2) {
     while (!logVarIdIsValid(idRangingAux1) || !logVarIdIsValid(idRangingAux2) ||
-           !logVarIdIsValid(idDistance1) || !logVarIdIsValid(idHeight1)) {
+           !logVarIdIsValid(idDistance1) || !logVarIdIsValid(idHeight1) ||
+           !logVarIdIsValid(idDistance3) || !logVarIdIsValid(idHeight3)) {
       ensureLogId(&idRangingAux1, "ranging", "aux1");
       ensureLogId(&idRangingAux2, "ranging", "aux2");
       ensureLogId(&idDistance1,   "ranging", "distance1");
       ensureLogId(&idHeight1,     "ranging", "height1");
+      ensureLogId(&idDistance3,   "ranging", "distance3");
+      ensureLogId(&idHeight3,     "ranging", "height3");
       vTaskDelay(pdMS_TO_TICKS(100));
     }
-    DEBUG_PRINT("[%.2f] Drone %u: UWB trigger (ranging.aux1>%u), kill (ranging.aux2), avoid on distance1<=%u (CCW)\n",
-      (double)getTimestamp(), droneId, AUX_UWB_ACTIVE_THRESHOLD, peerCloseMm);
+    DEBUG_PRINT("[%.2f] Drone 2: UWB trigger (aux1>%u), kill (aux2), avoid peers 1/3, CCW yaw\n",
+      (double)getTimestamp(), AUX_UWB_ACTIVE_THRESHOLD);
+  } else {
+    // Drone 3 (no forward 4x4 ToF: OBSTACLE state is auto-disabled because the
+    // range8 log group isn't registered — see shouldEnterObstacle()).
+    while (!logVarIdIsValid(idRangingAux1) || !logVarIdIsValid(idRangingAux2) ||
+           !logVarIdIsValid(idDistance1) || !logVarIdIsValid(idHeight1) ||
+           !logVarIdIsValid(idDistance2) || !logVarIdIsValid(idHeight2)) {
+      ensureLogId(&idRangingAux1, "ranging", "aux1");
+      ensureLogId(&idRangingAux2, "ranging", "aux2");
+      ensureLogId(&idDistance1,   "ranging", "distance1");
+      ensureLogId(&idHeight1,     "ranging", "height1");
+      ensureLogId(&idDistance2,   "ranging", "distance2");
+      ensureLogId(&idHeight2,     "ranging", "height2");
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    DEBUG_PRINT("[%.2f] Drone 3: UWB trigger (aux1>%u), kill (aux2), avoid peers 1/2, no forward ToF\n",
+      (double)getTimestamp(), AUX_UWB_ACTIVE_THRESHOLD);
   }
       
   bool wasActive = false;
