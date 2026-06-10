@@ -1636,8 +1636,9 @@ void appMain(void) {
       ensureLogId(&idHeight2,     "ranging", "height2");
       vTaskDelay(pdMS_TO_TICKS(100));
     }
-    DEBUG_PRINT("[%.2f] Drone 3: UWB trigger (aux1>%u), kill (aux2), avoid peers 1/2, no forward ToF\n",
-      (double)getTimestamp(), AUX_UWB_ACTIVE_THRESHOLD);
+    const char *fwdToF = logVarIdIsValid(idObstColML) ? "with forward ToF" : "no forward ToF";
+    DEBUG_PRINT("[%.2f] Drone 3: UWB trigger (aux1>%u), kill (aux2), avoid peers 1/2, %s\n",
+      (double)getTimestamp(), AUX_UWB_ACTIVE_THRESHOLD, fwdToF);
   }
       
   bool wasActive = false;
