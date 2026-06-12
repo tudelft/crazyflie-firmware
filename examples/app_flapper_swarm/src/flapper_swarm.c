@@ -99,7 +99,10 @@ static uint8_t obstEnterConfirmCount = 2U;   // Confirmation samples to enter OB
 #define OBSTACLE_YAW_TOLERANCE 5.0f         // Degrees tolerance for obstacle rotation completion
 
 // UTURN state constants
-#define MIDDLE_BOUND_OFFSET_MM 400U         // Middle bound = dist0AbortMm - 400mm
+// Middle bound = dist0AbortMm - middleBoundOffsetMm. Runtime-tunable via
+// cfclient (swarm.middleOffset). If set >= dist0Abort, UTURN is effectively
+// disabled (see getMiddleBoundMm safety).
+static uint16_t middleBoundOffsetMm = 400U;
 #define UTURN_CONFIRM_COUNT 2               // Samples to confirm middle bound exceeded
 #define UTURN_YAW_RATE_DPS 60.0f            // Yaw rate for 180° turn (deg/s)
 #define UTURN_YAW_TOLERANCE 5.0f            // Degrees tolerance for completing turn
@@ -688,7 +691,12 @@ static bool shouldEnterObstacle(void) {
 // UTURN helper functions
 // ============================================================================
 static inline uint16_t getMiddleBoundMm(void) {
-  return dist0AbortMm - MIDDLE_BOUND_OFFSET_MM;
+  // Guard against the user setting offset >= dist0Abort: if invalid, collapse
+  // the middle ring onto the outer ring so the UTURN check (d0 >= middle &&
+  // d0 < outer) can never fire by accident.
+  return (middleBoundOffsetMm < dist0AbortMm)
+       ? (uint16_t)(dist0AbortMm - middleBoundOffsetMm)
+       : dist0AbortMm;
 }
 
 static bool shouldEnterUturn(void) {
@@ -1672,6 +1680,9 @@ PARAM_GROUP_START(swarm)
   PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, targetHeight, &targetHeightM)
   PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, fwdSpeed, &fwdSpeedMps)
   PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, dist0Abort, &dist0AbortMm)
+  // Middle ring (UTURN trigger) = dist0Abort - middleOffset. Set offset = 0
+  // to effectively disable the UTURN one-shot.
+  PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, middleOffset, &middleBoundOffsetMm)
   PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, innerBound, &innerBoundMm)
   PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, innerHyst, &innerBoundHysteresisMm)
   PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, turnYawRate, &turnYawRateDps)

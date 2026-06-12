@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -n '362,382p' examples/app_flapper_swarm/src/flapper_swarm.c)",
+      "Bash(sed -n '955,1060p' examples/app_flapper_swarm/src/flapper_swarm.c)",
+      "Bash(echo \"=== MTF02-relevant lines ===\"; grep -E \"MTF02|FLAPPER_EXTRX|UART|FLOW|DECK_FORCE\" /tmp/cfg_flapper | sort > /tmp/f.txt; grep -E \"MTF02|FLAPPER_EXTRX|UART|FLOW|DECK_FORCE\" /tmp/cfg_notof | sort > /tmp/n.txt; diff /tmp/f.txt /tmp/n.txt; echo \"\\(empty = identical, deck behavior should be the same\\)\")"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}
