@@ -13,6 +13,7 @@
 # it will handle the build for us.
 #
 CRAZYFLIE_BASE := ../..
+PYTHON ?= python3
 
 #
 # We override the default OOT_CONFIG here, we could also name our config
@@ -52,3 +53,15 @@ build:
 	$(MAKE) $${preset}_defconfig && \
 	echo ">>> Building $$preset firmware ..." && \
 	$(MAKE) all
+
+# Flash + then scan the radio to report which drone(s) are alive, with their
+# droneIds parsed out of the URI. Use this when flashing a drone whose radio
+# address you don't know yet (then plug the printed URI into cfclient).
+.PHONY: cload-id scan-drones
+cload-id:
+	$(MAKE) KBUILD_OUTPUT=$(OOT)/build $(OOT_ARGS) cload
+	@$(PYTHON) $(OOT)/find_drones.py
+
+# Just scan, no flashing.
+scan-drones:
+	@$(PYTHON) $(OOT)/find_drones.py
