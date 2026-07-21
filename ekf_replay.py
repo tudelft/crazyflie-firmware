@@ -747,6 +747,10 @@ def run_ekf(
         "yaw":   out_euler[:, 2],
         # raw tof for reference
         "tof_m": tof_m,
+        # recorded gyro = body angular rate (deg/s)
+        "gyro_x": gyro_deg[:, 0],
+        "gyro_y": gyro_deg[:, 1],
+        "gyro_z": gyro_deg[:, 2],
         # raw optical-flow pixel counts for diagnostics
         "delta_x": df[dx_col].to_numpy(),
         "delta_y": df[dy_col].to_numpy(),
@@ -917,16 +921,108 @@ def run_ekf(
         result["ls_vy_b"] = R01*ls_vx_w + R11*ls_vy_w + R21*ls_vz_w
         result["ls_vz_b"] = R02*ls_vx_w + R12*ls_vy_w + R22*ls_vz_w
 
-        # Onboard (stateEstimate) world velocity -> body frame, using the SAME
-        # rotation, so the actual on-drone estimate can be overlaid in the same
-        # body frame as replay and locSrv (to see how well replay reproduces it).
+        # Onboard (stateEstimate) world velocity -> body frame. The onboard
+        # estimator's world frame is anchored to the drone's heading at boot
+        # (initialYaw=0), which is NOT the mocap room frame unless the drone was
+        # started aligned with mocap +X. So we must rotate with the ONBOARD
+        # attitude (se_roll/pitch/yaw), not the mocap quaternion: v_body =
+        # R_onboard^T @ v_world_onboard. The boot-yaw origin cancels, making this
+        # overlay correct regardless of how the drone was oriented at startup.
         if all(c in result.columns for c in ("se_vx", "se_vy", "se_vz")):
             _sx = result["se_vx"].to_numpy()
             _sy = result["se_vy"].to_numpy()
             _sz = result["se_vz"].to_numpy()
-            result["se_vx_b"] = R00*_sx + R10*_sy + R20*_sz
-            result["se_vy_b"] = R01*_sx + R11*_sy + R21*_sz
-            result["se_vz_b"] = R02*_sx + R12*_sy + R22*_sz
+            if all(c in result.columns for c in ("se_roll", "se_pitch", "se_yaw")):
+                # ZYX Euler (matching firmware euler_deg convention), deg -> rad.
+                _ph = np.radians(result["se_roll"].to_numpy())
+                _th = np.radians(result["se_pitch"].to_numpy())
+                _ps = np.radians(result["se_yaw"].to_numpy())
+                _cph, _sph = np.cos(_ph), np.sin(_ph)
+                _cth, _sth = np.cos(_th), np.sin(_th)
+                _cps, _sps = np.cos(_ps), np.sin(_ps)
+                # R_onboard body->world = Rz(psi) Ry(theta) Rx(phi); we need R^T.
+                # v_body_i = R[0,i]*vx + R[1,i]*vy + R[2,i]*vz
+                sR00 = _cps*_cth;  sR10 = _sps*_cth;  sR20 = -_sth
+                sR01 = _cps*_sth*_sph - _sps*_cph
+                sR11 = _sps*_sth*_sph + _cps*_cph
+                sR21 = _cth*_sph
+                sR02 = _cps*_sth*_cph + _sps*_sph
+                sR12 = _sps*_sth*_cph - _cps*_sph
+                sR22 = _cth*_cph
+                result["se_vx_b"] = sR00*_sx + sR10*_sy + sR20*_sz
+                result["se_vy_b"] = sR01*_sx + sR11*_sy + sR21*_sz
+                result["se_vz_b"] = sR02*_sx + sR12*_sy + sR22*_sz
+            else:
+                # No onboard attitude logged. The onboard estimator booted at
+                # yaw=0 with its +X axis along the nose-at-startup; mocap saw that
+                # same nose direction at heading ls_yaw(0). So the boot->mocap
+                # frame rotation is exactly Rz(ls_yaw0): first align the onboard
+                # world velocity into the mocap frame, then apply the mocap
+                # attitude R^T. (Assumes onboard yaw tracks mocap after the
+                # initial offset; a good approximation over a short flight.)
+                _yaw_series = np.arctan2(2*(qx*qy + qw*qz),
+                                         qw*qw + qx*qx - qy*qy - qz*qz)
+                _finite = np.isfinite(_yaw_series)
+                _yaw0 = _yaw_series[_finite][0] if _finite.any() else 0.0
+                _ca, _sa = np.cos(_yaw0), np.sin(_yaw0)
+                # v_world_mocap = Rz(yaw0) @ v_world_onboard
+                _mx = _ca*_sx - _sa*_sy
+                _my = _sa*_sx + _ca*_sy
+                _mz = _sz
+                result["se_vx_b"] = R00*_mx + R10*_my + R20*_mz
+                result["se_vy_b"] = R01*_mx + R11*_my + R21*_mz
+                result["se_vz_b"] = R02*_mx + R12*_my + R22*_mz
+                print(f"Onboard attitude not logged; aligned onboard velocity "
+                      f"to mocap frame using ls_yaw0={np.degrees(_yaw0):.1f} deg")
+
+        # --- Mocap-derived body angular rates from the quaternion series ---
+        # omega_body = 2 * conj(q) x dq/dt.  Like velocity, the quaternion is
+        # zero-order-held at the IMU rate but only updates at ~180 Hz, so we
+        # compute dq/dt on true update instants (real dt), reject glitches, then
+        # interpolate to the full timeline and low-pass filter. Output in deg/s
+        # to match the logged gyro.
+        # Angular-rate low-pass: higher cutoff than velocity (25 Hz) so the
+        # flapping-rate content survives for comparison against the raw gyro.
+        _b_w, _a_w = butter(4, min(25.0, 0.45 * imu_rate) / (0.5 * imu_rate), btype="low")
+        def _lpf_w(v): return filtfilt(_b_w, _a_w, v)
+
+        def _optitrack_body_rates(qw, qx, qy, qz, ts):
+            q = np.column_stack([qw, qx, qy, qz])            # (N,4) [w,x,y,z]
+            changed = np.any(np.diff(q, axis=0) != 0, axis=1)
+            upd = np.concatenate([[0], np.where(changed)[0] + 1])
+            if len(upd) < 3:
+                return np.zeros(len(ts)), np.zeros(len(ts)), np.zeros(len(ts))
+            uq, uts = q[upd], ts[upd]
+            udt = np.diff(uts)
+            udt = np.where(udt < 1e-6, 1e-6, udt)
+            dq = np.diff(uq, axis=0) / udt[:, None]          # dq/dt at updates
+            q0 = uq[:-1]
+            # conj(q0) x dq  (Hamilton product), vector part = 0.5*omega_body
+            w0, x0, y0, z0 = q0[:, 0], -q0[:, 1], -q0[:, 2], -q0[:, 3]  # conj
+            dw, dx, dy, dz = dq[:, 0], dq[:, 1], dq[:, 2], dq[:, 3]
+            ox = w0*dx + x0*dw + y0*dz - z0*dy
+            oy = w0*dy - x0*dz + y0*dw + z0*dx
+            oz = w0*dz + x0*dy - y0*dx + z0*dw
+            wx, wy, wz = 2.0*ox, 2.0*oy, 2.0*oz              # rad/s, body frame
+            # reject implausible spikes (OptiTrack glitches), > ~1500 deg/s
+            lim = np.radians(1500.0)
+            for arr in (wx, wy, wz):
+                bad = np.abs(arr) > lim
+                if bad.any():
+                    good = ~bad
+                    iv = np.arange(len(arr))
+                    arr[bad] = np.interp(iv[bad], iv[good], arr[good])
+            mid = (uts[:-1] + uts[1:]) / 2.0
+            out = []
+            for arr in (wx, wy, wz):
+                full = np.interp(ts, mid, arr)
+                out.append(np.degrees(_lpf_w(full)))         # -> deg/s
+            return out[0], out[1], out[2]
+
+        ls_wx, ls_wy, ls_wz = _optitrack_body_rates(qw, qx, qy, qz, timestamps)
+        result["ls_wx"] = ls_wx
+        result["ls_wy"] = ls_wy
+        result["ls_wz"] = ls_wz
 
         # Convert quaternion to Euler angles in degrees.
         # Light smoothing on attitude — high cutoff just removes jitter.
@@ -1159,6 +1255,37 @@ def plot_results(results: pd.DataFrame):
     axes2[3].legend(fontsize=8)
     axes2[3].grid(True)
     axes2[3].axhline(0, color="k", linewidth=0.5, linestyle="--")
+
+    # ---------------------------------------------------------------
+    # Figure 3: body angular rates — recorded gyro vs mocap-derived
+    # ---------------------------------------------------------------
+    has_gyro = "gyro_x" in results.columns
+    has_ls_w = "ls_wx" in results.columns
+    if has_gyro:
+        fig3, axes3 = plt.subplots(3, 1, figsize=(14, 9), sharex=True,
+                                   constrained_layout=True)
+        _maximize_figure(fig3)
+        fig3.suptitle("Body angular rates: recorded gyro vs mocap-derived", fontsize=12)
+        rate_info = [
+            (0, "gyro_x", "ls_wx", "roll rate p (deg/s)"),
+            (1, "gyro_y", "ls_wy", "pitch rate q (deg/s)"),
+            (2, "gyro_z", "ls_wz", "yaw rate r (deg/s)"),
+        ]
+        for row, gcol, lscol, ylabel in rate_info:
+            ax = axes3[row]
+            ax.plot(t, results[gcol], "C0", linewidth=0.8, label="gyro (recorded)")
+            _arrays = [results[gcol].to_numpy()]
+            if has_ls_w and lscol in results.columns:
+                ax.plot(t, results[lscol], ":", color="C2", alpha=0.9,
+                        label="mocap-derived")
+                _arrays.append(results[lscol].to_numpy())
+            ax.set_ylim(_ylim_from_data(_arrays))
+            ax.set_ylabel(ylabel)
+            ax.grid(True)
+            ax.axhline(0, color="k", linewidth=0.5, linestyle="--")
+            if row == 0:
+                ax.legend(fontsize=8, ncol=2)
+        axes3[2].set_xlabel("Time (s)")
 
     plt.show()
 
