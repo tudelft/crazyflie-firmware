@@ -917,6 +917,17 @@ def run_ekf(
         result["ls_vy_b"] = R01*ls_vx_w + R11*ls_vy_w + R21*ls_vz_w
         result["ls_vz_b"] = R02*ls_vx_w + R12*ls_vy_w + R22*ls_vz_w
 
+        # Onboard (stateEstimate) world velocity -> body frame, using the SAME
+        # rotation, so the actual on-drone estimate can be overlaid in the same
+        # body frame as replay and locSrv (to see how well replay reproduces it).
+        if all(c in result.columns for c in ("se_vx", "se_vy", "se_vz")):
+            _sx = result["se_vx"].to_numpy()
+            _sy = result["se_vy"].to_numpy()
+            _sz = result["se_vz"].to_numpy()
+            result["se_vx_b"] = R00*_sx + R10*_sy + R20*_sz
+            result["se_vy_b"] = R01*_sx + R11*_sy + R21*_sz
+            result["se_vz_b"] = R02*_sx + R12*_sy + R22*_sz
+
         # Convert quaternion to Euler angles in degrees.
         # Light smoothing on attitude — high cutoff just removes jitter.
         _b_att, _a_att = butter(4, 20.0 / (0.5 * imu_rate), btype="low")
@@ -1038,17 +1049,22 @@ def plot_results(results: pd.DataFrame):
 
     # --- Column 1: Body-frame Velocities (vx_b, vy_b, vz_b) ---
     has_ls_vb = "ls_vx_b" in results.columns
+    has_se_vb = "se_vx_b" in results.columns
     vel_info = [
-        (0, "vx_b", "ls_vx_b", "vx body (m/s)"),
-        (1, "vy_b", "ls_vy_b", "vy body (m/s)"),
-        (2, "vz_b", "ls_vz_b", "vz body (m/s)"),
+        (0, "vx_b", "se_vx_b", "ls_vx_b", "vx body (m/s)"),
+        (1, "vy_b", "se_vy_b", "ls_vy_b", "vy body (m/s)"),
+        (2, "vz_b", "se_vz_b", "ls_vz_b", "vz body (m/s)"),
     ]
-    for row, rcol, ls_col, ylabel in vel_info:
+    for row, rcol, se_col, ls_col, ylabel in vel_info:
         ax = axes[row, 1]
         ax.plot(t, results[rcol], "C0", label="replay")
+        if has_se_vb and se_col in results.columns:
+            ax.plot(t, results[se_col], "--", color="C1", alpha=0.7, label="onboard")
         if has_ls_vb and ls_col in results.columns:
             ax.plot(t, results[ls_col], ":", color="C2", alpha=0.8, label="locSrv")
         _arrays = [results[rcol].to_numpy()]
+        if has_se_vb and se_col in results.columns:
+            _arrays.append(results[se_col].to_numpy())
         if has_ls_vb and ls_col in results.columns:
             _arrays.append(results[ls_col].to_numpy())
         ax.set_ylim(_ylim_from_data(_arrays))
@@ -1166,6 +1182,11 @@ def main():
                         help="Initial yaw in degrees (default: 0)")
     parser.add_argument("--proc-acc-xy",  type=float, default=0.5)
     parser.add_argument("--proc-acc-z",   type=float, default=1.0)
+    parser.add_argument("--flow-resolution", type=float, default=0.10,
+                        help="Flow scale applied to logged mtf02.dpixel. Use 0.10 "
+                             "for logs recorded with mtf02.flowScale=2.3 (current "
+                             "firmware default), or 0.22987 for old logs recorded "
+                             "with flowScale=1.0. effective = dpixel*flow_resolution.")
     parser.add_argument("--no-plot",      action="store_true",
                         help="Skip plotting")
     parser.add_argument("--save",         type=str, default=None,
@@ -1218,7 +1239,11 @@ def main():
         drag_z=0.0611769,
         flow_std_fixed_x=1.07615,
         flow_std_fixed_y=5.41112,
-        flow_resolution=0.22987,
+        # The tuned effective flow scale is 0.23. The firmware now applies 2.3 of
+        # that via mtf02.flowScale (default 2.3), so the logged dpixel is already
+        # 2.3x and the replay only needs the remaining 0.10. Old logs (flowScale=1.0)
+        # need --flow-resolution 0.22987.
+        flow_resolution=args.flow_resolution,
         cop=np.array([0.0, 0.0, 0.03]),
         flowdeck_pos=np.array([0.0, 0.0, -0.12]),
     )

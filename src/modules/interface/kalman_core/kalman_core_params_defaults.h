@@ -25,6 +25,12 @@
 
 #pragma once
 
+// This header selects defaults based on CONFIG_* symbols (platform, estimator
+// config), so it must pull in autoconf.h itself — otherwise a consumer that
+// doesn't include autoconf (e.g. estimator_kalman.c) silently gets the generic
+// #else branch instead of the platform-specific values.
+#include "autoconf.h"
+
 /**
  * @file kalman_core_params_defaults.h
  * @brief Single source of truth for Kalman core parameter default values
@@ -36,7 +42,13 @@
  */
 
 // Process noise defaults depend on configuration
-#ifdef CONFIG_ESTIMATOR_KALMAN_GENERAL_PURPOSE
+#if defined(CONFIG_PLATFORM_FLAPPER)
+// Flapper: mocap-tuned (see ekf_replay.py EKFParams). Live-tunable via
+// kalman.pNAcc_xy / kalman.pNAcc_z.
+#define KALMAN_CORE_PROC_NOISE_DEFAULTS \
+  .procNoiseAcc_xy = 1.05006f, \
+  .procNoiseAcc_z = 0.604273f
+#elif defined(CONFIG_ESTIMATOR_KALMAN_GENERAL_PURPOSE)
 #define KALMAN_CORE_PROC_NOISE_DEFAULTS \
   .procNoiseAcc_xy = 0.5f, \
   .procNoiseAcc_z = 0.5f
@@ -44,6 +56,18 @@
 #define KALMAN_CORE_PROC_NOISE_DEFAULTS \
   .procNoiseAcc_xy = 0.5f, \
   .procNoiseAcc_z = 1.0f
+#endif
+
+// Gyro measurement noise defaults (rad/s)
+#if defined(CONFIG_PLATFORM_FLAPPER)
+// Flapper: mocap-tuned. Live-tunable via kalman.mNGyro_rollpitch / mNGyro_yaw.
+#define KALMAN_CORE_MEAS_NOISE_GYRO_DEFAULTS \
+  .measNoiseGyro_rollpitch = 0.0521776f, \
+  .measNoiseGyro_yaw = 0.116742f
+#else
+#define KALMAN_CORE_MEAS_NOISE_GYRO_DEFAULTS \
+  .measNoiseGyro_rollpitch = 0.1f, \
+  .measNoiseGyro_yaw = 0.1f
 #endif
 
 #ifdef CONFIG_STIMATOR_KALMAN_INITIAL_YAW_STD
@@ -71,8 +95,7 @@
   .procNoisePos = 0, \
   .procNoiseAtt = 0, \
   .measNoiseBaro = 2.0f,           /* meters */ \
-  .measNoiseGyro_rollpitch = 0.1f, /* radians per second */ \
-  .measNoiseGyro_yaw = 0.1f,       /* radians per second */ \
+  KALMAN_CORE_MEAS_NOISE_GYRO_DEFAULTS, \
   \
   .initialX = 0.0, \
   .initialY = 0.0, \

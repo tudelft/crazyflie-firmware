@@ -148,6 +148,11 @@ static paramVarId_t enLhMtchStmParamId;
 
 static float extPosStdDev = 0.01;
 static float extQuatStdDev = 4.5e-3;
+// When 0, external position/pose (e.g. mocap) is still received and exposed via
+// the locSrv.* log variables (so it can be recorded as ground truth), but it is
+// NOT fused into the estimator. This lets the drone fly on the onboard estimator
+// (flow + IMU) while logging mocap for offline replay/comparison.
+static uint8_t enExtPoseFuse = 1;
 static bool isInit = false;
 static uint8_t my_id;
 static uint16_t tickOfLastPacket; // tick when last packet was received
@@ -210,7 +215,9 @@ static void extPositionHandler(CRTPPacket* pk) {
   ext_pos.source = MeasurementSourceLocationService;
   updateLogFromExtPos();
 
-  estimatorEnqueuePosition(&ext_pos);
+  if (enExtPoseFuse) {
+    estimatorEnqueuePosition(&ext_pos);
+  }
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -227,7 +234,9 @@ static void extPoseHandler(const CRTPPacket* pk) {
   ext_pose.stdDevPos = extPosStdDev;
   ext_pose.stdDevQuat = extQuatStdDev;
 
-  estimatorEnqueuePose(&ext_pose);
+  if (enExtPoseFuse) {
+    estimatorEnqueuePose(&ext_pose);
+  }
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -242,7 +251,9 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
       ext_pose.stdDevPos = extPosStdDev;
       ext_pose.stdDevQuat = extQuatStdDev;
-      estimatorEnqueuePose(&ext_pose);
+      if (enExtPoseFuse) {
+        estimatorEnqueuePose(&ext_pose);
+      }
       tickOfLastPacket = xTaskGetTickCount();
     } else {
       ext_pos.x = item->x / 1000.0f;
@@ -610,4 +621,12 @@ PARAM_GROUP_START(locSrv)
  * @brief Standard deviation of the quarternion data to kalman filter
  */
   PARAM_ADD_CORE(PARAM_FLOAT, extQuatStdDev, &extQuatStdDev)
+  /**
+ * @brief Fuse external position/pose (e.g. mocap) into the estimator (default: 1)
+ *
+ * Set to 0 to still receive and log the external pose via the locSrv.* log
+ * variables (for recording ground truth) without fusing it into the estimator.
+ * This lets the drone fly on the onboard estimator (flow + IMU) only.
+ */
+  PARAM_ADD(PARAM_UINT8, enExtPoseFuse, &enExtPoseFuse)
 PARAM_GROUP_STOP(locSrv)

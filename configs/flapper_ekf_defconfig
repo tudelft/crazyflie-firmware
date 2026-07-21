@@ -1,0 +1,47 @@
+CONFIG_PLATFORM_FLAPPER=y
+
+CONFIG_ESTIMATOR_AUTO_SELECT=y
+CONFIG_CONTROLLER_PID=y
+
+CONFIG_MOTORS_ESC_PROTOCOL_STANDARD_PWM=y
+
+CONFIG_CONTROLLER_PID_FILTER_ALL=y
+# CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD=y
+
+# ---------------------------------------------------------------------------
+# EKF data-gathering config WITH the full deck stack:
+#   MTF-02 optical flow (UART1) + SD-card logging (SPI) + Loco/UWB (SPI, auto)
+#   + 8x8 VL53L8CX multizone ToF via ZRanger3 (I2C).
+#
+# This restores CONFIG_DECK_USD (dropped by commit a3c5ea2b) so onboard SD
+# logging works. USD + Loco + MTF-02 is the proven combo from the
+# relative_localization branch. The 8x8 (ZRanger3, I2C-only, no GPIO) is
+# added on top — if UWB ranging or SD logging turns flaky, comment out the
+# two ZRANGER3 lines below to fall back to the known-good USD+Loco+MTF-02.
+#
+# Loco is auto-detected via 1-wire, so it is NOT added to DECK_FORCE
+# (forcing an auto-detecting deck causes a duplicate-enumeration GPIO conflict).
+# ---------------------------------------------------------------------------
+CONFIG_DECK_USD=y
+CONFIG_DECK_MTF02=y
+
+CONFIG_DECK_LOCO=y
+CONFIG_DECK_LOCODECK_USE_ALT_PINS=y
+CONFIG_DECK_LOCO_FULL_TX_POWER=y
+CONFIG_DECK_LOCO_ALGORITHM_TWR=y
+
+# 8x8 multizone ToF — DISABLED: with Loco TWR + USD logging the full 4-deck
+# stack is heap-starved (~8.9 KB free) and the app-level CRTP radio link fails
+# to establish. USD + Loco + MTF-02 is the proven relative_localization combo.
+# Re-enable (add back CONFIG_DECK_ZRANGER3=y and :bcZRanger3) only after freeing
+# heap / moving USD to alt SPI3.
+# CONFIG_DECK_ZRANGER3=y
+
+CONFIG_DECK_FORCE="bcMTF02:bcUSD"
+
+CONFIG_DECK_FLAPPER_EXTRX_ENABLE=n # Enable external receiver
+CONFIG_DECK_CPPM=y
+CONFIG_DECK_CPPM_USE_PA3=y
+
+# For Flappers prior to 2022 (PCB revB)
+# CONFIG_POWER_DISTRIBUTION_FLAPPER_REVB=y

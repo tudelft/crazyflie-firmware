@@ -96,8 +96,16 @@ static uint32_t validFlowCount = 0;
 // Settings
 static bool useFlowDisabled = false;
 static bool useRangeDisabled = false;
-static float flowStdFixed = 1.5f;
-static float flowScale = 1.0f;  // Scaling factor for flow measurements (tune if drift occurs)
+// Flow measurement std deviation, independent per axis (mocap-tuned; see
+// ekf_replay.py flow_std_fixed_x/y). The y-axis is trusted much less than x.
+static float flowStdX = 1.07615f;
+static float flowStdY = 5.41112f;
+// Scaling factor from raw MicoLink motion counts to the pixel units the EKF
+// expects. The stock EKF FLOW_RESOLUTION (0.10) was calibrated for the PMW3901
+// flowdeck; the MTF-02 reports at a different scale, so 2.3 * 0.10 = 0.23
+// effective, which matches the mocap-tuned value (see ekf_replay.py). Tunable
+// and persistent so it can be recalibrated from cfclient.
+static float flowScale = 2.3f;
 
 /**
  * CRC8 DVB-S2 calculation for MSPv2
@@ -261,8 +269,8 @@ static void processOpticalFlowMessage(msp_msg_t* msg, uint64_t* lastTime)
             abs(payload.motion_y) < FLOW_OUTLIER_LIMIT) {
             
             flowMeasurement_t flowData;
-            flowData.stdDevX = flowStdFixed;
-            flowData.stdDevY = flowStdFixed * 2;
+            flowData.stdDevX = flowStdX;
+            flowData.stdDevY = flowStdY;
             flowData.dt = (float)(usecTimestamp() - *lastTime) / 1000000.0f;
             *lastTime = usecTimestamp();
 
@@ -379,6 +387,7 @@ LOG_GROUP_STOP(mtf02)
 PARAM_GROUP_START(mtf02)
   PARAM_ADD(PARAM_UINT8, flowDisable, &useFlowDisabled)
   PARAM_ADD(PARAM_UINT8, rangeDisable, &useRangeDisabled)
-  PARAM_ADD(PARAM_FLOAT, flowStd, &flowStdFixed)
-  PARAM_ADD(PARAM_FLOAT, flowScale, &flowScale)  // Scaling factor for flow (default 1.0)
+  PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, flowStdX, &flowStdX)
+  PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, flowStdY, &flowStdY)
+  PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, flowScale, &flowScale)  // MTF-02 flow calibration (default 2.3)
 PARAM_GROUP_STOP(mtf02)

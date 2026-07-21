@@ -1,0 +1,30 @@
+1     # version
+4096  # buffer size in bytes
+log   # file name
+0     # enable on startup (0/1)
+on:fixedFrequency
+500     # frequency (Hz) — matches ekf_replay.py --imu-rate (default 500)
+1     # mode (0: disabled, 1: synchronous stabilizer, 2: asynchronous)
+stateEstimate.vx
+stateEstimate.vy
+stateEstimate.vz
+stateEstimate.roll
+stateEstimate.pitch
+stateEstimate.yaw
+acc.x
+acc.y
+acc.z
+gyro.x
+gyro.y
+gyro.z
+range.zrange
+mtf02.dpixelX
+mtf02.dpixelY
+mtf02.flowQual
+locSrv.x
+locSrv.y
+locSrv.z
+locSrv.qx
+locSrv.qy
+locSrv.qz
+locSrv.qw
