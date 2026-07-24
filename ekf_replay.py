@@ -975,6 +975,27 @@ def run_ekf(
                 print(f"Onboard attitude not logged; aligned onboard velocity "
                       f"to mocap frame using ls_yaw0={np.degrees(_yaw0):.1f} deg")
 
+        # --- Onboard (stateEstimate) position -> mocap frame ---
+        # The onboard estimator boots at (0,0) with its +X axis along the nose
+        # at startup, so its world frame is the mocap frame rotated by ls_yaw0
+        # about Z and translated by the initial mocap position. Express the
+        # onboard XY track in the mocap frame for a top-down overlay:
+        #   p_mocap = Rz(ls_yaw0) @ p_onboard + [ls_x0, ls_y0]
+        # (Position always uses the constant boot->mocap rotation, not the
+        # per-sample attitude — the two world frames differ by a fixed rigid
+        # transform. Onboard yaw drift shows up as track divergence, as it should.)
+        if all(c in result.columns for c in ("se_x", "se_y")):
+            _pyaw = np.arctan2(2*(qx*qy + qw*qz),
+                               qw*qw + qx*qx - qy*qy - qz*qz)
+            _pfin = np.isfinite(_pyaw)
+            _i0 = int(np.argmax(_pfin)) if _pfin.any() else 0
+            _py0 = _pyaw[_i0]
+            _pc, _ps = np.cos(_py0), np.sin(_py0)
+            _ex = result["se_x"].to_numpy()
+            _ey = result["se_y"].to_numpy()
+            result["se_x_m"] = ls_x[_i0] + (_pc*_ex - _ps*_ey)
+            result["se_y_m"] = ls_y[_i0] + (_ps*_ex + _pc*_ey)
+
         # --- Mocap-derived body angular rates from the quaternion series ---
         # omega_body = 2 * conj(q) x dq/dt.  Like velocity, the quaternion is
         # zero-order-held at the IMU rate but only updates at ~180 Hz, so we
@@ -1286,6 +1307,34 @@ def plot_results(results: pd.DataFrame):
             if row == 0:
                 ax.legend(fontsize=8, ncol=2)
         axes3[2].set_xlabel("Time (s)")
+
+    # ---------------------------------------------------------------
+    # Figure 4: top-down XY trajectory — mocap truth vs onboard estimate
+    # (onboard rotated into the mocap frame). Shows how far the onboard
+    # flow-only position drifts from ground truth in the room frame.
+    # ---------------------------------------------------------------
+    _has_replay_xy = "x" in results.columns and "y" in results.columns
+    _has_onboard_xy = "se_x_m" in results.columns
+    if "ls_x" in results.columns and (_has_replay_xy or _has_onboard_xy):
+        fig4, ax4 = plt.subplots(1, 1, figsize=(9, 9), constrained_layout=True)
+        _maximize_figure(fig4)
+        fig4.suptitle("Top-down XY trajectory (mocap frame)", fontsize=12)
+        ax4.plot(results["ls_x"], results["ls_y"], "C2", linewidth=1.5,
+                 label="mocap (locSrv)")
+        if _has_replay_xy:
+            ax4.plot(results["x"], results["y"], "C0", alpha=0.8, linewidth=1.5,
+                     label="replay (drone estimate)")
+        if _has_onboard_xy:
+            ax4.plot(results["se_x_m"], results["se_y_m"], "--", color="C1",
+                     alpha=0.85, linewidth=1.5,
+                     label="onboard (rotated to mocap)")
+        ax4.plot(results["ls_x"].iloc[0], results["ls_y"].iloc[0], "ko",
+                 ms=7, label="start")
+        ax4.set_xlabel("x (m)")
+        ax4.set_ylabel("y (m)")
+        ax4.set_aspect("equal", adjustable="box")
+        ax4.legend(fontsize=9)
+        ax4.grid(True)
 
     plt.show()
 

@@ -4,10 +4,25 @@
       "Bash(sed -n '362,382p' examples/app_flapper_swarm/src/flapper_swarm.c)",
       "Bash(sed -n '955,1060p' examples/app_flapper_swarm/src/flapper_swarm.c)",
       "Bash(echo \"=== MTF02-relevant lines ===\"; grep -E \"MTF02|FLAPPER_EXTRX|UART|FLOW|DECK_FORCE\" /tmp/cfg_flapper | sort > /tmp/f.txt; grep -E \"MTF02|FLAPPER_EXTRX|UART|FLOW|DECK_FORCE\" /tmp/cfg_notof | sort > /tmp/n.txt; diff /tmp/f.txt /tmp/n.txt; echo \"\\(empty = identical, deck behavior should be the same\\)\")",
-      "Bash(make -n cload-id)"
+      "Bash(make -n cload-id)",
+      "Bash(awk '{s+=$1} END{print s/1024\" KB, \"NR\" files\"}')",
+      "Bash(awk '{s+=$4} END{print s/1024\" KB, \"NR\" files\"}')",
+      "Bash(awk '{print $4, $5}')",
+      "Bash(make flapper_defconfig)",
+      "Bash(make size *)",
+      "Bash(arm-none-eabi-nm build/cf2.elf)",
+      "Bash(arm-none-eabi-nm build/flapper.elf)",
+      "Bash(xargs -I{} echo \"flapper.elf usd symbols: {}\")",
+      "Bash(PYTHONPATH=tools/usdlog python3 -c \"import cfusdlog; print\\('cfusdlog imports OK'\\)\")",
+      "Bash(git push *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('ekf_replay.py'\\).read\\(\\)\\); print\\('parse OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('/home/austin/crazyflie-firmware/fly_flapper_mocap_gt.py'\\).read\\(\\)\\); ast.parse\\(open\\('/home/austin/bitcraze_python_APL/examples/mocap/nocap.py'\\).read\\(\\)\\); print\\('both parse OK'\\)\")",
+      "Bash(chmod +x /home/austin/crazyflie-firmware/convert_logs.sh)",
+      "Bash(bash -n /home/austin/crazyflie-firmware/convert_logs.sh)"
     ],
     "additionalDirectories": [
-      "/tmp"
+      "/tmp",
+      "/home/austin/bitcraze_python_APL/examples/mocap"
     ]
   }
 }

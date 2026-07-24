@@ -5,6 +5,9 @@ log   # file name
 on:fixedFrequency
 500     # frequency (Hz) — matches ekf_replay.py --imu-rate (default 500)
 1     # mode (0: disabled, 1: synchronous stabilizer, 2: asynchronous)
+stateEstimate.x
+stateEstimate.y
+stateEstimate.z
 stateEstimate.vx
 stateEstimate.vy
 stateEstimate.vz

@@ -49,3 +49,8 @@ build/
 
 tools/dependency/web/data.js
 ekf_compare_square_100cm.mp4
+
+# Flight logs / data (large; kept out of git)
+flight*.csv
+flight*.bin
+csv/
