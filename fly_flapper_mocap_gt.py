@@ -39,6 +39,14 @@ rigid_body_name = 'flapper_02'
 # NOTE: with fusion disabled this only affects what gets LOGGED as ground truth.
 send_full_pose = True
 
+# Fuse the streamed mocap pose into the estimator?
+#   False -> flow-only flight: mocap is streamed but only LOGGED (locSrv.*),
+#            never fused (locSrv.enExtPoseFuse=0). Deployment-like experiment.
+#   True  -> mocap-driven flight: the pose IS fused (enExtPoseFuse=1) so the
+#            drone flies accurately in the mocap frame, like the stock example.
+# The flight sequence itself is identical either way.
+FUSE_MOCAP = False
+
 # Which flight to run:
 #   'box'      - centered box via absolute go_to waypoints (position control)
 #   'box_vel'  - same box via body-frame velocity legs (send_hover_setpoint);
@@ -159,13 +167,19 @@ def activate_kalman_estimator(cf):
 
 def configure_onboard_only_estimation(cf):
     """
-    Fly on the onboard estimator (flowdeck + IMU + ToF) only:
-      - locSrv.enExtPoseFuse = 0  -> mocap is logged (locSrv.*) but NOT fused
-      - mtf02.flowDisable    = 0  -> optical flow enabled
+    Configure how the estimator uses the streamed mocap pose (see FUSE_MOCAP):
+      - FUSE_MOCAP=False: mocap logged (locSrv.*) but NOT fused -> flow-only.
+      - FUSE_MOCAP=True:  mocap fused (enExtPoseFuse=1) -> mocap-driven flight.
+    Optical flow (mtf02) is left enabled in both cases.
     """
-    print('Onboard-only estimation: disabling mocap fusion, enabling MTF-02 flow')
-    cf.param.set_value('locSrv.enExtPoseFuse', '0')
     cf.param.set_value('mtf02.flowDisable', '0')
+    if FUSE_MOCAP:
+        print('Mocap fusion ENABLED: mocap-driven flight (pose fused)')
+        cf.param.set_value('locSrv.enExtPoseFuse', '1')
+        cf.param.set_value('locSrv.extQuatStdDev', '0.06')  # trust mocap orientation
+    else:
+        print('Mocap fusion DISABLED: flow-only flight; mocap logged as ground truth')
+        cf.param.set_value('locSrv.enExtPoseFuse', '0')
 
 
 def start_onboard_logging(cf):
