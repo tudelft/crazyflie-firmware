@@ -36,18 +36,21 @@ include $(CRAZYFLIE_BASE)/tools/make/oot.mk
 #   anchor        -> configs/anchor_defconfig       (Loco/UWB only)
 #   flapper       -> configs/flapper_defconfig      (Loco + MTF02 + 4x4 ToF)
 #   flapper_notof -> configs/flapper_notof_defconfig (Loco + MTF02, no 4x4)
+#   flapper_usd   -> configs/flapper_uwb_usd_defconfig (Loco + MTF02 + SD log, no 4x4)
 build:
 	@printf '\n=== Which drone are you building for? ===\n'; \
 	printf '  [a] anchor        - Loco/UWB only (no 4x4)\n'; \
 	printf '  [f] flapper       - Loco + MTF02 + 4x4 ToF\n'; \
 	printf '  [n] flapper_notof - Loco + MTF02, no 4x4 ToF\n'; \
-	printf 'Choice [a/f/n]: '; \
+	printf '  [u] flapper_usd   - Loco + MTF02 + SD logging, no 4x4 (data recording)\n'; \
+	printf 'Choice [a/f/n/u]: '; \
 	read role; \
 	case "$$role" in \
 	  a|A|anchor)        preset=anchor;;        \
 	  f|F|flapper)       preset=flapper;;       \
 	  n|N|notof)         preset=flapper_notof;; \
-	  *) echo "Unknown choice '$$role' - run 'make' again and type a, f, or n."; exit 1;; \
+	  u|U|usd)           preset=flapper_uwb_usd;; \
+	  *) echo "Unknown choice '$$role' - run 'make' again and type a, f, n, or u."; exit 1;; \
 	esac; \
 	echo ">>> Loading $${preset}_defconfig ..."; \
 	$(MAKE) $${preset}_defconfig && \
