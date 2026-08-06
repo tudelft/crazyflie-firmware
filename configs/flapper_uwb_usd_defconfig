@@ -1,0 +1,35 @@
+CONFIG_PLATFORM_FLAPPER=y
+
+CONFIG_ESTIMATOR_AUTO_SELECT=y
+CONFIG_CONTROLLER_PID=y
+
+CONFIG_MOTORS_ESC_PROTOCOL_STANDARD_PWM=y
+
+CONFIG_CONTROLLER_PID_FILTER_ALL=y
+
+# Flapper for DATA RECORDING: UWB (Loco) + MTF02 optical flow + SD-card logging.
+# This is flapper_notof_defconfig + the USD deck. It deliberately does NOT
+# include the 4x4 ToF (ZRanger3/VL53L8CX): the full 4-deck stack
+# (Loco + USD + 8x8 + MTF02) starves the heap and drops the radio link. The
+# proven-good combo is USD + Loco + MTF02 (from the relative_localization work).
+#
+# USD + Loco share SPI; CONFIG_DECK_LOCODECK_USE_ALT_PINS moves Loco to the
+# alternate SPI pins so the SD card and UWB do not conflict.
+# Loco auto-detects via 1-wire, so do NOT add bcLoco to DECK_FORCE.
+CONFIG_DECK_LOCO=y
+CONFIG_DECK_LOCODECK_USE_ALT_PINS=y
+CONFIG_DECK_LOCO_FULL_TX_POWER=y
+CONFIG_DECK_LOCO_ALGORITHM_TWR=y
+CONFIG_DECK_CPPM=y
+CONFIG_DECK_CPPM_USE_PA3=y
+
+CONFIG_DECK_MTF02=y
+
+# SD-card logging deck (restored; USD has no 1-wire ID so it must be forced).
+CONFIG_DECK_USD=y
+
+# Force MTF02 + USD; Loco auto-detects via 1-wire.
+CONFIG_DECK_FORCE="bcMTF02:bcUSD"
+
+# Explicitly disabled (keeps heap headroom for the radio link):
+# CONFIG_DECK_ZRANGER3 is not set
