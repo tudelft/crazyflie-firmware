@@ -48,6 +48,9 @@ static uint8_t droneId = 0;  // Will be set from radio address in appMain()
 // ============================================================================
 static float targetHeightM = 1.0f;
 static float fwdSpeedMps = 0.5f;
+// Post-takeoff hover duration (ms) before the demo starts. Live-tunable and
+// persistent via swarm.hoverMs. Default 2000 preserves the original behaviour.
+static uint16_t takeoffHoverMs = 2000;
 static uint16_t dist0AbortMm = 4200U;        // outer emergency bound to beacon (mm)
 static uint16_t innerBoundMm = 1750U;        // Inner bound to start turning
 static uint16_t innerBoundHysteresisMm = 100U; // Hysteresis: exit TURN when d0 <= innerBoundMm - hysteresis
@@ -761,7 +764,9 @@ static void rampToHeight(float zTarget, uint32_t rampMs) {
     sendHover(0.0f, 0.0f, z, 0.0f);
     vTaskDelay(pdMS_TO_TICKS(dtMs));
   }
-  for (uint32_t i = 0; i <= 100; i++) { // hover for a bit before starting the demo.
+  // Hover for a bit before starting the demo (swarm.hoverMs, live-tunable).
+  const uint32_t hoverSteps = (takeoffHoverMs / dtMs) ? (takeoffHoverMs / dtMs) : 1;
+  for (uint32_t i = 0; i <= hoverSteps; i++) {
     if (checkKillAndDisarm()) return;
     if (checkAndMaybeEmergencyLand()) return;
     sendHover(0.0f, 0.0f, zTarget, 0.0f);
@@ -1678,6 +1683,7 @@ void appMain(void) {
 // ============================================================================
 PARAM_GROUP_START(swarm)
   PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, targetHeight, &targetHeightM)
+  PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, hoverMs, &takeoffHoverMs)
   PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, fwdSpeed, &fwdSpeedMps)
   PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, dist0Abort, &dist0AbortMm)
   // Middle ring (UTURN trigger) = dist0Abort - middleOffset. Set offset = 0
