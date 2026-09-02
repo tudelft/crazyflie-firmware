@@ -9,26 +9,35 @@ CONFIG_CONTROLLER_PID_FILTER_ALL=y
 # CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD=y
 
 # ---------------------------------------------------------------------------
-# EKF data-gathering config WITH the full deck stack:
-#   MTF-02 optical flow (UART1) + SD-card logging (SPI) + Loco/UWB (SPI, auto)
-#   + 8x8 VL53L8CX multizone ToF via ZRanger3 (I2C).
+# EKF data-gathering config — MINIMAL deck stack for flow-only flight:
+#   MTF-02 optical flow (UART1) + SD-card logging (SPI). No Loco, no 4x4 ToF.
 #
 # This restores CONFIG_DECK_USD (dropped by commit a3c5ea2b) so onboard SD
-# logging works. USD + Loco + MTF-02 is the proven combo from the
-# relative_localization branch. The 8x8 (ZRanger3, I2C-only, no GPIO) is
-# added on top — if UWB ranging or SD logging turns flaky, comment out the
-# two ZRANGER3 lines below to fall back to the known-good USD+Loco+MTF-02.
+# logging works. MTF-02 (flow + downward ToF) + IMU drive the onboard
+# estimator; USD records everything (incl. streamed mocap ground truth).
 #
-# Loco is auto-detected via 1-wire, so it is NOT added to DECK_FORCE
-# (forcing an auto-detecting deck causes a duplicate-enumeration GPIO conflict).
+# Loco/UWB is DISABLED here so the drone flies without the Loco+ToF board
+# physically fitted. Re-enable the four CONFIG_DECK_LOCO* lines below for the
+# relative-localization work (Loco auto-detects via 1-wire, so it does NOT go
+# in DECK_FORCE — forcing an auto-detecting deck causes a GPIO conflict).
 # ---------------------------------------------------------------------------
 CONFIG_DECK_USD=y
 CONFIG_DECK_MTF02=y
 
-CONFIG_DECK_LOCO=y
-CONFIG_DECK_LOCODECK_USE_ALT_PINS=y
-CONFIG_DECK_LOCO_FULL_TX_POWER=y
-CONFIG_DECK_LOCO_ALGORITHM_TWR=y
+# --- Loco/UWB DISABLED (flying without the Loco+ToF board) ---
+# DECK_LOCO defaults to 'y' in Kconfig, so it must be explicitly turned OFF
+# with the "is not set" line below (a plain comment would leave it enabled).
+# To re-enable for relative localization: remove the "is not set" line and
+# uncomment the four CONFIG_DECK_LOCO* lines.
+# CONFIG_DECK_LOCO is not set
+# CONFIG_DECK_LOCO=y
+# CONFIG_DECK_LOCODECK_USE_ALT_PINS=y
+# CONFIG_DECK_LOCO_FULL_TX_POWER=y
+# CONFIG_DECK_LOCO_ALGORITHM_TWR=y
+# Flow-only estimation needs the Kalman EKF (normally pulled in by DECK_LOCO's
+# select); make sure it stays enabled now that Loco is off.
+CONFIG_ESTIMATOR_KALMAN=y
+CONFIG_ESTIMATOR_KALMAN_ENABLE=y
 
 # 8x8 multizone ToF — DISABLED: with Loco TWR + USD logging the full 4-deck
 # stack is heap-starved (~8.9 KB free) and the app-level CRTP radio link fails
