@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -71,25 +72,45 @@ class EKFParams:
     std_att_rp0: float = 0.01   # rad
     std_att_yaw0: float = 0.01  # rad
 
-    # --- Process noise ---
-    proc_noise_acc_xy: float = 0.5   # m/s^2·√Hz
-    proc_noise_acc_z: float = 1.0    # m/s^2·√Hz
+    # --- Process / measurement noise ---
+    # Mocap-tuned Flapper values (ekf_data Optuna run). These are also the
+    # firmware compile defaults for CONFIG_PLATFORM_FLAPPER (kalman_core_params_
+    # defaults.h) and the live-tunable kalman.pNAcc_* / kalman.mNGyro_* params.
+    # Change here to explore; keep in sync with the drone.
+    proc_noise_acc_xy: float = 1.05006    # kalman.pNAcc_xy
+    proc_noise_acc_z: float = 0.604273    # kalman.pNAcc_z
     proc_noise_vel: float = 0.0
     proc_noise_pos: float = 0.0
     proc_noise_att: float = 0.0
-    meas_noise_gyro_rp: float = 0.1  # rad/s
-    meas_noise_gyro_yaw: float = 0.1 # rad/s
+    meas_noise_gyro_rp: float = 0.0521776   # kalman.mNGyro_rollpitch
+    meas_noise_gyro_yaw: float = 0.116742   # kalman.mNGyro_yaw
 
-    # --- Drag (body frame, default 0 for standard Crazyflie) ---
-    drag_x: float = 0.0
-    drag_y: float = 0.0
-    drag_z: float = 0.0
+    # --- Drag (body frame) ---
+    # The Flapper EKF damps the predicted body velocity with a substantial drag
+    # term (kalman_core.c predict: S[PX] += dt*(... - dragBx*SPX - dragBx*odr_x)).
+    # Mocap-tuned Flapper values (ekf_data Optuna run) = the firmware compile
+    # defaults EKF_DRAG_BX/BY/BZ. dragBx/dragBy are also live-tunable via the
+    # kalman.dragBx / kalman.dragBy params; dragBz is compile-time only.
+    drag_x: float = 4.39468     # EKF_DRAG_BX / kalman.dragBx
+    drag_y: float = 2.88896     # EKF_DRAG_BY / kalman.dragBy
+    drag_z: float = 0.0611769   # EKF_DRAG_BZ (compile-time only)
 
     # --- Center-of-pressure offset from CoM (body frame, m) ---
-    cop: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    # Mirrors firmware (drag_rx, drag_ry, drag_rz = EKF_DRAG_R*); enters as
+    # omega x cop so drag acts on velocity-at-cop like firmware's dragB*·odr.
+    # drag_rz is live-tunable via kalman.drag_rz.
+    cop: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.03]))
 
     # --- Flowdeck position offset from CoM (body frame, m) ---
-    flowdeck_pos: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    # Firmware mm_flow.c compensates flow for the sensor lever arm:
+    #   v_cam += omega x flowdeck_pos.  The flapper firmware (dron_x3_object /
+    # ekf_playground) applies FLOWDECK_POS_Z = -0.12 m (sensor 12 cm below CoM),
+    # the mocap-tuned value from the ekf_data work. Its net effect on the
+    # velocity ESTIMATE is small (flow-Y is heavily down-weighted and flapping
+    # omega is zero-mean), so replay-vs-onboard RMSE barely moves -- but this
+    # mirrors what the firmware actually does, so keep it matched.
+    flowdeck_pos: np.ndarray = field(
+        default_factory=lambda: np.array([0.0, 0.0, -0.12]))
 
     # --- Attitude reversion toward initial quaternion (when not flying) ---
     attitude_reversion: float = 0.001
@@ -102,8 +123,12 @@ class EKFParams:
     tof_exp_point_b: float = 4.0    # m
 
     # --- Flow noise (in raw sensor pixel units, fixed) ---
-    flow_std_fixed_x: float = 2.0
-    flow_std_fixed_y: float = 2.0    # was 3× flow_std_fixed
+    # Must match the firmware's per-axis flow std devs so the replay reproduces
+    # the onboard EKF. mtf02deck.c: flowStdX=1.07615, flowStdY=5.41112 — Y is
+    # trusted ~5x less because flapping vibration corrupts the Y flow. Keeping
+    # these equal (the old 2.0/2.0) makes the replay diverge from onboard on vy.
+    flow_std_fixed_x: float = 1.07615
+    flow_std_fixed_y: float = 5.41112
 
     # --- Flow sensor model (PMW3901 on flowdeck v2) ---
     flow_resolution: float = 0.1       # sensor reports 10x pixel motion; scale back
@@ -953,46 +978,49 @@ def run_ekf(
                 result["se_vy_b"] = sR01*_sx + sR11*_sy + sR21*_sz
                 result["se_vz_b"] = sR02*_sx + sR12*_sy + sR22*_sz
             else:
-                # No onboard attitude logged. The onboard estimator booted at
-                # yaw=0 with its +X axis along the nose-at-startup; mocap saw that
-                # same nose direction at heading ls_yaw(0). So the boot->mocap
-                # frame rotation is exactly Rz(ls_yaw0): first align the onboard
-                # world velocity into the mocap frame, then apply the mocap
-                # attitude R^T. (Assumes onboard yaw tracks mocap after the
-                # initial offset; a good approximation over a short flight.)
-                _yaw_series = np.arctan2(2*(qx*qy + qw*qz),
-                                         qw*qw + qx*qx - qy*qy - qz*qz)
-                _finite = np.isfinite(_yaw_series)
-                _yaw0 = _yaw_series[_finite][0] if _finite.any() else 0.0
-                _ca, _sa = np.cos(_yaw0), np.sin(_yaw0)
-                # v_world_mocap = Rz(yaw0) @ v_world_onboard
-                _mx = _ca*_sx - _sa*_sy
-                _my = _sa*_sx + _ca*_sy
-                _mz = _sz
-                result["se_vx_b"] = R00*_mx + R10*_my + R20*_mz
-                result["se_vy_b"] = R01*_mx + R11*_my + R21*_mz
-                result["se_vz_b"] = R02*_mx + R12*_my + R22*_mz
-                print(f"Onboard attitude not logged; aligned onboard velocity "
-                      f"to mocap frame using ls_yaw0={np.degrees(_yaw0):.1f} deg")
+                # No onboard attitude logged. stateEstimate.vx/vy/vz is a WORLD-
+                # frame velocity (kalman_core.c externalizes the body-frame state
+                # to world). Rotate it back to body with the MOCAP orientation:
+                #   se_v_body = R_mocap^T @ se_v_world
+                # This is exact when the onboard estimator is aligned to the mocap
+                # frame (mocap pose fused, so R_onboard == R_mocap). For flow-only
+                # flights the onboard world frame differs from mocap by the
+                # (drifting) yaw, so there it is only approximate. No fixed
+                # Rz(ls_yaw0) offset -- that offset was the bug that mis-rotated
+                # fused/turning flights.
+                result["se_vx_b"] = R00*_sx + R10*_sy + R20*_sz
+                result["se_vy_b"] = R01*_sx + R11*_sy + R21*_sz
+                result["se_vz_b"] = R02*_sx + R12*_sy + R22*_sz
+                print("Onboard attitude not logged; onboard body velocity built "
+                      "by rotating stateEstimate WORLD velocity with the MOCAP "
+                      "orientation (exact for mocap-fused flights).")
 
         # --- Onboard (stateEstimate) position -> mocap frame ---
-        # The onboard estimator boots at (0,0) with its +X axis along the nose
-        # at startup, so its world frame is the mocap frame rotated by ls_yaw0
-        # about Z and translated by the initial mocap position. Express the
-        # onboard XY track in the mocap frame for a top-down overlay:
-        #   p_mocap = Rz(ls_yaw0) @ p_onboard + [ls_x0, ls_y0]
-        # (Position always uses the constant boot->mocap rotation, not the
-        # per-sample attitude — the two world frames differ by a fixed rigid
-        # transform. Onboard yaw drift shows up as track divergence, as it should.)
+        # Align the onboard XY track to the mocap frame with a rigid transform:
+        #   p_mocap = Rz(theta) @ (p_onboard - p_onboard0) + p_mocap0
+        # where theta = (mocap start yaw) - (onboard start yaw). Using the LOGGED
+        # onboard yaw makes this correct for BOTH flight types:
+        #   - flow-only: onboard boots at yaw=0 in its own frame and starts at
+        #     (0,0), so theta = ls_yaw0 (the boot->mocap rotation) as before.
+        #   - mocap-fused: the onboard is ALREADY in the mocap frame, so its start
+        #     yaw == the mocap start yaw -> theta = 0 (no rotation) and the track
+        #     overlays mocap directly (matching the fig1 position panels).
+        # Subtracting the onboard start position (rather than assuming (0,0)) is
+        # what lets the fused case reduce cleanly to the identity.
         if all(c in result.columns for c in ("se_x", "se_y")):
             _pyaw = np.arctan2(2*(qx*qy + qw*qz),
                                qw*qw + qx*qx - qy*qy - qz*qz)
             _pfin = np.isfinite(_pyaw)
             _i0 = int(np.argmax(_pfin)) if _pfin.any() else 0
-            _py0 = _pyaw[_i0]
-            _pc, _ps = np.cos(_py0), np.sin(_py0)
-            _ex = result["se_x"].to_numpy()
-            _ey = result["se_y"].to_numpy()
+            _ls_yaw0 = _pyaw[_i0]
+            if "se_yaw" in result.columns:
+                _se_yaw0 = np.radians(result["se_yaw"].to_numpy()[_i0])
+            else:
+                _se_yaw0 = 0.0
+            _theta = _ls_yaw0 - _se_yaw0
+            _pc, _ps = np.cos(_theta), np.sin(_theta)
+            _ex = result["se_x"].to_numpy() - result["se_x"].to_numpy()[_i0]
+            _ey = result["se_y"].to_numpy() - result["se_y"].to_numpy()[_i0]
             result["se_x_m"] = ls_x[_i0] + (_pc*_ex - _ps*_ey)
             result["se_y_m"] = ls_y[_i0] + (_ps*_ex + _pc*_ey)
 
@@ -1111,6 +1139,28 @@ def _print_rmse(results: pd.DataFrame):
         print(f"  body vy: {rmse(results['vy_b'].to_numpy(), results['ls_vy_b'].to_numpy()):.4f} m/s")
         print(f"  body vz: {rmse(results['vz_b'].to_numpy(), results['ls_vz_b'].to_numpy()):.4f} m/s")
 
+    # Hover / steady TRIM readout (from mocap truth). Over the low-motion samples
+    # (a whole hover, or the slow parts of any flight) the mean true tilt and mean
+    # body velocity expose the airframe trim bias that drives drift: a nonzero
+    # mean roll/pitch is a constant lean the velocity loop is fighting. Trim it
+    # out (flapper.motBiasRoll for roll, flapper.servPitchNeutr for pitch) and the
+    # mean drift velocity should fall toward zero.
+    if has_ls_vb and all(c in results.columns for c in ("ls_roll", "ls_pitch")):
+        t = results["time"].to_numpy()
+        zc = "ls_z" if "ls_z" in results.columns else "z"
+        z = results[zc].to_numpy()
+        spd = np.hypot(results["ls_vx_b"].to_numpy(), results["ls_vy_b"].to_numpy())
+        steady = (z > 0.5) & (spd < 0.10) & (t > t[0] + 3.0) & (t < t[-1] - 2.0)
+        if steady.sum() > 20:
+            def _m(c):
+                return np.nanmean(results[c].to_numpy()[steady])
+            print("\n===== Hover/steady TRIM readout (mocap truth) =====")
+            print(f"  low-motion window: {int(steady.sum())} samples "
+                  f"({100*steady.sum()/len(t):.0f}% of flight)")
+            print(f"  mean tilt:  roll={_m('ls_roll'):+.2f} deg   "
+                  f"pitch={_m('ls_pitch'):+.2f} deg   <- trim toward 0")
+            print(f"  mean drift: vx={_m('ls_vx_b'):+.3f}   vy={_m('ls_vy_b'):+.3f} m/s (body)")
+
     # Attitude
     if "ls_roll" in results.columns:
         print(f"  roll:  {rmse(results['roll'].to_numpy(), results['ls_roll'].to_numpy()):.4f} deg")
@@ -1120,7 +1170,8 @@ def _print_rmse(results: pd.DataFrame):
     print("===================================\n")
 
 
-def plot_results(results: pd.DataFrame):
+def plot_results(results: pd.DataFrame, save_prefix: str = None, show_replay: bool = True):
+    _figs = []  # (number, figure) pairs, saved as <save_prefix>_figNN.png
     t = results["time"]
     has_se_pos  = "se_x"    in results.columns
     has_se_vel  = "se_vx"   in results.columns
@@ -1133,24 +1184,30 @@ def plot_results(results: pd.DataFrame):
     fig1, axes = plt.subplots(3, 3, figsize=(18, 10), sharex=True,
                               constrained_layout=True)
     _maximize_figure(fig1)
+    _figs.append((1, fig1))
     fig1.suptitle("EKF Replay", fontsize=12)
 
     # --- Column 0: Positions (x, y, z) ---
+    # Onboard x/y are plotted in the MOCAP frame (se_x_m/se_y_m: start-aligned and
+    # rotated by the boot->mocap transform, same as the top-down) -- NOT the raw
+    # boot-frame se_x/se_y, which would sit offset by the start position and
+    # rotated. z is frame-independent (height), so raw se_z is fine.
     pos_info = [
-        (0, "x",  "se_x",  "ls_x",  False, "x (m)"),
-        (1, "y",  "se_y",  "ls_y",  False, "y (m)"),
-        (2, "z",  "se_z",  "ls_z",  True,  "z (m)"),
+        (0, "x",  "se_x_m", "ls_x",  False, "x (m)"),
+        (1, "y",  "se_y_m", "ls_y",  False, "y (m)"),
+        (2, "z",  "se_z",   "ls_z",  True,  "z (m)"),
     ]
     for row, rcol, se_col, ls_col, plot_tof, ylabel in pos_info:
         ax = axes[row, 0]
-        ax.plot(t, results[rcol], "C0", label="replay")
+        if show_replay:
+            ax.plot(t, results[rcol], "C0", label="replay")
         if has_se_pos and se_col in results.columns:
             ax.plot(t, results[se_col], "--", color="C1", alpha=0.7, label="onboard")
         if has_locsrv and ls_col in results.columns:
             ax.plot(t, results[ls_col], ":", color="C2", alpha=0.8, label="locSrv")
         if plot_tof:
             ax.plot(t, results["tof_m"], "k--", alpha=0.4, label="tof")
-        _arrays = [results[rcol].to_numpy()]
+        _arrays = [results[rcol].to_numpy()] if show_replay else []
         if has_se_pos and se_col in results.columns:
             _arrays.append(results[se_col].to_numpy())
         if has_locsrv and ls_col in results.columns:
@@ -1174,12 +1231,13 @@ def plot_results(results: pd.DataFrame):
     ]
     for row, rcol, se_col, ls_col, ylabel in vel_info:
         ax = axes[row, 1]
-        ax.plot(t, results[rcol], "C0", label="replay")
+        if show_replay:
+            ax.plot(t, results[rcol], "C0", label="replay")
         if has_se_vb and se_col in results.columns:
             ax.plot(t, results[se_col], "--", color="C1", alpha=0.7, label="onboard")
         if has_ls_vb and ls_col in results.columns:
             ax.plot(t, results[ls_col], ":", color="C2", alpha=0.8, label="locSrv")
-        _arrays = [results[rcol].to_numpy()]
+        _arrays = [results[rcol].to_numpy()] if show_replay else []
         if has_se_vb and se_col in results.columns:
             _arrays.append(results[se_col].to_numpy())
         if has_ls_vb and ls_col in results.columns:
@@ -1199,12 +1257,13 @@ def plot_results(results: pd.DataFrame):
     ]
     for row, rcol, se_col, ls_col, ylabel in att_info:
         ax = axes[row, 2]
-        ax.plot(t, results[rcol], "C0", label="replay")
+        if show_replay:
+            ax.plot(t, results[rcol], "C0", label="replay")
         if has_se_att and se_col in results.columns:
             ax.plot(t, results[se_col], "--", color="C1", alpha=0.7, label="onboard")
         if has_locsrv and ls_col in results.columns:
             ax.plot(t, results[ls_col], ":", color="C2", alpha=0.8, label="locSrv")
-        _arrays = [results[rcol].to_numpy()]
+        _arrays = [results[rcol].to_numpy()] if show_replay else []
         if has_se_att and se_col in results.columns:
             _arrays.append(results[se_col].to_numpy())
         if has_locsrv and ls_col in results.columns:
@@ -1225,6 +1284,7 @@ def plot_results(results: pd.DataFrame):
     fig2, axes2 = plt.subplots(4, 1, figsize=(14, 12), sharex=True,
                                constrained_layout=True)
     _maximize_figure(fig2)
+    _figs.append((2, fig2))
     fig2.suptitle("Optical Flow Measurements", fontsize=12)
 
     # Low-pass filter for flow delta values (cutoff 10 Hz)
@@ -1286,6 +1346,7 @@ def plot_results(results: pd.DataFrame):
         fig3, axes3 = plt.subplots(3, 1, figsize=(14, 9), sharex=True,
                                    constrained_layout=True)
         _maximize_figure(fig3)
+        _figs.append((3, fig3))
         fig3.suptitle("Body angular rates: recorded gyro vs mocap-derived", fontsize=12)
         rate_info = [
             (0, "gyro_x", "ls_wx", "roll rate p (deg/s)"),
@@ -1318,10 +1379,11 @@ def plot_results(results: pd.DataFrame):
     if "ls_x" in results.columns and (_has_replay_xy or _has_onboard_xy):
         fig4, ax4 = plt.subplots(1, 1, figsize=(9, 9), constrained_layout=True)
         _maximize_figure(fig4)
+        _figs.append((4, fig4))
         fig4.suptitle("Top-down XY trajectory (mocap frame)", fontsize=12)
         ax4.plot(results["ls_x"], results["ls_y"], "C2", linewidth=1.5,
                  label="mocap (locSrv)")
-        if _has_replay_xy:
+        if show_replay and _has_replay_xy:
             ax4.plot(results["x"], results["y"], "C0", alpha=0.8, linewidth=1.5,
                      label="replay (drone estimate)")
         if _has_onboard_xy:
@@ -1335,6 +1397,14 @@ def plot_results(results: pd.DataFrame):
         ax4.set_aspect("equal", adjustable="box")
         ax4.legend(fontsize=9)
         ax4.grid(True)
+
+    # Save each figure next to the data as <save_prefix>_figNN.png (stable
+    # numbers per figure so names don't shift when an optional figure is absent).
+    if save_prefix:
+        for num, fig in _figs:
+            out = f"{save_prefix}_fig{num:02d}.png"
+            fig.savefig(out, dpi=120, bbox_inches="tight")
+            print(f"Saved figure -> {out}")
 
     plt.show()
 
@@ -1356,8 +1426,10 @@ def main():
                         help="Initial Z position estimate in m (default: 0)")
     parser.add_argument("--initial-yaw",  type=float, default=0.0,
                         help="Initial yaw in degrees (default: 0)")
-    parser.add_argument("--proc-acc-xy",  type=float, default=0.5)
-    parser.add_argument("--proc-acc-z",   type=float, default=1.0)
+    parser.add_argument("--proc-acc-xy",  type=float, default=None,
+                        help="Override process-noise acc_xy (default: tuned class value)")
+    parser.add_argument("--proc-acc-z",   type=float, default=None,
+                        help="Override process-noise acc_z (default: tuned class value)")
     parser.add_argument("--flow-resolution", type=float, default=0.10,
                         help="Flow scale applied to logged mtf02.dpixel. Use 0.10 "
                              "for logs recorded with mtf02.flowScale=2.3 (current "
@@ -1365,64 +1437,31 @@ def main():
                              "with flowScale=1.0. effective = dpixel*flow_resolution.")
     parser.add_argument("--no-plot",      action="store_true",
                         help="Skip plotting")
+    parser.add_argument("--no-replay",    action="store_true",
+                        help="Hide the replay traces in the plots (show onboard vs mocap only)")
     parser.add_argument("--save",         type=str, default=None,
                         help="Save results to this CSV path")
     args = parser.parse_args()
 
+    # All the tuned EKF values (drag, cop, lever arm, process/measurement noise,
+    # flow std) now live in the EKFParams class defaults above -- edit them there
+    # to explore. main() only injects the per-run/CLI fields on top.
+    #
+    # flow_resolution note: the tuned effective flow scale is 0.23. The firmware
+    # now applies 2.3 of that via mtf02.flowScale (default 2.3), so the logged
+    # dpixel is already 2.3x and the replay only needs the remaining 0.10 (the
+    # --flow-resolution default). Old logs (firmware flowScale=1.0) need
+    # --flow-resolution 0.22987.
     params = EKFParams(
         initial_z=args.initial_z,
         initial_yaw=args.initial_yaw * DEG_TO_RAD,
-        cop=np.array([0.0, 0.0, 0.0]),
-        flowdeck_pos=np.array([0.0, 0.0, 0.0]),
-        proc_noise_acc_xy=args.proc_acc_xy,
-        proc_noise_acc_z=args.proc_acc_z,
-    )
-
-    params = EKFParams(
-        initial_z=args.initial_z,
-        initial_yaw=args.initial_yaw * DEG_TO_RAD,
-
-        # Only drag and bit of std
-        # drag_x=4.2,
-        # drag_y=1.8,
-        # drag_z=0.3,
-        # flow_std_fixed_x=2.0,
-        # flow_std_fixed_y=4.0,
-
-        # Tuned
-        # cop=np.array([0.0, 0.0, 0.0]),
-        # flowdeck_pos=np.array([0.0, 0.0, 0.0]),
-        # proc_noise_acc_xy=1.42299,
-        # proc_noise_acc_z=1.22339,
-        # meas_noise_gyro_rp=0.0124584,
-        # meas_noise_gyro_yaw=0.0239012,
-        # drag_x=4.29181,
-        # drag_y=2.54629,
-        # drag_z=0.70963,
-        # flow_std_fixed_x=0.76976,
-        # flow_std_fixed_y=2.20616,
-        # tof_exp_std_a=0.00176657,
-        # flow_resolution=0.188428,
-
-
-        # Tuned with cop and flowdeck lever arm
-        proc_noise_acc_xy=1.05006,
-        proc_noise_acc_z=0.604273,
-        meas_noise_gyro_rp=0.0521776,
-        meas_noise_gyro_yaw=0.116742,
-        drag_x=4.39468,
-        drag_y=2.88896,
-        drag_z=0.0611769,
-        flow_std_fixed_x=1.07615,
-        flow_std_fixed_y=5.41112,
-        # The tuned effective flow scale is 0.23. The firmware now applies 2.3 of
-        # that via mtf02.flowScale (default 2.3), so the logged dpixel is already
-        # 2.3x and the replay only needs the remaining 0.10. Old logs (flowScale=1.0)
-        # need --flow-resolution 0.22987.
         flow_resolution=args.flow_resolution,
-        cop=np.array([0.0, 0.0, 0.03]),
-        flowdeck_pos=np.array([0.0, 0.0, -0.12]),
     )
+    # Optional CLI overrides (leave unset to use the tuned class defaults).
+    if args.proc_acc_xy is not None:
+        params.proc_noise_acc_xy = args.proc_acc_xy
+    if args.proc_acc_z is not None:
+        params.proc_noise_acc_z = args.proc_acc_z
 
     results = run_ekf(
         csv_path=args.csv,
@@ -1439,7 +1478,9 @@ def main():
         print(f"Saved results to {args.save}")
 
     if not args.no_plot:
-        plot_results(results)
+        # Save figures alongside the input CSV as <flightNN>_figMM.png
+        save_prefix = os.path.splitext(args.csv)[0]
+        plot_results(results, save_prefix=save_prefix, show_replay=not args.no_replay)
 
 
 if __name__ == "__main__":

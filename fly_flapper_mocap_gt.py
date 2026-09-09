@@ -54,6 +54,7 @@ FUSE_MOCAP = False
 #                position estimate, so leg distance is v*T regardless of drift
 #   'fig8_follow' - figure-8 via velocity streaming, nose follows velocity
 #   'fig8_fixed'  - figure-8 via velocity streaming, heading held fixed
+#   'box_vel_debug' - box_vel with long hovers before/between legs (bias measurement)
 #   'velocity' - simple forward/back body-frame velocity streaming
 #   'position' - x-axis go_to
 SEQUENCE = 'box'
@@ -66,6 +67,7 @@ BOX_Z = 1.0
 BOX_SPEED = 0.5      # m/s cruise for each go_to leg
 BOX_SETTLE = 1.5     # s to hover/stabilise at each waypoint
 TAKEOFF_HOVER = 2.0  # s to hover after takeoff before moving
+DEBUG_HOVER_S = 4.0  # box_vel_debug: long hover before/between legs (bias measurement)
 
 # Figure-8 (Gerono lemniscate) geometry
 FIG8_A = 1.25              # x half-amplitude (m); y amplitude is A/2
@@ -345,6 +347,66 @@ def run_box_velocity_sequence(cf):
     hlc.stop()
 
 
+def run_box_velocity_debug_sequence(cf):
+    """
+    Same velocity box as box_vel, but with a long, clearly-separated HOVER
+    before the first leg and after every leg (DEBUG_HOVER_S each). Purpose:
+    create clean "commanded velocity = 0" windows so the DC velocity bias (and
+    hover tilt) can be measured in replay -- during each hover the drone holds
+    estimated v=0, so any residual mocap velocity in that window IS the bias.
+    Long hovers also let each leg start from rest (no accel carryover).
+    """
+    global t_start
+    H = BOX_HALF
+    z = BOX_Z
+    S = BOX_SPEED
+    setpoint_hz = 50.0
+    dt = 1.0 / setpoint_hz
+
+    legs = [
+        (S,    0.0, H,     "forward -> front-mid"),
+        (0.0,  S,   H,     "left    -> front-left corner"),
+        (-S,   0.0, 2 * H, "back    -> back-left corner"),
+        (0.0, -S,   2 * H, "right   -> back-right corner"),
+        (S,    0.0, 2 * H, "forward -> front-right corner"),
+        (0.0,  S,   H,     "left    -> front-mid"),
+        (-S,   0.0, H,     "back    -> centre"),
+    ]
+
+    cf.platform.send_arming_request(True)
+    time.sleep(3.0)
+    hlc = cf.high_level_commander
+    start_onboard_logging(cf)
+    t_start = time.time()
+
+    print(f'Takeoff to z={z} m')
+    hlc.takeoff(z, 3.0)
+    time.sleep(3.0)          # let the takeoff ramp complete
+
+    def stream(vx, vy, duration, label):
+        n = max(int(duration * setpoint_hz), 1)
+        print(f'{label}: vx={vx:+.2f} vy={vy:+.2f} m/s, hold z={z} m for {duration:.1f}s')
+        for _ in range(n):
+            cf.commander.send_hover_setpoint(vx, vy, 0.0, z)
+            time.sleep(dt)
+
+    # Long initial hover: purest bias/tilt measurement, before any motion.
+    stream(0.0, 0.0, DEBUG_HOVER_S, 'HOVER 0 (initial)')
+
+    for i, (vx, vy, dist, label) in enumerate(legs, 1):
+        dur = max(dist / S, 1.0)
+        stream(vx, vy, dur, f'LEG {i}: {label}')
+        stream(0.0, 0.0, DEBUG_HOVER_S, f'HOVER {i} (after leg {i})')
+
+    # Hand control back to the high-level commander to land cleanly.
+    cf.commander.send_notify_setpoint_stop()
+    print('Landing')
+    stop_onboard_logging(cf)
+    hlc.land(0.0, 2.5)
+    time.sleep(4.0)
+    hlc.stop()
+
+
 def run_figure8_sequence(cf, follow_heading):
     """
     Fly a figure-8 (Gerono lemniscate) by streaming body-frame velocity
@@ -560,6 +622,8 @@ if __name__ == '__main__':
             run_box_sequence(cf)
         elif SEQUENCE == 'box_vel':
             run_box_velocity_sequence(cf)
+        elif SEQUENCE == 'box_vel_debug':
+            run_box_velocity_debug_sequence(cf)
         elif SEQUENCE == 'fig8_follow':
             run_figure8_sequence(cf, follow_heading=True)
         elif SEQUENCE == 'fig8_fixed':
