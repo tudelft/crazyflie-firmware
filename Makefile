@@ -113,6 +113,10 @@ ifeq ($(CONFIG_PLATFORM_FLAPPER),y)
 PLATFORM = flapper
 endif
 
+ifeq ($(CONFIG_PLATFORM_FLAPPER3),y)
+PLATFORM = flapper3
+endif
+
 
 PLATFORM  ?= cf2
 PROG ?= $(PLATFORM)
