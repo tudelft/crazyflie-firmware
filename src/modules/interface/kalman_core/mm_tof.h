@@ -29,3 +29,6 @@
 
 // Measurements of TOF from laser sensor
 void kalmanCoreUpdateWithTof(kalmanCoreData_t* this, tofMeasurement_t *tof, const bool isFlying);
+// true while the ToF gate is rejecting and tofGate.flowSkip is set: other
+// ground-looking updates (flow) should stand down
+bool kalmanTofGateRejecting(void);

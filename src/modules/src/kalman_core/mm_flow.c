@@ -24,6 +24,7 @@
  */
 
 #include "mm_flow.h"
+#include "mm_tof.h"
 #include "log.h"
 #include "param.h"
 #include "FreeRTOS.h"
@@ -100,6 +101,10 @@ static float measuredNY;
 
 void kalmanCoreUpdateWithFlow(kalmanCoreData_t* this, const flowMeasurement_t *flow, const Axis3f *gyro, const bool isFlying)
 {
+  // While the range gate rejects, the flow camera is looking at the same obstacle
+  // (a bar/sill below at the gate/window): its motion scaled by the filter's z gave
+  // +-0.4 m position jumps and yaw kicks. Coast on the IMU for the rejected streak.
+  if (kalmanTofGateRejecting()) { return; }
   // Inclusion of flow measurements in the EKF done by two scalar updates
   
   // Get historical gyro if delay compensation is enabled
