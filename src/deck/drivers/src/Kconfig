@@ -533,3 +533,11 @@ config DECK_MTF02
     help
         Adds support for the MTF02 optical flow and range deck
         using MSP protocol over UART1.
+
+config DECK_AE3
+    bool "Support for the AE3 forward-camera UART link"
+    default n
+    help
+        Reads a single float (the AE3 forward camera's median ToF distance)
+        over UART2 and exposes it as the ae3.dist log variable. Passive: it
+        never commands flight. Disable CPPM (PA3) when using this on the flapper.

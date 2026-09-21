@@ -1,0 +1,45 @@
+CONFIG_PLATFORM_FLAPPER=y
+
+CONFIG_ESTIMATOR_AUTO_SELECT=y
+CONFIG_CONTROLLER_PID=y
+
+CONFIG_MOTORS_ESC_PROTOCOL_STANDARD_PWM=y
+
+CONFIG_CONTROLLER_PID_FILTER_ALL=y
+# CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD=y
+
+# ---------------------------------------------------------------------------
+# Flow-only flight (MTF-02 on UART1 + USD logging) PLUS the AE3 forward camera
+# on UART2. Same as flapper_ekf_defconfig but:
+#   - CONFIG_DECK_AE3=y  -> reads the AE3 float, exposes ae3.dist
+#   - CPPM DISABLED      -> CPPM captures on PA3, which is UART2 RX; the AE3
+#                           needs PA3, and we fly from Python/CRTP (no RC), so
+#                           CPPM is not needed. Freeing PA3 lets UART2 work.
+# Bus map: MTF-02 = UART1, AE3 = UART2, USD = SPI. (Loco/4x4-ToF not fitted;
+# the 4x4 was I2C and Loco is SPI, so neither touches UART2.)
+# ---------------------------------------------------------------------------
+CONFIG_DECK_USD=y
+CONFIG_DECK_MTF02=y
+CONFIG_DECK_AE3=y
+
+# --- Loco/UWB DISABLED (flying without the Loco+ToF board) ---
+# CONFIG_DECK_LOCO is not set
+# Flow-only estimation needs the Kalman EKF (normally pulled in by DECK_LOCO's
+# select); make sure it stays enabled now that Loco is off.
+CONFIG_ESTIMATOR_KALMAN=y
+CONFIG_ESTIMATOR_KALMAN_ENABLE=y
+
+# 8x8 multizone ToF (VL53L8CX) not fitted here.
+# CONFIG_DECK_ZRANGER3=y
+
+CONFIG_DECK_FORCE="bcMTF02:bcUSD:bcAE3"
+
+CONFIG_DECK_FLAPPER_EXTRX_ENABLE=n # Enable external receiver
+
+# CPPM disabled so PA3 is free for UART2 RX (see note above). We command the
+# flapper from Python over the CRTP/nRF radio, not an RC handset.
+# CONFIG_DECK_CPPM is not set
+# CONFIG_DECK_CPPM_USE_PA3 is not set
+
+# For Flappers prior to 2022 (PCB revB)
+# CONFIG_POWER_DISTRIBUTION_FLAPPER_REVB=y
