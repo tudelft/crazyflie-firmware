@@ -104,9 +104,16 @@ static void ae3ParseByte(uint8_t b)
         // little-endian on the STM32, so a plain memcpy matches struct.pack("<Bfff")
         //   payload: [0] state | [1:5] dist | [5:9] x | [9:13] y
         ae3State = buf[0];
-        memcpy(&ae3Dist, buf + 1, 4);
+        memcpy(&ae3Dist, buf + 1, 4);   // metres, or NaN (no ToF reading) — kept as-is
         memcpy(&ae3X,    buf + 5, 4);
         memcpy(&ae3Y,    buf + 9, 4);
+        // The camera sends NaN for x/y when nothing is tracked (state 0). We
+        // present those as 0.0 ("no push") so the flight script always gets a
+        // real number; ae3.state==0 is how you tell "nothing seen" from
+        // "centred". dist is left as NaN — 0.0 there would read as a wall
+        // touching the sensor.
+        if (ae3X != ae3X) { ae3X = 0.0f; }   // NaN != NaN
+        if (ae3Y != ae3Y) { ae3Y = 0.0f; }
         ae3Rx++;
         ae3LastTick = xTaskGetTickCount();
       } else {
