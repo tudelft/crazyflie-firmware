@@ -50,6 +50,27 @@
     #include "platform_defaults_flapper3.h"
 #endif
 
+// Optional EKF drag model. Platforms with measured coefficients override these
+// defaults; otherwise leave drag compensation disabled.
+#ifndef EKF_DRAG_BX
+    #define EKF_DRAG_BX 0.0f
+#endif
+#ifndef EKF_DRAG_BY
+    #define EKF_DRAG_BY 0.0f
+#endif
+#ifndef EKF_DRAG_BZ
+    #define EKF_DRAG_BZ 0.0f
+#endif
+#ifndef EKF_DRAG_RX
+    #define EKF_DRAG_RX 0.0f
+#endif
+#ifndef EKF_DRAG_RY
+    #define EKF_DRAG_RY 0.0f
+#endif
+#ifndef EKF_DRAG_RZ
+    #define EKF_DRAG_RZ 0.0f
+#endif
+
 // Drone physical constants
 // TODO provide those in each config. Those are values of cf2 platform
 #ifndef ARM_LENGTH

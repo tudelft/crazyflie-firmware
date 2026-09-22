@@ -36,6 +36,47 @@ wiring — AE3 P2 (UART5 TX) → CF PA3 (UART2 RX), AE3 P3 → CF PA2, GND → G
 
 For a build without the AE3 (flow + USD only): `make flapper_ekf_defconfig` instead.
 
+### Flapper Nimble Triple
+
+Triple support is integrated from `1048bcab7a955438d6d990d4ac0f7b4ad5f729f7`.
+Use `make flapper3_ae3_defconfig` for the IMAV2026 MTF-02 + USD + AE3 setup,
+then `make -j$(nproc)`. The output is `build/flapper3.bin`.
+This config uses the revC-and-newer mapping with yaw servo inversion enabled;
+CPPM is disabled to free UART2 RX.
+
+The original Triple configs are also available:
+
+| Config | M1 | M2 | M3 | M4 | Servo inverted |
+| --- | --- | --- | --- | --- | --- |
+| `flapper3_defconfig` | Left | Yaw servo | Right | Rear | No |
+| `flapper3_revA_defconfig` | Left | Yaw servo | Right | Rear | Yes |
+| `flapper3_revB_defconfig` | Left | Rear | Yaw servo | Right | Yes |
+
+The default and revB configs force USD + LED ring; revA forces no decks.
+They do not enable MTF-02 or AE3. The IMAV2026 `flapper3_ae3_defconfig` already
+enables servo inversion for revA/revB. For revB, also enable the Triple PCB
+revision option under power distribution using `make menuconfig`.
+
+Integration checks before flight:
+
+- Confirm motor order, yaw direction and IMU orientation on the actual airframe.
+  The imported Triple alignment is `(0, -90, 180)` degrees for every revision;
+  the older Nimble+ revB uses a different pitch alignment (`+90` degrees).
+  Keep the imported Triple setting until its mounting is verified.
+- Use the PID controller: the Triple mixer only supports legacy control outputs.
+  Clear persisted PID gains with `reset_pid_gains.py` and power-cycle when
+  switching from Nimble+ so the Triple defaults take effect.
+- Triple EKF drag defaults use `BX = BY = 0.7 * Flapper BX = 3.076276` and
+  `BZ = Flapper BZ = 0.0611769`. Drag-center offsets remain zero and noise
+  defaults are generic. These initial settings still need Triple validation;
+  do not automatically apply `set_ekf_params.py` from the instructions above.
+  Previously persisted `kalman.*` parameters can override firmware defaults.
+- Trim parameters are in `flapper3.*`. `flapper3.flapperMaxThrust` limits
+  collective thrust before mixing, not each motor's final output.
+
+Firmware builds and mixer checks do not establish flight stability. Triple PID,
+EKF tuning and the deck installation still need validation on the hardware.
+
 ### Crazyflie 1.0 support
 
 The 2017.06 release was the last release with Crazyflie 1.0 support. If you want

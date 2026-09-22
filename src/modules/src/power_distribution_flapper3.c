@@ -96,7 +96,7 @@ uint16_t powerDistributionStopRatio(uint32_t id)
   uint16_t stopRatio = 0;
   if (id == idYaw)
   {
-    stopRatio = flapperConfig.yawServoNeutral*act_max/100.0f;
+    stopRatio = limitServoNeutral(flapperConfig.yawServoNeutral)*act_max/100.0f;
   }
 
   return stopRatio;
@@ -213,7 +213,7 @@ PARAM_GROUP_STOP(powerDist)
 
 /**
  *
- * Flapper Drone configration parameters
+ * Flapper Drone configuration parameters
  */
 PARAM_GROUP_START(flapper3)
 /**
@@ -224,10 +224,10 @@ PARAM_GROUP_START(flapper3)
  */
 PARAM_ADD(PARAM_UINT8 | PARAM_PERSISTENT, servYawNeutr, &flapperConfig.yawServoNeutral)
 /**
- * @brief Yaw servo neutral <25%; 75%> (default 50%)
+ * @brief Maximum collective thrust command (default 60000)
  *
- * The parameter sets the neutral position of the yaw servo, such that the yaw control arm is pointed spanwise. If in flight
- * you observe drift in the clock-wise direction, increase this parameter and vice-versa if the drift is counter-clock-wise.
+ * Limits collective thrust before roll/pitch mixing. Individual motor outputs
+ * can exceed this value and are capped separately at UINT16_MAX.
  */
 PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, flapperMaxThrust, &flapperConfig.maxThrust)
 

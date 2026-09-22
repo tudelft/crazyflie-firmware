@@ -146,3 +146,15 @@
 #define SUPERVISOR_TUMBLE_CHECK_ACCEPTED_UPSIDEDOWN_TIME 200
 
 #define YAW_MAX_DELTA 30.0
+
+// Triple drag defaults based on platform_defaults_flapper.h:
+// both horizontal axes use 70% of Flapper BX; vertical drag uses Flapper BZ.
+#ifndef EKF_DRAG_BX
+    #define EKF_DRAG_BX (0.7f * 4.39468f)
+#endif
+#ifndef EKF_DRAG_BY
+    #define EKF_DRAG_BY (0.7f * 4.39468f)
+#endif
+#ifndef EKF_DRAG_BZ
+    #define EKF_DRAG_BZ 0.0611769f
+#endif
