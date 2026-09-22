@@ -1,7 +1,6 @@
 CONFIG_PLATFORM_FLAPPER=y
 
-CONFIG_ESTIMATOR_KALMAN=y
-CONFIG_ESTIMATOR_KALMAN_ENABLE=y
+CONFIG_ESTIMATOR_AUTO_SELECT=y
 CONFIG_CONTROLLER_PID=y
 
 CONFIG_MOTORS_ESC_PROTOCOL_STANDARD_PWM=y
@@ -10,31 +9,36 @@ CONFIG_CONTROLLER_PID_FILTER_ALL=y
 # CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD=y
 
 # ---------------------------------------------------------------------------
-# IMAV2026 "backup" drone — the fully-instrumented airframe.
-# Fuses UWB absolute position + optical-flow velocity + multi-zone ToF height:
-#   - CONFIG_DECK_MTF02=y   -> MTF-02 optical flow  (UART1)
-#   - CONFIG_DECK_LOCO=y    -> Loco/UWB positioning (SPI) — ABSOLUTE position
-#   - CONFIG_DECK_ZRANGER3=y-> VL53L8CX 4x4 multi-zone ToF height (I2C)
-#   - CONFIG_DECK_USD=y     -> SD-card logging (SPI)
+# IMAV2026 "backup" drone — modeled on dron_x3_object/flapper_defconfig.
+# Loco/UWB (absolute position) + MTF-02 optical flow + 4x4 ToF (VL53L8CX).
+# NO SD card (the full Loco+USD+4x4+MTF02 stack starves the heap and drops the
+# radio link — proven in the x3_object work).
 #
-# CRITICAL: the Loco deck's DEFAULT pins are RX1/TX1 = UART1, which is exactly
-# what the MTF-02 uses. They collide. CONFIG_DECK_LOCODECK_USE_ALT_PINS moves
-# Loco's IRQ/RESET to IO_2/IO_3 (it then uses IO_1|IO_2|IO_3 + SPI), leaving
-# UART1 free for the MTF-02. Verified no GPIO/bus conflicts across all four:
-#   MTF-02 = UART1 | Loco = SPI + IO_1/2/3 | ZRanger3 = I2C | USD = SPI + IO_4.
-#
-# NOTE: no AE3 here (that used UART2 + CPPM-off). This is a separate loadout
-# from flapper_ae3_defconfig.
+# TWO things that matter (both were breaking the 4x4 before):
+#   1. Loco AUTO-DETECTS via 1-wire — do NOT put bcLoco in DECK_FORCE. Forcing
+#      an auto-detecting deck causes a duplicate-enumeration GPIO conflict that
+#      can knock out deck init (including the 4x4).
+#   2. CONFIG_DECK_LOCODECK_USE_ALT_PINS moves Loco's IRQ/RESET off UART1
+#      (RX1/TX1) so the MTF-02 keeps UART1.
+# Bus map: MTF-02 = UART1 | Loco = SPI + IO_1/2/3 | ZRanger3 (4x4) = I2C.
 # ---------------------------------------------------------------------------
-CONFIG_DECK_MTF02=y
 CONFIG_DECK_LOCO=y
 CONFIG_DECK_LOCODECK_USE_ALT_PINS=y
-CONFIG_DECK_ZRANGER3=y
-CONFIG_DECK_USD=y
-
-CONFIG_DECK_FORCE="bcMTF02:bcLoco:bcZRanger3:bcUSD"
+CONFIG_DECK_LOCO_FULL_TX_POWER=y
+CONFIG_DECK_LOCO_ALGORITHM_TWR=y
 
 CONFIG_DECK_FLAPPER_EXTRX_ENABLE=n # Enable external receiver
+CONFIG_DECK_CPPM=y
+CONFIG_DECK_CPPM_USE_PA3=y
+
+CONFIG_DECK_ZRANGER3=y
+CONFIG_DECK_MTF02=y
+
+# Force only the decks with no 1-wire ID; Loco auto-detects (see note above).
+CONFIG_DECK_FORCE="bcMTF02:bcZRanger3"
+
+# Explicitly disabled — no SD card (keeps heap headroom for the radio link):
+# CONFIG_DECK_USD is not set
 
 # For Flappers prior to 2022 (PCB revB)
 # CONFIG_POWER_DISTRIBUTION_FLAPPER_REVB=y
