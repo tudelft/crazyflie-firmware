@@ -2,19 +2,23 @@
  * ae3deck.c — read the AE3 forward camera's telemetry over UART2 and publish it
  * as log variables the Python flight script can tap into.
  *
- * The AE3 sends THREE floats per frame:
+ * The AE3 sends three floats + one byte per frame:
  *   ae3.dist  — median ToF distance (metres); NaN = the sensor got no reading.
  *   ae3.x     — horizontal centering offset of the tracked object in the frame.
  *               Sign/scale are the camera script's convention (e.g. -2..2,
  *               negative = object left of centre -> drone should move left).
  *               0.0 = centred / no correction.
  *   ae3.y     — vertical centering offset (adjust height). 0.0 = no correction.
+ *   ae3.state — the camera's current tracking mode (enum set by the camera
+ *               script): e.g. 1 = black boxes, 2 = blue boxes, 3 = walls.
+ *               0 is reserved for "none / unknown" (also the stale default).
  *
  * ae3.x / ae3.y are AUXILIARY: base flight does not depend on them. They default
  * to 0.0 ("do nothing"), and if the AE3 link goes stale (no frames for
- * AE3_STALE_MS) they are forced back to 0.0 so a lost detection can never leave
- * a stale push running. (dist is left at its last value — the sender sends NaN
- * on a failed read, and the CF side should treat NaN as "range unknown, hold".)
+ * AE3_STALE_MS) they are forced back to 0.0 (and state back to 0) so a lost
+ * detection can never leave a stale push running. (dist is left at its last
+ * value — the sender sends NaN on a failed read, and the CF side should treat
+ * NaN as "range unknown, hold".)
  *
  * PASSIVE: this deck never commands flight. It only reads the AE3 and exposes
  * log variables, so it runs alongside a Python/CRTP flight script without any
@@ -28,8 +32,9 @@
  * On the flapper, disable CPPM (it captures on PA3) so UART2 RX is free.
  *
  * Wire protocol (AE3 -> CF), little-endian:
- *   0xAE 0x51 | float32 dist | float32 x | float32 y | xor(the 12 payload bytes)
- *   (15 bytes/frame). The CF just stores the three floats.
+ *   0xAE 0x51 | float32 dist | float32 x | float32 y | uint8 state |
+ *   xor(the 13 payload bytes)                         (16 bytes/frame).
+ * The CF just stores the three floats and the state byte.
  */
 
 #define DEBUG_MODULE "AE3"
@@ -50,7 +55,7 @@
 #define AE3_BAUDRATE        115200
 #define AE3_SYNC0           0xAE
 #define AE3_SYNC1           0x51
-#define AE3_PAYLOAD_LEN     12      // 3 x float32: dist, x, y
+#define AE3_PAYLOAD_LEN     13      // 3 x float32 (dist, x, y) + 1 x uint8 (state)
 #define AE3_STALE_MS        300     // no frame for this long -> zero x/y (do nothing)
 #define AE3_TASK_PRI        3
 #define AE3_TASK_STACKSIZE  (2 * configMINIMAL_STACK_SIZE)
@@ -62,13 +67,14 @@ static bool isInit = false;
 static float     ae3Dist   = 0.0f;  // median ToF distance (metres); NaN = no reading
 static float     ae3X      = 0.0f;  // horizontal centering offset; 0 = no push
 static float     ae3Y      = 0.0f;  // vertical centering offset; 0 = no push
+static uint8_t   ae3State  = 0;     // camera tracking mode (1/2/3...); 0 = none/unknown
 static uint32_t  ae3Rx     = 0;     // valid frames received (link-alive counter)
 static uint32_t  ae3Bad    = 0;     // checksum failures
 static uint32_t  ae3AgeMs  = 0;     // ms since the last valid frame
 static TickType_t ae3LastTick = 0;  // tick of the last valid frame
 
 // Byte-by-byte frame parser:
-//   0xAE 0x51 | float32 dist | float32 x | float32 y | xor(12 payload bytes)
+//   0xAE 0x51 | float32 dist | float32 x | float32 y | uint8 state | xor(13 payload bytes)
 static void ae3ParseByte(uint8_t b)
 {
   static uint8_t state = 0;    // 0:sync0  1:sync1  2:payload  3:xor
@@ -91,10 +97,11 @@ static void ae3ParseByte(uint8_t b)
       uint8_t x = 0;
       for (uint8_t i = 0; i < AE3_PAYLOAD_LEN; i++) { x ^= buf[i]; }
       if (x == b) {
-        // little-endian on the STM32, so a plain memcpy matches struct.pack("<f")
+        // little-endian on the STM32, so a plain memcpy matches struct.pack("<fffB")
         memcpy(&ae3Dist, buf + 0, 4);
         memcpy(&ae3X,    buf + 4, 4);
         memcpy(&ae3Y,    buf + 8, 4);
+        ae3State = buf[12];
         ae3Rx++;
         ae3LastTick = xTaskGetTickCount();
       } else {
@@ -121,11 +128,13 @@ static void ae3Task(void *param)
     }
     ae3AgeMs = T2M((uint32_t)(xTaskGetTickCount() - ae3LastTick));
     // Auxiliary, fail-safe: if the camera link is stale, the centering offsets
-    // default back to "do nothing" so an old push can't persist. dist is left
-    // as-is (the sender signals a bad reading with NaN).
+    // default back to "do nothing" and the mode to "none" so an old push or a
+    // stale mode can't persist. dist is left as-is (the sender signals a bad
+    // reading with NaN).
     if (ae3AgeMs > AE3_STALE_MS) {
       ae3X = 0.0f;
       ae3Y = 0.0f;
+      ae3State = 0;
     }
   }
 }
@@ -170,6 +179,10 @@ LOG_ADD(LOG_FLOAT, x, &ae3X)
  * @brief Vertical centering offset of the tracked object; 0 = centred / no push
  */
 LOG_ADD(LOG_FLOAT, y, &ae3Y)
+/**
+ * @brief Camera tracking mode (e.g. 1=black boxes, 2=blue boxes, 3=walls); 0 = none/unknown
+ */
+LOG_ADD(LOG_UINT8, state, &ae3State)
 /**
  * @brief Valid AE3 frames received (link-alive counter)
  */
