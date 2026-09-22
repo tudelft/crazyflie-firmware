@@ -31,10 +31,14 @@
  *   GND shared, AE3 powered.
  * On the flapper, disable CPPM (it captures on PA3) so UART2 RX is free.
  *
- * Wire protocol (AE3 -> CF), little-endian:
- *   0xAE 0x51 | float32 dist | float32 x | float32 y | uint8 state |
+ * Wire protocol (AE3 -> CF), little-endian — matches the camera's
+ * struct.pack("<Bfff", state, depth, x, y):
+ *   0xAE 0x52 | uint8 state | float32 dist | float32 x | float32 y |
  *   xor(the 13 payload bytes)                         (16 bytes/frame).
- * The CF just stores the three floats and the state byte.
+ * The CF just stores the state byte and the three floats.
+ *
+ * NOTE the second sync byte is 0x52 (the camera's "state" frame). The camera
+ * also has a 0x51 range-only frame (state absent); this deck reads 0x52.
  */
 
 #define DEBUG_MODULE "AE3"
@@ -54,7 +58,7 @@
 
 #define AE3_BAUDRATE        115200
 #define AE3_SYNC0           0xAE
-#define AE3_SYNC1           0x51
+#define AE3_SYNC1           0x52    // the camera's "state" frame (0x51 = range-only)
 #define AE3_PAYLOAD_LEN     13      // 3 x float32 (dist, x, y) + 1 x uint8 (state)
 #define AE3_STALE_MS        300     // no frame for this long -> zero x/y (do nothing)
 #define AE3_TASK_PRI        3
@@ -73,8 +77,8 @@ static uint32_t  ae3Bad    = 0;     // checksum failures
 static uint32_t  ae3AgeMs  = 0;     // ms since the last valid frame
 static TickType_t ae3LastTick = 0;  // tick of the last valid frame
 
-// Byte-by-byte frame parser:
-//   0xAE 0x51 | float32 dist | float32 x | float32 y | uint8 state | xor(13 payload bytes)
+// Byte-by-byte frame parser (little-endian, matches camera's "<Bfff"):
+//   0xAE 0x52 | uint8 state | float32 dist | float32 x | float32 y | xor(13 payload bytes)
 static void ae3ParseByte(uint8_t b)
 {
   static uint8_t state = 0;    // 0:sync0  1:sync1  2:payload  3:xor
@@ -97,11 +101,12 @@ static void ae3ParseByte(uint8_t b)
       uint8_t x = 0;
       for (uint8_t i = 0; i < AE3_PAYLOAD_LEN; i++) { x ^= buf[i]; }
       if (x == b) {
-        // little-endian on the STM32, so a plain memcpy matches struct.pack("<fffB")
-        memcpy(&ae3Dist, buf + 0, 4);
-        memcpy(&ae3X,    buf + 4, 4);
-        memcpy(&ae3Y,    buf + 8, 4);
-        ae3State = buf[12];
+        // little-endian on the STM32, so a plain memcpy matches struct.pack("<Bfff")
+        //   payload: [0] state | [1:5] dist | [5:9] x | [9:13] y
+        ae3State = buf[0];
+        memcpy(&ae3Dist, buf + 1, 4);
+        memcpy(&ae3X,    buf + 5, 4);
+        memcpy(&ae3Y,    buf + 9, 4);
         ae3Rx++;
         ae3LastTick = xTaskGetTickCount();
       } else {
