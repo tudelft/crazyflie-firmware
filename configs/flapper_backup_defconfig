@@ -1,0 +1,40 @@
+CONFIG_PLATFORM_FLAPPER=y
+
+CONFIG_ESTIMATOR_KALMAN=y
+CONFIG_ESTIMATOR_KALMAN_ENABLE=y
+CONFIG_CONTROLLER_PID=y
+
+CONFIG_MOTORS_ESC_PROTOCOL_STANDARD_PWM=y
+
+CONFIG_CONTROLLER_PID_FILTER_ALL=y
+# CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD=y
+
+# ---------------------------------------------------------------------------
+# IMAV2026 "backup" drone — the fully-instrumented airframe.
+# Fuses UWB absolute position + optical-flow velocity + multi-zone ToF height:
+#   - CONFIG_DECK_MTF02=y   -> MTF-02 optical flow  (UART1)
+#   - CONFIG_DECK_LOCO=y    -> Loco/UWB positioning (SPI) — ABSOLUTE position
+#   - CONFIG_DECK_ZRANGER3=y-> VL53L8CX 4x4 multi-zone ToF height (I2C)
+#   - CONFIG_DECK_USD=y     -> SD-card logging (SPI)
+#
+# CRITICAL: the Loco deck's DEFAULT pins are RX1/TX1 = UART1, which is exactly
+# what the MTF-02 uses. They collide. CONFIG_DECK_LOCODECK_USE_ALT_PINS moves
+# Loco's IRQ/RESET to IO_2/IO_3 (it then uses IO_1|IO_2|IO_3 + SPI), leaving
+# UART1 free for the MTF-02. Verified no GPIO/bus conflicts across all four:
+#   MTF-02 = UART1 | Loco = SPI + IO_1/2/3 | ZRanger3 = I2C | USD = SPI + IO_4.
+#
+# NOTE: no AE3 here (that used UART2 + CPPM-off). This is a separate loadout
+# from flapper_ae3_defconfig.
+# ---------------------------------------------------------------------------
+CONFIG_DECK_MTF02=y
+CONFIG_DECK_LOCO=y
+CONFIG_DECK_LOCODECK_USE_ALT_PINS=y
+CONFIG_DECK_ZRANGER3=y
+CONFIG_DECK_USD=y
+
+CONFIG_DECK_FORCE="bcMTF02:bcLoco:bcZRanger3:bcUSD"
+
+CONFIG_DECK_FLAPPER_EXTRX_ENABLE=n # Enable external receiver
+
+# For Flappers prior to 2022 (PCB revB)
+# CONFIG_POWER_DISTRIBUTION_FLAPPER_REVB=y
